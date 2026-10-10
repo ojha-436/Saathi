@@ -33,6 +33,13 @@ service cloud.firestore {
     match /meetings/{meetingId} {
       allow read: if signedIn() && request.auth.uid in resource.data.participants;
     }
+    // Connected-app data is personal: only the person who connected the account can read it
+    match /events/{id} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+    match /external_items/{id} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
     }

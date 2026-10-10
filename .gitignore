@@ -6,3 +6,6 @@ __pycache__
 *.pyc
 .env*
 !.env.example
+
+# OAuth client credentials (kept in Secret Manager, never in git)
+client_secret_*.json

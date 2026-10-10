@@ -32,3 +32,10 @@ TZ = ZoneInfo("Asia/Kolkata")
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "TRUE")
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", PROJECT)
 os.environ.setdefault("GOOGLE_CLOUD_LOCATION", GENAI_LOCATION)
+
+# Google connector (Calendar + Gmail, read-only). OAuth client JSON comes from Secret Manager (saathi-google-oauth),
+# mounted as GOOGLE_OAUTH_CLIENT. Refresh tokens are encrypted with Cloud KMS before they're stored.
+GOOGLE_OAUTH_CLIENT = os.getenv("GOOGLE_OAUTH_CLIENT", "")
+KMS_KEY = os.getenv("KMS_KEY", f"projects/{PROJECT}/locations/asia-south1/keyRings/saathi/cryptoKeys/saathi-connectors")
+PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "https://saathi-api-82398575445.asia-south1.run.app").rstrip("/")
+WEB_URL = os.getenv("WEB_URL", "https://saathi-web-82398575445.asia-south1.run.app").rstrip("/")

@@ -396,13 +396,14 @@ function WorkspaceTab() {
   const [domains, setDomains] = useState(account.org.domains.join(", "));
   const [creation, setCreation] = useState(account.org.settings.channel_creation ?? "everyone");
   const [ai, setAi] = useState(account.org.settings.ai_enabled ?? true);
+  const [google, setGoogle] = useState(account.org.settings.integrations_google ?? true);
   const [busy, setBusy] = useState(false);
   async function save() {
     setBusy(true);
     try {
       await api("/api/admin/org", {
         method: "PATCH",
-        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai },
+        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai, integrations_google: google },
       });
       toast("Workspace settings saved. Reload to see them everywhere.");
     } catch (e) {
@@ -445,6 +446,13 @@ function WorkspaceTab() {
             <div className="text-xs text-muted">When off, no one in the workspace can ask Saathi questions.</div>
           </div>
           <Switch on={ai} onChange={setAi} label="AI assistant enabled" />
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <div>
+            <div className="text-sm font-semibold">Google Calendar &amp; Gmail connections</div>
+            <div className="text-xs text-muted">Members can connect their own Google account (read-only). Turning this off disconnects everyone and deletes synced data.</div>
+          </div>
+          <Switch on={google} onChange={setGoogle} label="Allow Google connections" />
         </div>
       </section>
       <button onClick={save} disabled={busy} className="flex h-9 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-50">

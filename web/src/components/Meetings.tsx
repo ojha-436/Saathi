@@ -7,19 +7,19 @@ import { api } from "@/lib/api";
 import { chatTitle, dueLabel, toDate } from "@/lib/format";
 import type { Task } from "@/lib/types";
 import { UserAvatar } from "./bits";
-import { useWs } from "./ctx";
+import { useWs, type MeetingPrefill } from "./ctx";
 import { Modal, ModalHeader, PeoplePicker } from "./Dialogs";
 import { Markdown } from "./Markdown";
 
-export function NewMeetingDialog({ onClose }: { onClose: () => void }) {
+export function NewMeetingDialog({ onClose, prefill = {} }: { onClose: () => void; prefill?: MeetingPrefill }) {
   const { uid, chats, users, open, toast } = useWs();
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(prefill.title ?? "");
   const [when, setWhen] = useState(() => {
-    const d = new Date(Date.now() - 60 * 60 * 1000);
-    d.setMinutes(0, 0, 0);
+    const d = prefill.when ? new Date(prefill.when) : new Date(Date.now() - 60 * 60 * 1000);
+    if (!prefill.when) d.setMinutes(0, 0, 0);
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   });
-  const [attendees, setAttendees] = useState<string[]>([]);
+  const [attendees, setAttendees] = useState<string[]>((prefill.attendees ?? []).filter((a) => a !== uid));
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [chatId, setChatId] = useState("");
