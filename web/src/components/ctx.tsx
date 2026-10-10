@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Account, CalendarEvent, Chat, EmailItem, FileDoc, Meeting, UserProfile, UserSettings } from "@/lib/types";
+import type { Account, CalendarEvent, Chat, DriveFile, EmailItem, FileDoc, Meeting, UserProfile, UserSettings } from "@/lib/types";
 
 export type View =
   | { kind: "home" }
@@ -12,6 +12,9 @@ export type View =
   | { kind: "admin" }
   | { kind: "meeting"; id: string }
   | { kind: "chats" }
+  | { kind: "gmail" }
+  | { kind: "calendar" }
+  | { kind: "drive" }
   | { kind: "chat"; chatId: string; focusMsg?: string };
 
 export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new";
@@ -29,6 +32,7 @@ export type WorkspaceCtx = {
   meetings: Record<string, Meeting>;
   events: CalendarEvent[];
   emails: Record<string, EmailItem>;
+  driveFiles: Record<string, DriveFile>;
   settings: UserSettings;
   view: View;
   open: (view: View) => void;

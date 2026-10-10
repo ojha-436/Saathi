@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus } from "@/lib/icons";
+import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus, Mail, CalendarDays, DriveIcon } from "@/lib/icons";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle, isUnread, timeShort } from "@/lib/format";
@@ -9,7 +9,7 @@ import type { Chat, NotifyLevel, UserSettings } from "@/lib/types";
 import { ChatIcon, Menu } from "./bits";
 import { useWs, type View } from "./ctx";
 
-export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "insights" | "admin";
+export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "insights" | "admin" | "gmail" | "calendar" | "drive";
 
 export function railKey(view: View): RailKey {
   return view.kind === "meeting" ? "home" : view.kind === "chats" ? "chat" : view.kind;
@@ -20,7 +20,7 @@ export function notifyLevel(chat: Chat, settings: UserSettings): NotifyLevel {
 }
 
 /** Teams-style app bar: vertical on desktop, bottom navigation on phones. */
-export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect, mobile, admin }: {
+export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect, mobile, admin, connected = [], emailPromises = 0 }: {
   unreadChats: number;
   unreadAlerts: number;
   openTasks: number;
@@ -28,6 +28,8 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
   onSelect: (k: RailKey) => void;
   mobile?: boolean;
   admin?: boolean;
+  connected?: string[];
+  emailPromises?: number;
 }) {
   const all: { key: RailKey; label: string; icon: typeof Bell; badge?: number; dot?: boolean }[] = [
     { key: "home", label: "My Day", icon: Sun },
@@ -35,11 +37,15 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
     { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChats },
     { key: "assistant", label: "Saathi", icon: Sparkles },
     { key: "tasks", label: "Tasks", icon: ListTodo, badge: openTasks, dot: true },
+    // Connected apps: shown only for services this person has connected
+    ...(connected.includes("gmail") ? [{ key: "gmail" as const, label: "Gmail", icon: Mail, badge: emailPromises, dot: true }] : []),
+    ...(connected.includes("calendar") ? [{ key: "calendar" as const, label: "Calendar", icon: CalendarDays }] : []),
+    ...(connected.includes("drive") ? [{ key: "drive" as const, label: "Drive", icon: DriveIcon as typeof Bell }] : []),
     { key: "insights", label: "Insights", icon: BarChart3 },
     ...(admin ? [{ key: "admin" as const, label: "Admin", icon: ShieldCheck }] : []),
   ];
   // Phones: five most-used destinations; Insights and Admin are in the profile menu.
-  const items = mobile ? all.filter((i) => i.key !== "insights" && i.key !== "admin") : all;
+  const items = mobile ? all.filter((i) => !["insights", "admin", "gmail", "calendar", "drive"].includes(i.key)) : all;
   return (
     <nav
       aria-label="Apps"

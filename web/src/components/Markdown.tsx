@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CiteChip } from "./bits";
 
-const CITE = /\[((?:msg|file|meet|mail):[A-Za-z0-9_\-/]+)\]/g;
+const CITE = /\[((?:msg|file|meet|mail|drive):[A-Za-z0-9_\-/]+)\]/g;
 
 /** Renders assistant markdown; [msg:..]/[file:..] citations become clickable chips. */
 export function Markdown({ text }: { text: string }) {
