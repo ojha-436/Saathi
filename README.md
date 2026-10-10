@@ -81,11 +81,23 @@ uv run python -m seed.seed        # full rebuild (wipes the workspace!)
 uv run python -m seed.reset       # fast reset: clears assistant chats, tasks, alerts and messages added after seeding
 ```
 
-## Deploy
+## Deploy (CI/CD)
+
+Merging to `main` deploys automatically through GitHub Actions (`.github/workflows/ci-cd.yml`):
+
+1. Open a pull request into `main`. CI builds and type-checks `web/` and installs and compiles `agent/` (only the folders the PR touches).
+2. Merge it. The push to `main` re-runs the checks, then deploys only what changed: `agent/**` → **saathi-api**, `web/**` → **saathi-web** (API first when both change), followed by a health check.
+3. Watch it under **Actions** or **Deployments → production** on GitHub. Each Cloud Run revision is labelled with the commit SHA.
+
+To redeploy without a code change: **Actions → CI/CD → Run workflow** (choose api, web or both) on `main`.
+
+Auth is keyless: GitHub OIDC → Workload Identity Federation (pool `github`, provider `saathi-repo`) → service account `github-deployer`. The provider only trusts workflows from `ojha-436/Saathi` running on `refs/heads/main`, so branches and forks can't deploy. Deploys keep the existing Cloud Run env vars and secrets; change those with `gcloud run services update`.
+
+Manual deploy (fallback):
 
 ```bash
-cd agent && gcloud run deploy saathi-api --source . --region asia-south1   # keeps existing env vars and secrets
-cd web   && gcloud run deploy saathi-web --source . --region asia-south1   # keeps existing env vars
+cd agent && gcloud run deploy saathi-api --source . --region asia-south1
+cd web   && gcloud run deploy saathi-web --source . --region asia-south1
 ```
 
 ## Team split
