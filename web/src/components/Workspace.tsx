@@ -13,6 +13,7 @@ import type { Account, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { Menu, UserAvatar } from "./bits";
+import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
 import { Ctx, isAdmin, type DialogKind, type MeetingPrefill, type TaskPrefill, type View } from "./ctx";
 import { BrowseChannelsDialog, CommandPalette, CreateChannelDialog, NewChatDialog, ProfileDialog } from "./Dialogs";
@@ -109,8 +110,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
   // If the open chat disappears (left, removed, deleted), fall back to My Day.
   useEffect(() => {
-    if (view.kind === "chat" && chatList.length && !chats[view.chatId]) {
-      const t = setTimeout(() => setView({ kind: "home" }), 1500);
+    if (view.kind === "chat" && !chats[view.chatId]) {
+      const t = setTimeout(() => setView({ kind: "chats" }), 2500);
       return () => clearTimeout(t);
     }
   }, [view, chats, chatList.length]);
@@ -158,15 +159,15 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
   const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
-  const listPane = view.kind === "chat" || view.kind === "assistant";
+  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant";
   const admin = isAdmin(account);
   const myState = presence(me);
 
   function selectRail(k: ReturnType<typeof railKey>) {
     if (k === "chat") {
-      // Desktop: reopen the most recent conversation. Phones: show the list.
+      // Desktop: reopen the most recent conversation (or the chat home when there is none). Phones: show the list.
       setMobileList(true);
-      if (view.kind !== "chat" && chatList[0]) setView({ kind: "chat", chatId: chatList[0].id });
+      if (view.kind !== "chat") setView(chatList[0] ? { kind: "chat", chatId: chatList[0].id } : { kind: "chats" });
       return;
     }
     open({ kind: k } as View);
@@ -250,6 +251,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "admin" && admin && <AdminView />}
             {view.kind === "meeting" && <MeetingView id={view.id} tasks={tasks} />}
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
+            {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
           </main>
         </div>
 
