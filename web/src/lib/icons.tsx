@@ -133,3 +133,10 @@ export function CircleDot({ size = 24, className }: IconProps) {
     </span>
   );
 }
+
+// Added when merging with threads, push and the Google connector: closest glyphs in the free Freehand set.
+export const Reply = make("CornerDownLeft");
+export const MessagesSquare = make("MessageSquareQuote");
+export const Plug = make("Workflow");
+export const Video = make("Phone");
+export const NotebookPen = make("ScrollText");

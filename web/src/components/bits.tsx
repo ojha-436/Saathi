@@ -1,33 +1,47 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarDays, FileText, Hash, Lock, MessageSquare, Users } from "@/lib/icons";
+import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
-import { STATUS_META, avatarColor, chatTitle, presence } from "@/lib/format";
+import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
-import { USER_ICON } from "@/lib/streamline-icons";
 import { useWs } from "./ctx";
 
-/** One person icon (Streamline Freehand) on the same pastel circle for everyone. */
+/** Initials on a per-person pastel circle (photos, when present, are shown by UserAvatar). */
 export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full text-ink ring-2 ring-white"
-      style={{ width: size, height: size, background: "#cfd8ff" }}
+      className={clsx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-ink ring-2 ring-white", avatarColor(name))}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
       role="img"
       aria-label={name}
     >
-      <svg width={size * 0.66} height={size * 0.66} viewBox="0 0 24 24" aria-hidden dangerouslySetInnerHTML={{ __html: USER_ICON }} />
+      <span aria-hidden>{initials(name)}</span>
     </span>
   );
 }
 
 /** A clickable source chip for refs like msg:CHAT/MSG or file:ID produced by the assistant. */
 export function CiteChip({ refId }: { refId: string }) {
-  const { chats, files, users, uid, openRef, meetings } = useWs();
+  const { chats, files, users, uid, openRef, meetings, emails } = useWs();
   let label = "source";
   let isFile = false;
+  if (refId.startsWith("mail:")) {
+    const e = emails[refId.slice(5)];
+    return (
+      <a
+        href={e?.url ?? "https://mail.google.com"}
+        target="_blank"
+        rel="noreferrer"
+        title={e ? `Open “${e.subject}” in Gmail` : "Open in Gmail"}
+        className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-rust/20 bg-rust-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-rust transition hover:border-rust/50"
+      >
+        <Mail size={11} aria-hidden />
+        <span className="truncate">{e ? `${e.from_name}: ${e.subject}` : "email"}</span>
+      </a>
+    );
+  }
   if (refId.startsWith("meet:")) {
     label = meetings[refId.slice(5)]?.title ?? "meeting";
   } else if (refId.startsWith("file:")) {
@@ -70,7 +84,7 @@ export function ChatIcon({ chat, title, size = 36 }: { chat: Chat; title: string
   const Icon = chat.type === "group" ? Users : chat.visibility === "private" ? Lock : Hash;
   return (
     <span
-      className={clsx("inline-flex shrink-0 items-center justify-center rounded-lg text-white", chat.type === "group" ? "bg-[#3d4f8f]" : avatarColor(chat.name))}
+      className={clsx("inline-flex shrink-0 items-center justify-center rounded-lg text-ink", avatarColor(chat.name || chat.id))}
       style={{ width: size, height: size }}
       aria-hidden
     >

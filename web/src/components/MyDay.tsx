@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowRight, AtSign, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Plus, Radar, Sun, Users } from "@/lib/icons";
-import { useState } from "react";
-import { toDate } from "@/lib/format";
+import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X } from "@/lib/icons";
+import { api } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { enablePush, pushState, type PushState } from "@/lib/push";
+import { dueLabel, toDate } from "@/lib/format";
 import type { Notice, Task } from "@/lib/types";
 import { useWs } from "./ctx";
 import { TaskRow } from "./Tasks";
@@ -30,7 +32,7 @@ function Empty({ text }: { text: string }) {
 
 /** Start-of-day home: what I owe, what's owed to me, meetings, mentions, and a one-click brief. */
 export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[] }) {
-  const { uid, me, account, meetings, open, openRef, dialog, newTask } = useWs();
+  const { uid, me, account, meetings, events, emails, users, open, openRef, dialog, newTask, newMeeting, toast } = useWs();
   // Clock captured once per mount (render must stay pure)
   const [{ now, endOfToday }] = useState(() => {
     const d = new Date();
@@ -49,6 +51,40 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
   const recentMeetings = Object.values(meetings)
     .sort((a, b) => (b.held_at?.toMillis() ?? 0) - (a.held_at?.toMillis() ?? 0))
     .slice(0, 4);
+
+  const startOfToday = endOfToday - 24 * 60 * 60 * 1000 + 1;
+  const today = events
+    .filter((e) => e.start && e.start.toMillis() >= startOfToday && e.start.toMillis() <= endOfToday)
+    .sort((a, b) => a.start!.toMillis() - b.start!.toMillis());
+  const emailPromises = Object.values(emails)
+    .filter((e) => e.promise && !e.task_id && !e.dismissed)
+    .sort((a, b) => (b.ts?.toMillis() ?? 0) - (a.ts?.toMillis() ?? 0));
+  const clock = (t?: { toDate(): Date }) => t?.toDate().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
+  const names = (e: (typeof events)[number]) => [...e.attendee_uids.filter((a) => a !== uid).map((a) => users[a]?.name).filter(Boolean), ...e.attendee_emails.filter((m) => !e.attendee_uids.some((u) => users[u]?.email === m) && m !== me?.email)].slice(0, 5);
+
+  async function emailAct(id: string, action: "track" | "dismiss") {
+    try {
+      await api(`/api/connectors/items/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+      if (action === "track") toast("Tracking it as a task.");
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  }
+
+  const [push, setPush] = useState<PushState | null>(null);
+  useEffect(() => {
+    let dismissed = false;
+    try {
+      dismissed = localStorage.getItem("saathi.pushPrompt") === "dismissed";
+    } catch {}
+    if (!dismissed) pushState().then(setPush);
+  }, []);
+  const hidePush = () => {
+    setPush(null);
+    try {
+      localStorage.setItem("saathi.pushPrompt", "dismissed");
+    } catch {}
+  };
 
   const first = me?.name.split(" ")[0] ?? "";
   const hour = +new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false });
@@ -84,6 +120,28 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
           </div>
         </div>
 
+        {push === "off" && (
+          <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft/60 px-4 py-3 text-sm">
+            <BellRing size={18} className="text-brand" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <b>Don&rsquo;t miss mentions and replies.</b> Turn on push notifications for this device.
+            </span>
+            <button
+              onClick={async () => {
+                const s = await enablePush().catch(() => "off" as const);
+                toast(s === "on" ? "Push notifications are on." : s === "denied" ? "Blocked by the browser. Allow notifications in site settings." : "Notifications not enabled.");
+                hidePush();
+              }}
+              className="h-8 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-strong"
+            >
+              Turn on
+            </button>
+            <button onClick={hidePush} className="text-xs font-medium text-muted hover:underline">
+              Not now
+            </button>
+          </div>
+        )}
+
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <Card icon={ListTodo} title="Due today" count={dueToday.length} action={<GoLink onClick={() => open({ kind: "tasks" })} />}>
             {dueToday.length ? dueToday.map((t) => <TaskRow key={t.id} t={t} compact />) : <Empty text="Nothing due today. 🎉" />}
@@ -101,7 +159,89 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             {owed.length ? owed.slice(0, 6).map((t) => <TaskRow key={t.id} t={t} perspective="delegated" compact />) : <Empty text="Nobody owes you anything right now. Assign work from any message or meeting." />}
           </Card>
 
-          <Card icon={CalendarDays} title="Meetings" count={recentMeetings.length} action={<button onClick={() => dialog("meeting-new")} className="text-xs font-semibold text-brand hover:underline">+ Add notes</button>}>
+          {events.length > 0 && (
+            <Card icon={CalendarDays} title="Today's calendar" count={today.length}>
+              {today.length ? (
+                <ul>
+                  {today.map((e) => {
+                    const done = e.end && e.end.toMillis() < now;
+                    const live = e.start && e.end && e.start.toMillis() <= now && e.end.toMillis() > now;
+                    const who = names(e);
+                    return (
+                      <li key={e.id} className={`flex gap-3 border-b border-border px-4 py-2.5 last:border-b-0 ${done ? "opacity-60" : ""}`}>
+                        <div className="w-16 shrink-0 text-xs">
+                          <div className="font-semibold">{clock(e.start)}</div>
+                          <div className="text-muted">{clock(e.end)}</div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-sm font-semibold">
+                            {live && <span className="rounded bg-rust px-1.5 text-[10px] font-bold text-white">NOW</span>}
+                            <span className="truncate">{e.title}</span>
+                          </div>
+                          {who.length > 0 && <div className="truncate text-xs text-muted">with {who.join(", ")}</div>}
+                          {!e.private && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {!done && (
+                                <button
+                                  onClick={() => open({ kind: "assistant", prompt: `Prep me for my meeting "${e.title}" at ${clock(e.start)} today${who.length ? ` with ${who.join(", ")}` : ""}.` })}
+                                  className="flex h-7 items-center gap-1 rounded-md bg-ink px-2 text-[11px] font-semibold text-white hover:bg-ink-3"
+                                >
+                                  <Sparkles size={12} className="text-saffron" /> Prep me
+                                </button>
+                              )}
+                              {e.meet_url && !done && (
+                                <a href={e.meet_url} target="_blank" rel="noreferrer" className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover">
+                                  <Video size={12} /> Join
+                                </a>
+                              )}
+                              <button
+                                onClick={() => newMeeting({ title: e.title, when: e.start?.toDate(), attendees: e.attendee_uids })}
+                                className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover"
+                              >
+                                <NotebookPen size={12} /> {done ? "Add notes" : "Notes"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <Empty text="No meetings today." />
+              )}
+            </Card>
+          )}
+
+          {emailPromises.length > 0 && (
+            <Card icon={Mail} title="Promises in your email" count={emailPromises.length}>
+              <ul>
+                {emailPromises.slice(0, 5).map((e) => (
+                  <li key={e.id} className="border-b border-border px-4 py-2.5 last:border-b-0">
+                    <div className="text-sm">
+                      <b>{e.promise!.committer}</b> — {e.promise!.action}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-muted">
+                      {e.promise!.due_at && <span className="font-mono">due {dueLabel(e.promise!.due_at)} · </span>}
+                      <a href={e.url} target="_blank" rel="noreferrer" className="hover:underline">
+                        {e.from_name}: {e.subject}
+                      </a>
+                    </div>
+                    <div className="mt-1.5 flex gap-1.5">
+                      <button onClick={() => emailAct(e.id, "track")} className="h-7 rounded-md bg-plum px-2.5 text-[11px] font-semibold text-white hover:brightness-110">
+                        Track
+                      </button>
+                      <button onClick={() => emailAct(e.id, "dismiss")} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-hover" aria-label="Dismiss">
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          <Card icon={CalendarDays} title="Meeting notes" count={recentMeetings.length} action={<button onClick={() => dialog("meeting-new")} className="text-xs font-semibold text-brand hover:underline">+ Add notes</button>}>
             {recentMeetings.length ? (
               <ul>
                 {recentMeetings.map((m) => {
@@ -129,7 +269,11 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
               <div className="px-4 py-6 text-center text-sm text-muted">
                 <FileText size={22} className="mx-auto mb-2" aria-hidden />
                 Paste notes or upload a transcript from Meet, Teams or Zoom. Saathi pulls out decisions and action items with owners.
-                <p className="mt-2 text-xs">Calendar sync for Google and Microsoft is coming next.</p>
+                {!events.length && (
+                  <button onClick={() => dialog("settings")} className="mt-2 text-xs font-semibold text-brand hover:underline">
+                    Connect Google Calendar in Settings → Connected apps
+                  </button>
+                )}
               </div>
             )}
           </Card>

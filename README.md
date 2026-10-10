@@ -27,8 +27,10 @@ Re-run with `uv run python -m eval.run_eval`, then `uv run python -m eval.export
 | Tasks without apps | “Kal subah 10 baje … reminder” → drafted task the user confirms |
 | Document intelligence | Document AI OCR + Gemini multimodal: drawing title blocks, revision tables, MTC values, OCR confidence |
 | Workspaces & admin | Every account belongs to one workspace (invite → verified company domain → new workspace). Roles: owner, admin, member, guest (vendors see only invited channels). Admin console: members & roles, deactivate, invites, channel governance (no message access), workspace settings, audit log. Firestore rules enforce workspace + membership via token claims |
+| Threads & push | Reply in thread (side panel, reply counts, followers notified), web push via Firebase Cloud Messaging + service worker (mentions, replies, DMs/chats per notification level, tasks, reminders; respects DND and quiet hours; click opens the message) |
 | Messaging basics | Presence & status (available/busy/DND/away/offline, message + expiry), @mentions with notifications, per-chat notification levels + quiet hours, profile cards, settings, sign out everywhere |
 | Work management | Tasks assignable to colleagues with watchers and status (to do / in progress / blocked / done); My Day home; meeting notes/transcripts → summary, decisions, action items → assigned tasks; Saathi tools `assign_task`, `who_owes` |
+| Google connector | Settings → Connected apps: Google Calendar + Gmail, read-only. Server-side OAuth (one-time state), refresh tokens encrypted with Cloud KMS (`saathi/saathi-connectors`, asia-south1), client in Secret Manager (`saathi-google-oauth`). Today's meetings on My Day with "Prep me", join and notes; colleagues see "In a meeting" from free/busy only; email commitments → trackable tasks; Saathi tool `get_calendar`, emails searchable by their owner only; sync every 10 min (`saathi-sync` scheduler job); disconnect revokes and deletes synced data; admins can turn it off per workspace |
 | Sign-in & accounts | Continue with Google (Firebase Auth SSO), email sign-up with password rules, password reset, first-run profile (name + job title); optional `SIGNUP_DOMAINS` allow-list for company domains |
 | Channels | Create public or private channels, browse and join public ones, add/remove members, owners rename or delete; search index and file access follow membership instantly |
 | Enterprise chat UX | Teams-style app rail, one list for chats and channels (Favorites · Channels · Chats) with Unread/Channels/Chats filters, unread markers, reactions, hover actions (add to tasks, ask Saathi), members & details panel, mobile bottom navigation |
@@ -66,6 +68,7 @@ No environment files or secrets are committed (`.env*` is git-ignored; only `web
 | Web (Cloud Run) | `gcloud run deploy saathi-web --set-env-vars SAATHI_API_URL=…,FIREBASE_API_KEY=…,…` |
 | API | Env vars on Cloud Run: `DOCAI_PROCESSOR`, `BQ_TABLE`, `ALLOWED_ORIGINS`, `SIGNUP_DOMAINS` (optional), model overrides (`AGENT_MODEL`, `FAST_MODEL`, `VISION_MODEL`, `AGENT_THINKING`) |
 | Cron secret | Secret Manager `saathi-cron-secret`, mounted as `CRON_SECRET` |
+| Google OAuth client | Secret Manager `saathi-google-oauth` (asia-south1), mounted as `GOOGLE_OAUTH_CLIENT`. Redirect URI `…/api/connectors/google/callback`. Consent screen in Testing: add each user as a test user |
 
 ## Run locally
 

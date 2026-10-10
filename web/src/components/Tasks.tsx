@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { AtSign, Bell, CalendarClock, CheckCircle2, Circle, CircleDot, Clock, ListTodo, Loader2, Octagon, Plus, Sparkles, UserCheck, Users, X } from "@/lib/icons";
+import { AtSign, Bell, MessagesSquare, CalendarClock, CheckCircle2, Circle, CircleDot, Clock, ListTodo, Loader2, Octagon, Plus, Sparkles, UserCheck, Users, X } from "@/lib/icons";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { dueLabel, isOverdue, timeShort } from "@/lib/format";
@@ -329,7 +329,7 @@ export function TaskRow({ t, perspective = "mine", compact }: { t: Task; perspec
   );
 }
 
-const NOTICE_ICON: Record<string, typeof Bell> = { mention: AtSign, task_assigned: UserCheck, task_update: CheckCircle2, reminder: Clock, meeting: Users };
+const NOTICE_ICON: Record<string, typeof Bell> = { mention: AtSign, thread_reply: MessagesSquare, task_assigned: UserCheck, task_update: CheckCircle2, reminder: Clock, meeting: Users };
 
 export function ActivityView({ notices }: { notices: Notice[] }) {
   const { openRef, open } = useWs();
@@ -341,14 +341,14 @@ export function ActivityView({ notices }: { notices: Notice[] }) {
       return () => clearTimeout(t);
     }
   }, [unread]);
-  const rows = notices.filter((n) => filter === "all" || (filter === "task" ? n.kind?.startsWith("task") : n.kind === filter));
+  const rows = notices.filter((n) => filter === "all" || (filter === "task" ? n.kind?.startsWith("task") : filter === "mention" ? n.kind === "mention" || n.kind === "thread_reply" : n.kind === filter));
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label="Activity">
       <PageHeader icon={Bell} title="Activity" sub="Mentions, tasks assigned to you, task updates, reminders and meeting summaries." />
       <div className="flex gap-1.5 border-b border-border px-4 py-2 lg:px-6" role="group" aria-label="Filter">
         {(["all", "mention", "task", "reminder"] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f} className={clsx("h-7 rounded-full border px-2.5 text-xs font-medium capitalize", filter === f ? "border-brand bg-brand-soft text-brand" : "border-border text-muted hover:text-ink")}>
-            {f === "mention" ? "@Mentions" : f === "task" ? "Tasks" : f === "reminder" ? "Reminders" : "All"}
+            {f === "mention" ? "@Mentions & replies" : f === "task" ? "Tasks" : f === "reminder" ? "Reminders" : "All"}
           </button>
         ))}
       </div>
@@ -368,7 +368,7 @@ export function ActivityView({ notices }: { notices: Notice[] }) {
               return (
                 <li key={n.id}>
                   <button onClick={go} className={clsx("flex w-full gap-3 rounded-xl border bg-surface p-3.5 text-left transition hover:border-[#c5cad3]", n.read ? "border-border" : "border-saffron/50 shadow-[inset_3px_0_0_var(--color-saffron)]")}>
-                    <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", n.kind === "mention" ? "bg-brand-soft text-brand" : n.kind?.startsWith("task") ? "bg-moss-soft text-moss" : "bg-saffron-soft text-saffron-ink")} aria-hidden>
+                    <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", n.kind === "mention" || n.kind === "thread_reply" ? "bg-brand-soft text-brand" : n.kind?.startsWith("task") ? "bg-moss-soft text-moss" : "bg-saffron-soft text-saffron-ink")} aria-hidden>
                       <I size={16} />
                     </span>
                     <div className="min-w-0 flex-1">

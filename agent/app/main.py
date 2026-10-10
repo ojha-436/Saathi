@@ -13,7 +13,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, ingest, meetings, people
+from . import admin, ai, connectors, ingest, meetings, people, push
 from .agent import ask
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
 from .firebase import audit, bucket, current_user, db, get_chat_for_member, require_admin, same_org, user_profile
@@ -23,6 +23,7 @@ app = FastAPI(title="Saathi API")
 app.include_router(people.router)
 app.include_router(admin.router)
 app.include_router(meetings.router)
+app.include_router(connectors.router)
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
 )
@@ -127,11 +128,13 @@ def notify(uid: str, kind: str, title: str, body: str, actor: dict | None = None
          "actor": actor["uid"] if actor else None, "actor_name": actor["name"] if actor else None,
          "org_id": (actor or user_profile(uid))["org_id"], "ts": now(), "read": False}
     )
+    push.push(uid, title, body, ref=source_ref, tag=f"{kind}-{task_id or source_ref or ''}")
 
 
 # ---------------- chats ----------------
 
-def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None) -> str:
+def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None,
+                 parent_id: str | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
     ts = now()
     body = {"sender": user["uid"], "sender_name": user["name"], "text": text, "ts": ts}
@@ -139,8 +142,15 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
         body["file"] = file
     if mentions:
         body["mentions"] = mentions
-    db.collection("chats").document(chat["id"]).collection("messages").document(msg_id).set(body)
-    preview = text or (f"📎 {file['name']}" if file else "")
+    col = db.collection("chats").document(chat["id"]).collection("messages")
+    if parent_id:
+        body["parent_id"] = parent_id
+        col.document(parent_id).update({
+            "reply_count": firestore.Increment(1), "last_reply_ts": ts, "reply_users": firestore.ArrayUnion([user["uid"]]),
+            "thread_followers": firestore.ArrayUnion([user["uid"]]),
+        })
+    col.document(msg_id).set(body)
+    preview = ("↪ " if parent_id else "") + (text or (f"📎 {file['name']}" if file else ""))
     db.collection("chats").document(chat["id"]).update(
         {"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"], f"read_at.{user['uid']}": ts}
     )
@@ -389,6 +399,32 @@ def react(chat_id: str, msg_id: str, body: ReactIn, user=Depends(current_user)):
 class MessageIn(BaseModel):
     text: str
     mentions: list[str] = []  # member uids, or "channel" to notify everyone in a channel
+    parent_id: str | None = None  # reply in a thread (one level deep)
+
+
+def thread_root(chat_id: str, parent_id: str | None) -> dict | None:
+    """Validates a thread parent: it must exist in this chat and be a top-level message."""
+    if not parent_id:
+        return None
+    snap = db.collection("chats").document(chat_id).collection("messages").document(parent_id).get()
+    if not snap.exists or snap.to_dict().get("parent_id") or snap.to_dict().get("system"):
+        raise HTTPException(400, "You can only reply to a message in this conversation")
+    return {"id": parent_id, **snap.to_dict()}
+
+
+def after_post(chat: dict, user: dict, text: str, msg_id: str, mentioned: list[str], everyone: bool, root: dict | None) -> None:
+    """Notifications for a new message: mentions, thread followers, then plain pushes for everyone else."""
+    where = chat.get("name") or "a direct message"
+    ref = f"msg:{chat['id']}/{msg_id}"
+    notified = set(chat["members"]) - {user["uid"]} if everyone else set(mentioned)
+    for m in notified:
+        notify(m, "mention", f"{user['name']} mentioned you in {where}", text, actor=user, source_ref=ref, chat_id=chat["id"])
+    if root:
+        followers = (set(root.get("thread_followers") or []) | {root.get("sender")} | set(root.get("mentions") or [])) & set(chat["members"])
+        for f in followers - notified - {user["uid"]}:
+            notify(f, "thread_reply", f"{user['name']} replied to a thread in {where}", text, actor=user, source_ref=ref, chat_id=chat["id"])
+            notified.add(f)
+    push.push_message(chat, user, text, msg_id, skip=notified)
 
 
 @app.post("/api/chats/{chat_id}/messages")
@@ -398,20 +434,21 @@ def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depend
     if not text:
         raise HTTPException(400, "Empty message")
     rate_limit(user["uid"], "message", 60)
+    root = thread_root(chat_id, body.parent_id)
     mentioned = [m for m in dict.fromkeys(body.mentions) if m in chat["members"] and m != user["uid"]]
     everyone = "channel" in body.mentions and chat.get("type") == "channel" and (
         user["uid"] in (chat.get("owners") or []) or user.get("org_role") in ("owner", "admin"))
-    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []))
-    where = chat.get("name") or "a direct message"
-    for m in (set(chat["members"]) - {user["uid"]} if everyone else mentioned):
-        notify(m, "mention", f"{user['name']} mentioned you in {where}", text, actor=user, source_ref=f"msg:{chat_id}/{msg_id}", chat_id=chat_id)
+    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []), parent_id=body.parent_id if root else None)
+    after_post(chat, user, text, msg_id, mentioned, everyone, root)
     bg.add_task(ingest.process_message, chat_id, msg_id)
     return {"id": msg_id}
 
 
 @app.post("/api/chats/{chat_id}/files")
-async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File(...), text: str = Form(""), user=Depends(current_user)):
+async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File(...), text: str = Form(""), parent_id: str = Form(""),
+                      user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
+    root = thread_root(chat_id, parent_id or None)
     rate_limit(user["uid"], "upload", 10)
     ext = ("." + (file.filename or "").rsplit(".", 1)[-1].lower()) if "." in (file.filename or "") else ""
     if ext not in UPLOAD_TYPES:
@@ -432,7 +469,8 @@ async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File
         }
     )
     meta = {"id": file_id, "name": file.filename, "mime": UPLOAD_TYPES[ext], "size": len(data), "status": "processing"}
-    msg_id = post_message(chat, user, text.strip(), file=meta)
+    msg_id = post_message(chat, user, text.strip(), file=meta, parent_id=parent_id if root else None)
+    after_post(chat, user, text.strip() or f"📎 {file.filename}", msg_id, [], False, root)
     if text.strip():  # quick: promise/decision chips appear before the slower document extraction
         bg.add_task(ingest.process_message, chat_id, msg_id)
     bg.add_task(ingest.process_file, chat_id, msg_id, file_id)
@@ -701,6 +739,7 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
             {"uid": t["owner"], "kind": "reminder", "title": title, "body": t.get("title"), "task_id": s.id, "source_ref": t.get("source_ref"),
              "org_id": t.get("org_id", ""), "ts": now(), "read": False}
         )
+        push.push(t["owner"], title, t.get("title") or "", ref=t.get("source_ref"), tag=f"reminder-{s.id}")
         s.reference.update({"notified": True})
         fired += 1
     # statuses with an expiry ("Busy until 4 pm") go back to Available

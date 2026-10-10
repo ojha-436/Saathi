@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Account, Chat, FileDoc, Meeting, UserProfile, UserSettings } from "@/lib/types";
+import type { Account, CalendarEvent, Chat, EmailItem, FileDoc, Meeting, UserProfile, UserSettings } from "@/lib/types";
 
 export type View =
   | { kind: "home" }
@@ -11,11 +11,13 @@ export type View =
   | { kind: "activity" }
   | { kind: "admin" }
   | { kind: "meeting"; id: string }
+  | { kind: "chats" }
   | { kind: "chat"; chatId: string; focusMsg?: string };
 
 export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new";
 
 export type TaskPrefill = { title?: string; assignee?: string; sourceRef?: string; due?: string };
+export type MeetingPrefill = { title?: string; when?: Date; attendees?: string[] };
 
 export type WorkspaceCtx = {
   uid: string;
@@ -25,6 +27,8 @@ export type WorkspaceCtx = {
   chats: Record<string, Chat>;
   files: Record<string, FileDoc>;
   meetings: Record<string, Meeting>;
+  events: CalendarEvent[];
+  emails: Record<string, EmailItem>;
   settings: UserSettings;
   view: View;
   open: (view: View) => void;
@@ -32,6 +36,7 @@ export type WorkspaceCtx = {
   toast: (text: string) => void;
   dialog: (kind: DialogKind) => void;
   newTask: (prefill?: TaskPrefill) => void;
+  newMeeting: (prefill?: MeetingPrefill) => void;
   showProfile: (uid: string) => void;
   /** Mobile only: go back from a conversation to the chat list. */
   showList: () => void;

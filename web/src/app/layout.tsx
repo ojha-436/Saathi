@@ -1,7 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Geist_Mono, Montserrat } from "next/font/google";
 import { connection } from "next/server";
 import { serverConfig } from "@/lib/config";
 import "./globals.css";
+
+// Self-hosted at build time: no request to Google Fonts at runtime (the CSP only allows our own origin for fonts/styles)
+const montserrat = Montserrat({ variable: "--font-montserrat", subsets: ["latin"], style: ["normal", "italic"], display: "swap" });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], display: "swap" });
 
 
 export const metadata: Metadata = {
@@ -17,12 +22,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection();
   const config = JSON.stringify(serverConfig()).replace(/</g, "\\u003c");
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className={`${montserrat.variable} ${geistMono.variable} h-full antialiased`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Geist+Mono:wght@100..900&display=swap" />
         <script dangerouslySetInnerHTML={{ __html: `window.__SAATHI__=${config};` }} />
       </head>
       <body className="h-full">{children}</body>

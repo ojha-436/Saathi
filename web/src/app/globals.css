@@ -3,9 +3,9 @@
 /* Saathi design system — "industrial blueprint editorial"
    ink + warm paper, saffron accent, blueprint blue for links/citations. */
 @theme inline {
-  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Montserrat", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-sans: var(--font-montserrat), "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-montserrat), "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
 
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
@@ -48,7 +48,7 @@ html,
 body {
   background: var(--color-paper);
   color: var(--color-ink);
-  font-family: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-montserrat), "Montserrat", ui-sans-serif, system-ui, sans-serif;
 }
 
 ::selection {

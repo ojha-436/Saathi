@@ -53,7 +53,8 @@ export function initials(name = "") {
     .toUpperCase();
 }
 
-const PALETTE = ["bg-[#2457a6]", "bg-[#2f6b4f]", "bg-[#5b3fa0]", "bg-[#b3402a]", "bg-[#9a520a]", "bg-[#1f6f78]", "bg-[#3d4f8f]"];
+// Pastel backgrounds with dark text (light, airy redesign); still one colour per person so people stay recognisable
+const PALETTE = ["bg-[#cfd8ff]", "bg-[#d6f0c2]", "bg-[#ffd9c7]", "bg-[#f3d1f4]", "bg-[#fff1b8]", "bg-[#c7ecef]", "bg-[#e3dcff]"];
 export function avatarColor(seed = "") {
   let h = 0;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -86,6 +87,7 @@ export function presence(u?: UserProfile): StatusState {
   const st = u.status;
   const until = st?.until?.toMillis?.();
   if (st && st.state !== "available" && (!until || until > Date.now())) return st.state;
+  if (inMeeting(u)) return "busy";
   const last = u.last_active?.toMillis?.();
   if (!last) return "offline";
   return Date.now() - last > 10 * 60_000 ? "away" : "available";
@@ -102,7 +104,14 @@ export const STATUS_META: Record<StatusState, { label: string; dot: string }> = 
 export function statusText(u?: UserProfile) {
   const st = u?.status;
   const until = st?.until?.toMillis?.();
-  return st?.text && (!until || until > Date.now()) ? st.text : "";
+  if (st?.text && (!until || until > Date.now())) return st.text;
+  return inMeeting(u) ? "📅 In a meeting (calendar)" : "";
+}
+
+/** From the free/busy slots Google Calendar sync puts on the profile (no titles). */
+export function inMeeting(u?: UserProfile) {
+  const t = Date.now();
+  return !!u?.calendar_busy?.some((s) => s.start?.toMillis?.() <= t && s.end?.toMillis?.() > t);
 }
 
 export function localTime(tz?: string) {

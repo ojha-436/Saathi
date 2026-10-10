@@ -8,13 +8,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";
 import { STATUS_META, isUnread, presence, statusText } from "@/lib/format";
-import { useChats, useFiles, useMeetings, useNotices, useSettings, useTasks, useUsers } from "@/lib/hooks";
+import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useSettings, useTasks, useUsers } from "@/lib/hooks";
 import type { Account, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { Menu, UserAvatar } from "./bits";
+import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
-import { Ctx, isAdmin, type DialogKind, type TaskPrefill, type View } from "./ctx";
+import { Ctx, isAdmin, type DialogKind, type MeetingPrefill, type TaskPrefill, type View } from "./ctx";
 import { BrowseChannelsDialog, CommandPalette, CreateChannelDialog, NewChatDialog, ProfileDialog } from "./Dialogs";
 import { InsightsView } from "./InsightsView";
 import { LogoMark } from "./Logo";
@@ -36,10 +37,23 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const notices = useNotices(uid);
   const meetingList = useMeetings(uid);
   const settings = useSettings(uid);
+  const events = useEvents(uid);
+  const emailList = useEmailItems(uid);
+  const emails = useMemo(() => Object.fromEntries(emailList.map((e) => [e.id, e])), [emailList]);
+  const [meetingPrefill, setMeetingPrefill] = useState<MeetingPrefill | null>(null);
   const [view, setView] = useState<View>({ kind: "home" });
   // Phones show one pane at a time: the chat list, or the open conversation.
   const [mobileList, setMobileList] = useState(false);
-  const [dlg, setDlg] = useState<DialogKind | null>(null);
+  // Deep link from a push notification: /app?open=msg:CHAT/MSG (also meet:, mail:)
+  const [deepLink] = useState(() => new URLSearchParams(location.search).get("open") ?? "");
+  const [oauthReturn] = useState(() => {
+    const q = new URLSearchParams(location.search);
+    if (q.get("connected") !== "google") return "";
+    const status = q.get("status");
+    return status === "ok" ? "Google connected. Syncing your calendar and email…" : status === "cancelled" ? "Google connection cancelled." : `Couldn't connect Google: ${q.get("detail") || "try again"}`;
+  });
+  const [dlg, setDlg] = useState<DialogKind | null>(oauthReturn ? "settings" : null);
+  const [settingsTab, setSettingsTab] = useState<string | undefined>(oauthReturn ? "apps" : undefined);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [profileOf, setProfileOf] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
@@ -76,6 +90,33 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     [open],
   );
 
+  // Back from Google's consent screen (?connected=google&status=ok|error|cancelled): read once, clean the URL, show the result
+  useEffect(() => {
+    if (!oauthReturn) return;
+    history.replaceState(null, "", "/app");
+    const t = setTimeout(() => toast(oauthReturn), 0);
+    return () => clearTimeout(t);
+  }, [oauthReturn, toast]);
+
+  useEffect(() => {
+    if (!deepLink) return;
+    history.replaceState(null, "", "/app");
+    const t = setTimeout(() => openRef(deepLink), 0);
+    return () => clearTimeout(t);
+  }, [deepLink, openRef]);
+
+  // A notification clicked while the app is already open: the service worker asks this tab to navigate.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type !== "saathi-open") return;
+      const ref = new URL(e.data.url).searchParams.get("open");
+      if (ref) openRef(ref);
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, [openRef]);
+
   // Presence heartbeat while the app is open and visible.
   useEffect(() => {
     const beat = () => document.visibilityState === "visible" && api("/api/me/presence", { method: "POST" }).catch(() => {});
@@ -90,8 +131,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
   // If the open chat disappears (left, removed, deleted), fall back to My Day.
   useEffect(() => {
-    if (view.kind === "chat" && chatList.length && !chats[view.chatId]) {
-      const t = setTimeout(() => setView({ kind: "home" }), 1500);
+    if (view.kind === "chat" && !chats[view.chatId]) {
+      const t = setTimeout(() => setView({ kind: "chats" }), 2500);
       return () => clearTimeout(t);
     }
   }, [view, chats, chatList.length]);
@@ -139,15 +180,15 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
   const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
-  const listPane = view.kind === "chat" || view.kind === "assistant";
+  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant";
   const admin = isAdmin(account);
   const myState = presence(me);
 
   function selectRail(k: ReturnType<typeof railKey>) {
     if (k === "chat") {
-      // Desktop: reopen the most recent conversation. Phones: show the list.
+      // Desktop: reopen the most recent conversation (or the chat home when there is none). Phones: show the list.
       setMobileList(true);
-      if (view.kind !== "chat" && chatList[0]) setView({ kind: "chat", chatId: chatList[0].id });
+      if (view.kind !== "chat") setView(chatList[0] ? { kind: "chat", chatId: chatList[0].id } : { kind: "chats" });
       return;
     }
     open({ kind: k } as View);
@@ -156,8 +197,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   return (
     <Ctx.Provider
       value={{
-        uid, account, me, users, chats, files, meetings, settings, view, open, openRef, toast, dialog: setDlg,
-        newTask: (p) => setTaskPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true),
+        uid, account, me, users, chats, files, meetings, events, emails, settings, view, open, openRef, toast, dialog: setDlg,
+        newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true),
       }}
     >
       <a href="#workspace-main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">
@@ -231,6 +272,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "admin" && admin && <AdminView />}
             {view.kind === "meeting" && <MeetingView id={view.id} tasks={tasks} />}
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
+            {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
           </main>
         </div>
 
@@ -250,9 +292,25 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       {dlg === "new-channel" && <CreateChannelDialog onClose={() => setDlg(null)} />}
       {dlg === "browse-channels" && <BrowseChannelsDialog onClose={() => setDlg(null)} />}
       {dlg === "profile" && <ProfileDialog onClose={() => setDlg(null)} />}
-      {dlg === "settings" && <SettingsDialog onClose={() => setDlg(null)} />}
+      {dlg === "settings" && (
+        <SettingsDialog
+          initialTab={settingsTab}
+          onClose={() => {
+            setDlg(null);
+            setSettingsTab(undefined);
+          }}
+        />
+      )}
       {dlg === "status" && <StatusDialog onClose={() => setDlg(null)} />}
-      {dlg === "meeting-new" && <NewMeetingDialog onClose={() => setDlg(null)} />}
+      {(dlg === "meeting-new" || meetingPrefill) && (
+        <NewMeetingDialog
+          prefill={meetingPrefill ?? {}}
+          onClose={() => {
+            setDlg(null);
+            setMeetingPrefill(null);
+          }}
+        />
+      )}
       {taskPrefill && <TaskDialog prefill={taskPrefill} onClose={() => setTaskPrefill(null)} />}
       {profileOf && <ProfileCard uid={profileOf} onClose={() => setProfileOf(null)} />}
       {welcome && !dlg && <ProfileDialog welcome onClose={() => setWelcomeDone(true)} />}
