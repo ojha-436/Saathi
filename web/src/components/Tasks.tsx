@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { AtSign, Bell, MessagesSquare, CalendarClock, CheckCircle2, Circle, CircleDot, Clock, ListTodo, Loader2, Octagon, Plus, Sparkles, UserCheck, Users, X } from "lucide-react";
+import { AtSign, Bell, MessagesSquare, CalendarClock, CheckCircle2, Circle, CircleDot, Clock, ListTodo, Loader2, Octagon, Plus, Sparkles, UserCheck, Users, X } from "@/lib/icons";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { dueLabel, isOverdue, timeShort } from "@/lib/format";

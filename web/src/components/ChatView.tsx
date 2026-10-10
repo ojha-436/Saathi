@@ -31,7 +31,7 @@ import {
   Users,
   Wand2,
   X,
-} from "lucide-react";
+} from "@/lib/icons";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X } from "lucide-react";
+import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X } from "@/lib/icons";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { enablePush, pushState, type PushState } from "@/lib/push";

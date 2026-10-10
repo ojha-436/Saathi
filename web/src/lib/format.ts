@@ -53,7 +53,8 @@ export function initials(name = "") {
     .toUpperCase();
 }
 
-const PALETTE = ["bg-[#2457a6]", "bg-[#2f6b4f]", "bg-[#5b3fa0]", "bg-[#b3402a]", "bg-[#9a520a]", "bg-[#1f6f78]", "bg-[#3d4f8f]"];
+// Pastel backgrounds with dark text (light, airy redesign); still one colour per person so people stay recognisable
+const PALETTE = ["bg-[#cfd8ff]", "bg-[#d6f0c2]", "bg-[#ffd9c7]", "bg-[#f3d1f4]", "bg-[#fff1b8]", "bg-[#c7ecef]", "bg-[#e3dcff]"];
 export function avatarColor(seed = "") {
   let h = 0;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;

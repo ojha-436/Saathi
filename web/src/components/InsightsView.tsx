@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, BarChart3, CheckCircle2, Gavel, Handshake, ListTodo, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, Gavel, Handshake, ListTodo, RefreshCw, Sparkles } from "@/lib/icons";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Insights } from "@/lib/types";

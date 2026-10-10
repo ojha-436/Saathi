@@ -1,21 +1,23 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users } from "lucide-react";
+import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
 import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
 import { useWs } from "./ctx";
 
+/** Initials on a per-person pastel circle (photos, when present, are shown by UserAvatar). */
 export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (
     <span
-      className={clsx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white", avatarColor(name))}
+      className={clsx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-ink ring-2 ring-white", avatarColor(name))}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
-      aria-hidden
+      role="img"
+      aria-label={name}
     >
-      {initials(name)}
+      <span aria-hidden>{initials(name)}</span>
     </span>
   );
 }
@@ -82,7 +84,7 @@ export function ChatIcon({ chat, title, size = 36 }: { chat: Chat; title: string
   const Icon = chat.type === "group" ? Users : chat.visibility === "private" ? Lock : Hash;
   return (
     <span
-      className={clsx("inline-flex shrink-0 items-center justify-center rounded-lg text-white", chat.type === "group" ? "bg-[#3d4f8f]" : avatarColor(chat.name))}
+      className={clsx("inline-flex shrink-0 items-center justify-center rounded-lg text-ink", avatarColor(chat.name || chat.id))}
       style={{ width: size, height: size }}
       aria-hidden
     >

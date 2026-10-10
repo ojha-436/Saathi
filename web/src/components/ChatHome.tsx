@@ -1,6 +1,6 @@
 "use client";
 
-import { Compass, Hash, Loader2, MessageSquare, MessageSquarePlus, Search, Users } from "lucide-react";
+import { Compass, Hash, Loader2, MessageSquare, MessageSquarePlus, Search, Users } from "@/lib/icons";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { STATUS_META, presence, statusText } from "@/lib/format";
