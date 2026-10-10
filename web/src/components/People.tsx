@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";
 import { disablePush, enablePush, pushState, type PushState } from "@/lib/push";
-import { STATUS_META, localTime, presence, statusText } from "@/lib/format";
+import { STATUS_META, localTime, ownStatusText, presence, statusText } from "@/lib/format";
 import type { Connection, NotifyLevel, StatusState } from "@/lib/types";
 import { RoleBadge, Switch, UserAvatar } from "./bits";
 import { useWs } from "./ctx";
@@ -47,7 +47,7 @@ const PRESETS = [
 export function StatusDialog({ onClose }: { onClose: () => void }) {
   const { me, toast } = useWs();
   const [state, setState] = useState<StatusState>(me?.status?.state && me.status.state !== "offline" ? me.status.state : "available");
-  const [text, setText] = useState(statusText(me));
+  const [text, setText] = useState(ownStatusText(me));
   const [clear, setClear] = useState<number | null>(-1);
   const [busy, setBusy] = useState(false);
 
@@ -421,6 +421,15 @@ function SecuritySettings() {
           {account.org.name} · your role: <b className="text-ink">{account.org_role}</b>
         </p>
         <p className="mt-1 text-muted">Only people in this workspace can see you, and only chats and channels you belong to are visible to you and to Saathi.</p>
+      </section>
+      <section className="rounded-xl border border-border p-4">
+        <h3 className="font-semibold">Your data</h3>
+        <p className="mt-1 text-muted">
+          What Saathi collects, who can see it, where it&rsquo;s stored and how to request a copy or deletion.{" "}
+          <a href="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">
+            Read the Privacy Policy
+          </a>
+        </p>
       </section>
       <section className="rounded-xl border border-border p-4">
         <h3 className="font-semibold">Sign out everywhere</h3>

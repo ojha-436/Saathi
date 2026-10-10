@@ -86,8 +86,11 @@ export function presence(u?: UserProfile): StatusState {
   if (!u) return "offline";
   const st = u.status;
   const until = st?.until?.toMillis?.();
-  if (st && st.state !== "available" && (!until || until > Date.now())) return st.state;
-  if (inMeeting(u)) return "busy";
+  const manual = !!st && (!until || until > Date.now());
+  if (manual && st.state !== "available") return st.state;
+  const slot = meetingNow(u);
+  // Calendar only applies if you haven't chosen a status since the meeting started (Available included)
+  if (slot && !(manual && (st.set_at?.toMillis?.() ?? 0) >= slot.start.toMillis())) return "busy";
   const last = u.last_active?.toMillis?.();
   if (!last) return "offline";
   return Date.now() - last > 10 * 60_000 ? "away" : "available";
@@ -105,13 +108,28 @@ export function statusText(u?: UserProfile) {
   const st = u?.status;
   const until = st?.until?.toMillis?.();
   if (st?.text && (!until || until > Date.now())) return st.text;
-  return inMeeting(u) ? "📅 In a meeting (calendar)" : "";
+  return presence(u) === "busy" && meetingNow(u) && st?.state !== "busy" ? "📅 In a meeting (calendar)" : "";
+}
+
+/** The status message the user typed (never the automatic calendar text). */
+export function ownStatusText(u?: UserProfile) {
+  const st = u?.status;
+  const until = st?.until?.toMillis?.();
+  return st?.text && (!until || until > Date.now()) && !st.text.includes("(calendar)") ? st.text : "";
 }
 
 /** From the free/busy slots Google Calendar sync puts on the profile (no titles). */
 export function inMeeting(u?: UserProfile) {
+  return !!meetingNow(u);
+}
+
+const MAX_MEETING_MS = 12 * 60 * 60 * 1000;
+function meetingNow(u?: UserProfile) {
   const t = Date.now();
-  return !!u?.calendar_busy?.some((s) => s.start?.toMillis?.() <= t && s.end?.toMillis?.() > t);
+  return u?.calendar_busy?.find((s) => {
+    const a = s.start?.toMillis?.(), b = s.end?.toMillis?.();
+    return a <= t && b > t && b - a <= MAX_MEETING_MS;
+  });
 }
 
 export function localTime(tz?: string) {

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";
-import { STATUS_META, isUnread, presence, statusText } from "@/lib/format";
+import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
 import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useSettings, useTasks, useUsers } from "@/lib/hooks";
 import type { Account, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
@@ -170,7 +170,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
   async function setStatus(state: StatusState) {
     try {
-      await api("/api/me/status", { json: { state, text: statusText(me) } });
+      await api("/api/me/status", { json: { state, text: ownStatusText(me) } });
     } catch (e) {
       toast((e as Error).message);
     }

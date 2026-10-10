@@ -275,7 +275,8 @@ def _sync_calendar(uid: str, user: dict, headers: dict) -> int:
             "attendee_emails": [] if private else emails[:50], "attendee_uids": [] if private else [people[e] for e in emails if e in people],
             "private": private, "updated_at": datetime.now(TZ),
         })
-        if ev.get("transparency") != "transparent" and end and end > t and start < t + timedelta(hours=24):
+        # Only real meetings count as busy: skip "free" events and long blocks (multi-day, holidays, all-day-ish reminders)
+        if ev.get("transparency") != "transparent" and end and end > t and start < t + timedelta(hours=24) and end - start <= timedelta(hours=12):
             busy.append({"start": start, "end": end})
     for s in db.collection("events").where(filter=FieldFilter("uid", "==", uid)).stream():
         if s.id not in seen:

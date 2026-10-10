@@ -16,7 +16,7 @@ export type UserProfile = {
   org_id?: string;
   org_role?: OrgRole;
   deactivated?: boolean;
-  status?: { state: StatusState; text?: string; until?: Timestamp | null } | null;
+  status?: { state: StatusState; text?: string; until?: Timestamp | null; set_at?: Timestamp | null } | null;
   last_active?: Timestamp | null;
   calendar_busy?: { start: Timestamp; end: Timestamp }[];
 };
