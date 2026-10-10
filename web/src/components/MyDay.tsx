@@ -120,6 +120,17 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
           </div>
         </div>
 
+        {push === "install" && (
+          <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft/60 px-4 py-3 text-sm">
+            <BellRing size={18} className="text-brand" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <b>Get notifications on your iPhone:</b> tap <b>Share</b> → <b>Add to Home Screen</b>, then open Saathi from your Home Screen.
+            </span>
+            <button onClick={hidePush} className="text-xs font-medium text-muted hover:underline">
+              Got it
+            </button>
+          </div>
+        )}
         {push === "off" && (
           <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft/60 px-4 py-3 text-sm">
             <BellRing size={18} className="text-brand" aria-hidden />

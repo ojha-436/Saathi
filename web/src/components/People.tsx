@@ -335,9 +335,15 @@ function PushSettings() {
           <h3 className="font-semibold">Push notifications on this device</h3>
           <p className="text-sm text-muted">Mentions, thread replies, new messages (per chat setting), tasks and reminders, even when Saathi is closed.</p>
         </div>
-        {state === null || busy ? <Loader2 size={18} className="animate-spin text-muted" /> : state === "unsupported" ? null : <Switch on={state === "on"} onChange={toggle} label="Push notifications" />}
+        {state === null || busy ? <Loader2 size={18} className="animate-spin text-muted" /> : state === "unsupported" || state === "install" ? null : <Switch on={state === "on"} onChange={toggle} label="Push notifications" />}
       </div>
-      {state === "unsupported" && <p className="mt-2 text-xs text-muted">This browser doesn&rsquo;t support web push. On iPhone, add Saathi to your Home Screen first (Share → Add to Home Screen).</p>}
+      {state === "install" && (
+        <p className="mt-2 rounded-lg bg-brand-soft/60 px-3 py-2 text-xs">
+          <b>On iPhone and iPad:</b> tap <b>Share</b> → <b>Add to Home Screen</b>, open Saathi from your Home Screen, then turn this on. Apple only allows
+          notifications for apps added to the Home Screen (iOS 16.4 or later).
+        </p>
+      )}
+      {state === "unsupported" && <p className="mt-2 text-xs text-muted">This browser doesn&rsquo;t support web push notifications.</p>}
       {state === "denied" && <p className="mt-2 text-xs text-rust">Blocked in this browser. Click the lock icon in the address bar → Notifications → Allow, then turn this on.</p>}
       {state === "on" && (
         <button
