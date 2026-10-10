@@ -1,7 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, sendEmailVerification, signOut, type User } from "firebase/auth";
-import { MailCheck } from "lucide-react";
+import { MailCheck } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogoMark } from "@/components/Logo";

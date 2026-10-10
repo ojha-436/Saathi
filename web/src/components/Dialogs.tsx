@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowRight, Check, Compass, CornerDownLeft, FileText, Globe, Hash, Loader2, Lock, MessageSquare, Search, Sparkles, Users, X } from "lucide-react";
+import { ArrowRight, Check, Compass, CornerDownLeft, FileText, Globe, Hash, Loader2, Lock, MessageSquare, Search, Sparkles, Users, X } from "@/lib/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle } from "@/lib/format";

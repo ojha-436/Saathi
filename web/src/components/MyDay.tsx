@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, AtSign, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X } from "lucide-react";
+import { ArrowRight, AtSign, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X } from "@/lib/icons";
 import { api } from "@/lib/api";
 import { useState } from "react";
 import { dueLabel, toDate } from "@/lib/format";

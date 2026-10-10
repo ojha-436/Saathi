@@ -1,7 +1,7 @@
 "use client";
 
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { Loader2, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import { Loader2, LockKeyhole, ShieldCheck, Sparkles } from "@/lib/icons";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { getFbAuth } from "@/lib/firebase";

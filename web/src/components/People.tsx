@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { signOut } from "firebase/auth";
-import { AlertTriangle, Bell, Building2, CalendarDays, CheckCircle2, Clock, Loader2, Mail, MapPin, MessageSquare, Phone, Plug, RefreshCw, ShieldCheck, Smile, UserRound, X } from "lucide-react";
+import { AlertTriangle, Bell, Building2, CalendarDays, CheckCircle2, Clock, Loader2, Mail, MapPin, MessageSquare, Phone, Plug, RefreshCw, ShieldCheck, Smile, UserRound, X } from "@/lib/icons";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";
