@@ -178,6 +178,7 @@ class OrgIn(BaseModel):
     domains: list[str] | None = None
     channel_creation: str | None = None  # everyone | admins
     ai_enabled: bool | None = None
+    integrations_google: bool | None = None
 
 
 @router.patch("/org")
@@ -210,6 +211,13 @@ def update_org(body: OrgIn, admin=Depends(admin_user)):
         update["settings.channel_creation"] = body.channel_creation
     if body.ai_enabled is not None:
         update["settings.ai_enabled"] = body.ai_enabled
+    if body.integrations_google is not None:
+        update["settings.integrations_google"] = body.integrations_google
+        if not body.integrations_google:  # turning it off disconnects everyone in the workspace
+            from .connectors import disconnect_user
+
+            for c in db.collection("connections").where(filter=FieldFilter("org_id", "==", admin["org_id"])).stream():
+                disconnect_user(c.get("uid"))
     if update:
         ref.update(update)
         audit(admin, "workspace.updated", admin["org_id"], **{k.replace("settings.", ""): v for k, v in update.items()})

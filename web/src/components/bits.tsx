@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarDays, FileText, Hash, Lock, MessageSquare, Users } from "lucide-react";
+import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
 import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
@@ -22,9 +22,24 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
 
 /** A clickable source chip for refs like msg:CHAT/MSG or file:ID produced by the assistant. */
 export function CiteChip({ refId }: { refId: string }) {
-  const { chats, files, users, uid, openRef, meetings } = useWs();
+  const { chats, files, users, uid, openRef, meetings, emails } = useWs();
   let label = "source";
   let isFile = false;
+  if (refId.startsWith("mail:")) {
+    const e = emails[refId.slice(5)];
+    return (
+      <a
+        href={e?.url ?? "https://mail.google.com"}
+        target="_blank"
+        rel="noreferrer"
+        title={e ? `Open “${e.subject}” in Gmail` : "Open in Gmail"}
+        className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-rust/20 bg-rust-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-rust transition hover:border-rust/50"
+      >
+        <Mail size={11} aria-hidden />
+        <span className="truncate">{e ? `${e.from_name}: ${e.subject}` : "email"}</span>
+      </a>
+    );
+  }
   if (refId.startsWith("meet:")) {
     label = meetings[refId.slice(5)]?.title ?? "meeting";
   } else if (refId.startsWith("file:")) {

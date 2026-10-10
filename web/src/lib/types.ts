@@ -18,6 +18,7 @@ export type UserProfile = {
   deactivated?: boolean;
   status?: { state: StatusState; text?: string; until?: Timestamp | null } | null;
   last_active?: Timestamp | null;
+  calendar_busy?: { start: Timestamp; end: Timestamp }[];
 };
 
 /** The signed-in user's account and workspace, from GET /api/me. */
@@ -27,7 +28,7 @@ export type Account = {
   email: string;
   org_id: string;
   org_role: OrgRole;
-  org: { id: string; name: string; domains: string[]; settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean } };
+  org: { id: string; name: string; domains: string[]; settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean } };
 };
 
 export type NotifyLevel = "all" | "mentions" | "off";
@@ -166,4 +167,39 @@ export type Insights = {
   assistant: { questions_7d: number; tool_use: Record<string, number>; median_latency_ms: number | null };
   chats: { chat_id: string; name: string; messages: number; files: number }[];
   decisions: { chat: string; decision: string; ts: string }[];
+};
+
+export type Connection = {
+  provider: "google";
+  email: string;
+  services: ("calendar" | "gmail")[];
+  status: "active" | "needs_reauth";
+  error?: string | null;
+  last_sync: string | null;
+  stats: { events?: number; emails?: number; email_promises?: number };
+};
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  start?: Timestamp;
+  end?: Timestamp;
+  location?: string;
+  meet_url?: string | null;
+  html_link?: string;
+  attendee_emails: string[];
+  attendee_uids: string[];
+  private?: boolean;
+};
+
+export type EmailItem = {
+  id: string;
+  subject: string;
+  from_name: string;
+  ts?: Timestamp;
+  snippet: string;
+  url: string;
+  promise?: { committer: string; action: string; due_at?: Timestamp | null } | null;
+  task_id?: string | null;
+  dismissed?: boolean;
 };

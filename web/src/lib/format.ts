@@ -86,6 +86,7 @@ export function presence(u?: UserProfile): StatusState {
   const st = u.status;
   const until = st?.until?.toMillis?.();
   if (st && st.state !== "available" && (!until || until > Date.now())) return st.state;
+  if (inMeeting(u)) return "busy";
   const last = u.last_active?.toMillis?.();
   if (!last) return "offline";
   return Date.now() - last > 10 * 60_000 ? "away" : "available";
@@ -102,7 +103,14 @@ export const STATUS_META: Record<StatusState, { label: string; dot: string }> = 
 export function statusText(u?: UserProfile) {
   const st = u?.status;
   const until = st?.until?.toMillis?.();
-  return st?.text && (!until || until > Date.now()) ? st.text : "";
+  if (st?.text && (!until || until > Date.now())) return st.text;
+  return inMeeting(u) ? "📅 In a meeting (calendar)" : "";
+}
+
+/** From the free/busy slots Google Calendar sync puts on the profile (no titles). */
+export function inMeeting(u?: UserProfile) {
+  const t = Date.now();
+  return !!u?.calendar_busy?.some((s) => s.start?.toMillis?.() <= t && s.end?.toMillis?.() > t);
 }
 
 export function localTime(tz?: string) {

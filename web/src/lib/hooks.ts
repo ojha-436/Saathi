@@ -4,7 +4,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query, where, type Query }
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getDb } from "./firebase";
-import type { AssistantMsg, Chat, FileDoc, Meeting, Message, Notice, Task, UserProfile, UserSettings } from "./types";
+import type { AssistantMsg, CalendarEvent, Chat, EmailItem, FileDoc, Meeting, Message, Notice, Task, UserProfile, UserSettings } from "./types";
 
 function useLive<T>(make: () => Query | null, key: string): T[] {
   const [rows, setRows] = useState<T[]>([]);
@@ -90,3 +90,9 @@ export const useAssistant = (uid?: string) =>
     () => (uid ? query(collection(getDb(), "assistant", uid, "messages"), orderBy("ts", "asc"), limit(200)) : null),
     `assistant:${uid}`,
   );
+
+export const useEvents = (uid?: string) =>
+  useLive<CalendarEvent>(() => (uid ? query(collection(getDb(), "events"), where("uid", "==", uid), limit(200)) : null), `events:${uid}`);
+
+export const useEmailItems = (uid?: string) =>
+  useLive<EmailItem>(() => (uid ? query(collection(getDb(), "external_items"), where("uid", "==", uid), limit(200)) : null), `emails:${uid}`);
