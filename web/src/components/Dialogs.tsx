@@ -9,7 +9,7 @@ import type { ChannelSummary, Chat } from "@/lib/types";
 import { Avatar } from "./bits";
 import { useWs } from "./ctx";
 
-function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -30,7 +30,7 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
   );
 }
 
-function ModalHeader({ title, sub, onClose }: { title: string; sub?: string; onClose: () => void }) {
+export function ModalHeader({ title, sub, onClose }: { title: string; sub?: string; onClose: () => void }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
       <div>
@@ -44,12 +44,12 @@ function ModalHeader({ title, sub, onClose }: { title: string; sub?: string; onC
   );
 }
 
-function PeoplePicker({ picked, setPicked, exclude = [] }: { picked: string[]; setPicked: (f: (p: string[]) => string[]) => void; exclude?: string[] }) {
+export function PeoplePicker({ picked, setPicked, exclude = [] }: { picked: string[]; setPicked: (f: (p: string[]) => string[]) => void; exclude?: string[] }) {
   const { uid, users } = useWs();
   const [q, setQ] = useState("");
   const t = q.trim().toLowerCase();
   const people = Object.values(users)
-    .filter((u) => u.id !== uid && !exclude.includes(u.id))
+    .filter((u) => u.id !== uid && !exclude.includes(u.id) && !u.deactivated)
     .filter((u) => !t || u.name.toLowerCase().includes(t) || u.role.toLowerCase().includes(t))
     .sort((a, b) => a.name.localeCompare(b.name));
   return (
@@ -362,7 +362,7 @@ const KIND_SUB: Record<Chat["type"], string> = { dm: "Direct message", group: "G
 
 /** ⌘K: jump to any chat, channel or file, or send the query straight to Saathi. */
 export function CommandPalette({ chatList, onClose }: { chatList: Chat[]; onClose: () => void }) {
-  const { uid, users, files, open, dialog } = useWs();
+  const { uid, users, files, open, dialog, newTask } = useWs();
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -379,6 +379,8 @@ export function CommandPalette({ chatList, onClose }: { chatList: Chat[]; onClos
     const ask = t ? [{ key: "ask", label: `Ask Saathi: “${q.trim()}”`, sub: "Searches every chat, channel and file you can access", kind: "ask" as const, id: "" }] : [];
     const actions = !t
       ? [
+          { key: "a-task", label: "Create a task", sub: "Action", kind: "action-task" as const, id: "" },
+          { key: "a-meeting", label: "Add meeting notes", sub: "Action · summary + action items", kind: "action-meeting" as const, id: "" },
           { key: "a-channel", label: "Create a channel", sub: "Action", kind: "action-channel" as const, id: "" },
           { key: "a-browse", label: "Browse channels", sub: "Action", kind: "action-browse" as const, id: "" },
         ]
@@ -393,12 +395,18 @@ export function CommandPalette({ chatList, onClose }: { chatList: Chat[]; onClos
     else if (it.kind === "chat" || it.kind === "channel") open({ kind: "chat", chatId: it.id });
     else if (it.kind === "file") open({ kind: "chat", chatId: (it as { chatId: string }).chatId });
     else if (it.kind === "action-channel") return dialog("new-channel");
+    else if (it.kind === "action-meeting") return dialog("meeting-new");
+    else if (it.kind === "action-task") {
+      newTask();
+      onClose();
+      return;
+    }
     else if (it.kind === "action-browse") return dialog("browse-channels");
     onClose();
   }
 
   const icon = (k: (typeof items)[number]["kind"]) =>
-    k === "ask" ? <Sparkles size={15} /> : k === "file" ? <FileText size={15} /> : k === "channel" || k === "action-channel" ? <Hash size={15} /> : k === "action-browse" ? <Compass size={15} /> : <MessageSquare size={15} />;
+    k === "ask" ? <Sparkles size={15} /> : k === "file" ? <FileText size={15} /> : k === "channel" || k === "action-channel" ? <Hash size={15} /> : k === "action-browse" ? <Compass size={15} /> : k === "action-task" ? <Check size={15} /> : k === "action-meeting" ? <Users size={15} /> : <MessageSquare size={15} />;
 
   return (
     <Modal title="Search or ask" onClose={onClose} wide>

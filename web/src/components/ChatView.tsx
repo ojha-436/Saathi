@@ -11,6 +11,9 @@ import {
   Gavel,
   Handshake,
   Info,
+  Bell,
+  BellOff,
+  AtSign,
   ListPlus,
   Loader2,
   LogOut,
@@ -27,14 +30,35 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
 import { DOC_LABEL, REACTION_EMOJI, chatTitle, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
-import type { Chat, Message, Reaction } from "@/lib/types";
-import { Avatar, ChatIcon, Menu, Switch, type MenuItem } from "./bits";
+import type { Chat, Message, Reaction, UserProfile } from "@/lib/types";
+import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
+import { notifyLevel } from "./Sidebar";
+
+/** Highlights @Name tokens for people actually mentioned on the message (and @channel). */
+function withMentions(text: string, mentions: string[] | undefined, users: Record<string, UserProfile>, me: string) {
+  if (!mentions?.length) return text;
+  const tags = mentions
+    .map((m) => (m === "channel" ? { tag: "@channel", me: true } : users[m] ? { tag: `@${users[m].name}`, me: m === me } : null))
+    .filter(Boolean) as { tag: string; me: boolean }[];
+  if (!tags.length) return text;
+  const re = new RegExp(`(${tags.map((t) => t.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length).join("|")})`, "g");
+  return text.split(re).map((part, i) => {
+    const t = tags.find((x) => x.tag === part);
+    return t ? (
+      <span key={i} className={clsx("rounded px-0.5 font-semibold", t.me ? "bg-saffron-soft text-saffron-ink" : "text-brand")}>
+        {part}
+      </span>
+    ) : (
+      part
+    );
+  });
+}
 
 type Tab = "messages" | "decisions" | "files";
 type Panel = null | "about" | "members";
@@ -43,7 +67,7 @@ const COMPOSER_EMOJI = ["👍", "🙏", "✅", "👌", "🎉", "😄", "🙂", "
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: string }) {
-  const { uid, users, chats, toast, open, showList } = useWs();
+  const { uid, users, chats, toast, open, showList, settings } = useWs();
   const chat = chats[chatId];
   const messages = useMessages(chatId);
   const [tab, setTab] = useState<Tab>("messages");
@@ -98,6 +122,15 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
     try {
       await api(`/api/chats/${chatId}/ai-exclude`, { json: { excluded: !visible } });
       toast(visible ? "Saathi can search this conversation again." : "This conversation is now hidden from Saathi's search.");
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  }
+
+  async function setLevel(level: "all" | "mentions" | "off") {
+    try {
+      await api("/api/me/settings", { json: { chat_id: chatId, level } });
+      toast(level === "off" ? "Muted. Mentions still reach you." : level === "mentions" ? "You'll be notified for @mentions only." : "You'll be notified of every message.");
     } catch (e) {
       toast((e as Error).message);
     }
@@ -196,7 +229,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                 <span className="hidden -space-x-2 sm:flex">
                   {chat.members.slice(0, 3).map((m) => (
                     <span key={m} className="rounded-full ring-2 ring-surface">
-                      <Avatar name={users[m]?.name ?? "?"} size={24} />
+                      <UserAvatar uid={m} size={24} dot={false} clickable={false} />
                     </span>
                   ))}
                 </span>
@@ -218,6 +251,14 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                 trigger={<MoreHorizontal size={18} />}
                 items={[
                   { label: fav ? "Remove from favorites" : "Add to favorites", icon: Star, onSelect: () => favorite(!fav) },
+                  "sep",
+                  ...(["all", "mentions", "off"] as const).map((lvl) => ({
+                    label: lvl === "all" ? "Notify: all messages" : lvl === "mentions" ? "Notify: @mentions only" : "Mute notifications",
+                    icon: lvl === "all" ? Bell : lvl === "mentions" ? AtSign : BellOff,
+                    hint: notifyLevel(chat, settings) === lvl ? "✓" : undefined,
+                    onSelect: () => setLevel(lvl),
+                  })),
+                  "sep",
                   { label: `About this ${kindLabel}`, icon: Info, onSelect: () => setPanel("about") },
                   ...(chat.type !== "dm" ? [{ label: "Add people", icon: UserPlus, onSelect: () => setPanel("members") }] : []),
                   { label: chat.ai_excluded ? "Make visible to Saathi" : "Hide from Saathi", icon: chat.ai_excluded ? Eye : EyeOff, onSelect: () => toggleAi(!!chat.ai_excluded) },
@@ -299,7 +340,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
           </div>
         )}
 
-        <Composer chatId={chatId} title={title} isChannel={isChannel} />
+        <Composer chat={chat} title={title} />
       </section>
 
       {panel && (
@@ -376,10 +417,11 @@ function MessageList({ messages, chat, title, flash }: { messages: Message[]; ch
 }
 
 function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: { m: Message; mine: boolean; grouped: boolean; bubbles: boolean; highlight: boolean; chatId: string; chatName: string }) {
+  const { uid, users, showProfile } = useWs();
   const right = bubbles && mine;
   const body = (
     <>
-      {m.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-ink">{m.text}</p>}
+      {m.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-ink">{withMentions(m.text, m.mentions, users, uid)}</p>}
       {m.file && <FileCard file={m.file} />}
       {m.decision && (
         <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-moss/25 bg-moss-soft px-2.5 py-1.5 text-xs text-moss">
@@ -402,13 +444,19 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
         right && "flex-row-reverse",
         !bubbles && "hover:bg-canvas/70",
         highlight && "bg-saffron-soft ring-2 ring-saffron/60",
+        !highlight && !right && (m.mentions?.includes(uid) || m.mentions?.includes("channel")) && "bg-saffron-soft/40 shadow-[inset_3px_0_0_var(--color-saffron)]",
       )}
     >
-      {!right && (grouped ? <span className="w-9 shrink-0" /> : <Avatar name={m.sender_name} size={36} />)}
+      {!right && (grouped ? <span className="w-9 shrink-0" /> : <UserAvatar uid={m.sender} size={36} />)}
       <div className={clsx("flex min-w-0 flex-col", right ? "items-end" : "items-start", bubbles ? "max-w-[min(42rem,85%)]" : "flex-1")}>
         {!grouped && (
           <div className={clsx("mb-0.5 flex items-baseline gap-2 text-xs", right && "flex-row-reverse")}>
-            {!right && <span className="text-[13px] font-semibold text-ink">{m.sender_name}</span>}
+            {!right && (
+              <button onClick={() => showProfile(m.sender)} className="text-[13px] font-semibold text-ink hover:underline">
+                {m.sender_name}
+              </button>
+            )}
+            {!right && <RoleBadge role={users[m.sender]?.org_role === "guest" ? "guest" : undefined} />}
             <span className="text-muted">{clock(m.ts)}</span>
           </div>
         )}
@@ -425,7 +473,7 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
 }
 
 function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: string; chatName: string; align: "left" | "right" }) {
-  const { open, toast } = useWs();
+  const { open, toast, newTask, uid } = useWs();
   async function react(r: Reaction) {
     try {
       await api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: r } });
@@ -433,14 +481,9 @@ function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: st
       toast((e as Error).message);
     }
   }
-  async function addTask() {
-    try {
-      const text = m.text || m.file?.name || "message";
-      await api("/api/tasks", { json: { text: `Follow up: ${m.sender_name.split(" ")[0]} — ${text}`.slice(0, 200), source_ref: `msg:${chatId}/${m.id}` } });
-      toast("Added to your tasks.");
-    } catch (e) {
-      toast((e as Error).message);
-    }
+  function addTask() {
+    const text = m.text || m.file?.name || "message";
+    newTask({ title: (m.sender === uid ? text : `Follow up: ${m.sender_name.split(" ")[0]} — ${text}`).slice(0, 200), sourceRef: `msg:${chatId}/${m.id}` });
   }
   const btn = "flex h-8 w-8 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-ink";
   return (
@@ -458,7 +501,7 @@ function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: st
         </button>
       ))}
       <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
-      <button onClick={addTask} className={btn} aria-label="Add to my tasks" title="Add to my tasks">
+      <button onClick={addTask} className={btn} aria-label="Create task from message" title="Create task…">
         <ListPlus size={15} />
       </button>
       <button
@@ -511,9 +554,50 @@ function Reactions({ m, chatId }: { m: Message; chatId: string }) {
   );
 }
 
-function Composer({ chatId, title, isChannel }: { chatId: string; title: string; isChannel: boolean }) {
-  const { toast } = useWs();
+function Composer({ chat, title }: { chat: Chat; title: string }) {
+  const { toast, users, uid, account } = useWs();
+  const chatId = chat.id;
+  const isChannel = chat.type === "channel";
   const [text, setText] = useState("");
+  const [mentioned, setMentioned] = useState<Record<string, string>>({}); // uid -> inserted "@Name"
+  const [query, setQuery] = useState<string | null>(null);
+  const [sel, setSel] = useState(0);
+  const canChannel = isChannel && (chat.owners?.includes(uid) || account.org_role === "owner" || account.org_role === "admin");
+  const candidates = query === null ? [] : [
+    ...(canChannel && "channel".startsWith(query.toLowerCase()) ? [{ id: "channel", name: "channel", role: "Notify everyone in this channel" }] : []),
+    ...chat.members
+      .filter((m) => m !== uid && users[m])
+      .map((m) => ({ id: m, name: users[m].name, role: users[m].role }))
+      .filter((u) => u.name.toLowerCase().includes(query.toLowerCase())),
+  ].slice(0, 6);
+
+  function onChange(v: string, caret: number) {
+    setText(v);
+    const m = /(^|\s)@([\w.]*)$/.exec(v.slice(0, caret));
+    setQuery(m ? m[2] : null);
+    setSel(0);
+  }
+
+  function pick(c: { id: string; name: string }) {
+    const el = inputRef.current;
+    const caret = el?.selectionStart ?? text.length;
+    const before = text.slice(0, caret).replace(/@([\w.]*)$/, `@${c.name} `);
+    const next = before + text.slice(caret);
+    setText(next);
+    setMentioned((m) => ({ ...m, [c.id]: `@${c.name}` }));
+    setQuery(null);
+    caretRef.current = before.length; // placed synchronously after React writes the new value (see layout effect)
+  }
+
+  const caretRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (el && caretRef.current !== null) {
+      el.focus();
+      el.setSelectionRange(caretRef.current, caretRef.current);
+      caretRef.current = null;
+    }
+  }, [text]);
   const [sending, setSending] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -531,8 +615,12 @@ function Composer({ chatId, title, isChannel }: { chatId: string; title: string;
     if (!body || sending) return;
     setSending(true);
     try {
-      await api(`/api/chats/${chatId}/messages`, { json: { text: body } });
+      const mentions = Object.entries(mentioned)
+        .filter(([, tag]) => body.includes(tag))
+        .map(([id]) => id);
+      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions } });
       setText("");
+      setMentioned({});
     } catch (e) {
       toast(`Message not sent: ${(e as Error).message}. Try again.`);
     } finally {
@@ -569,19 +657,64 @@ function Composer({ chatId, title, isChannel }: { chatId: string; title: string;
           id="composer"
           ref={inputRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
           onKeyDown={(e) => {
+            if (candidates.length) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                setSel((i) => (i + (e.key === "ArrowDown" ? 1 : candidates.length - 1)) % candidates.length);
+                return;
+              }
+              if (e.key === "Enter" || e.key === "Tab") {
+                e.preventDefault();
+                pick(candidates[sel]);
+                return;
+              }
+              if (e.key === "Escape") {
+                setQuery(null);
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               send();
             }
           }}
           rows={1}
-          placeholder={isChannel ? `Post in ${title}` : `Type a message to ${title}`}
+          placeholder={isChannel ? `Post in ${title} · type @ to mention` : `Type a message to ${title}`}
           className="block max-h-40 min-h-11 w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[14.5px] outline-none"
+          aria-autocomplete="list"
         />
+        {candidates.length > 0 && (
+          <ul role="listbox" aria-label="Mention someone" className="ws-pop absolute bottom-full left-2 z-30 mb-2 w-72 rounded-xl border border-border bg-surface p-1 shadow-xl">
+            {candidates.map((c, i) => (
+              <li key={c.id} role="option" aria-selected={i === sel}>
+                <button
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pick(c);
+                  }}
+                  onMouseEnter={() => setSel(i)}
+                  className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left", i === sel && "bg-hover")}
+                >
+                  {c.id === "channel" ? (
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-saffron-soft text-saffron-ink">
+                      <AtSign size={14} />
+                    </span>
+                  ) : (
+                    <UserAvatar uid={c.id} size={28} clickable={false} />
+                  )}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{c.id === "channel" ? "@channel" : c.name}</span>
+                    <span className="block truncate text-[11px] text-muted">{c.role}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
-          <input ref={fileRef} type="file" className="hidden" accept=".pdf,image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+          <input ref={fileRef} type="file" className="hidden" accept=".pdf,image/*,.docx,.xlsx,.txt" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
           <button onClick={() => fileRef.current?.click()} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Attach a PDF or image" aria-label="Attach file">
             <Paperclip size={17} />
           </button>
@@ -819,7 +952,7 @@ function DetailsPanel({
           <ul>
             {members.map((m) => (
               <li key={m} className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover">
-                <Avatar name={users[m]?.name ?? "?"} size={32} />
+                <UserAvatar uid={m} size={32} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 text-sm">
                     <span className="truncate">{users[m]?.name ?? "Unknown"}</span>
@@ -827,6 +960,7 @@ function DetailsPanel({
                   </span>
                   <span className="block truncate text-[11px] text-muted">{users[m]?.role}</span>
                 </span>
+                {users[m]?.org_role === "guest" && <RoleBadge role="guest" />}
                 {chat.owners?.includes(m) && <span className="rounded-full bg-canvas px-2 py-0.5 text-[10.5px] font-semibold text-muted">Owner</span>}
                 {canRemove && m !== uid && (
                   <button onClick={() => remove(m)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted opacity-0 hover:bg-border hover:text-rust focus:opacity-100 group-hover:opacity-100" aria-label={`Remove ${users[m]?.name}`}>
@@ -899,11 +1033,12 @@ function PromiseChip({ m, chatId }: { m: Message; chatId: string }) {
   if (p.dismissed_by?.includes(uid)) return null;
   const tracked = p.tracked_by?.includes(uid);
 
-  async function act(action: "track" | "dismiss") {
+  async function act(action: "track" | "dismiss", assign = false) {
     setBusy(true);
     try {
-      await api(`/api/chats/${chatId}/messages/${m.id}/${action}`, { method: "POST" });
-      if (action === "track") toast("Added to your tasks. Saathi will nudge you when it's due.");
+      await api(`/api/chats/${chatId}/messages/${m.id}/${action}`, action === "track" ? { json: { assign } } : { method: "POST" });
+      if (action === "track")
+        toast(assign ? `Assigned to ${m.sender_name.split(" ")[0]}. You're watching it.` : "Added to your tasks. Saathi will nudge you when it's due.");
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -924,6 +1059,11 @@ function PromiseChip({ m, chatId }: { m: Message; chatId: string }) {
         </span>
       ) : (
         <span className="flex gap-1">
+          {m.sender !== uid && (
+            <button onClick={() => act("track", true)} disabled={busy} className="h-7 rounded-lg border border-plum/40 bg-white/70 px-2.5 font-semibold text-plum transition hover:bg-white disabled:opacity-60" title={`Create a task assigned to ${m.sender_name}, with you watching`}>
+              Assign to {m.sender_name.split(" ")[0]}
+            </button>
+          )}
           <button onClick={() => act("track")} disabled={busy} className="h-7 rounded-lg bg-plum px-3 font-semibold text-white transition hover:brightness-110 disabled:opacity-60">
             Track
           </button>

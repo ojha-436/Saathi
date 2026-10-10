@@ -1,28 +1,38 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Chat, FileDoc, UserProfile } from "@/lib/types";
+import type { Account, Chat, FileDoc, Meeting, UserProfile, UserSettings } from "@/lib/types";
 
 export type View =
+  | { kind: "home" }
   | { kind: "assistant"; prompt?: string }
   | { kind: "insights" }
   | { kind: "tasks" }
   | { kind: "activity" }
+  | { kind: "admin" }
+  | { kind: "meeting"; id: string }
   | { kind: "chat"; chatId: string; focusMsg?: string };
 
-export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile";
+export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new";
+
+export type TaskPrefill = { title?: string; assignee?: string; sourceRef?: string; due?: string };
 
 export type WorkspaceCtx = {
   uid: string;
+  account: Account;
   me: UserProfile | undefined;
   users: Record<string, UserProfile>;
   chats: Record<string, Chat>;
   files: Record<string, FileDoc>;
+  meetings: Record<string, Meeting>;
+  settings: UserSettings;
   view: View;
   open: (view: View) => void;
   openRef: (ref: string) => void;
   toast: (text: string) => void;
   dialog: (kind: DialogKind) => void;
+  newTask: (prefill?: TaskPrefill) => void;
+  showProfile: (uid: string) => void;
   /** Mobile only: go back from a conversation to the chat list. */
   showList: () => void;
 };
@@ -34,3 +44,5 @@ export function useWs() {
   if (!v) throw new Error("useWs outside workspace");
   return v;
 }
+
+export const isAdmin = (a?: Account) => a?.org_role === "owner" || a?.org_role === "admin";

@@ -13,18 +13,57 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import ai, ingest
+from . import admin, ai, ingest, meetings, people
 from .agent import ask
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
-from .firebase import bucket, current_user, db, get_chat_for_member, user_profile
+from .firebase import audit, bucket, current_user, db, get_chat_for_member, require_admin, same_org, user_profile
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Saathi API")
+app.include_router(people.router)
+app.include_router(admin.router)
+app.include_router(meetings.router)
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
 )
 
 MAX_UPLOAD = 20 * 1024 * 1024
+# Server-side upload allow-list (the browser's accept= attribute is only a hint)
+UPLOAD_TYPES = {
+    ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".txt": "text/plain", ".vtt": "text/vtt",
+}
+
+_hits: dict[tuple[str, str], list[float]] = {}
+
+
+def rate_limit(uid: str, bucket_name: str, per_minute: int) -> None:
+    """Per-instance sliding window; enough to stop runaway clients and scripted abuse."""
+    t = time.monotonic()
+    key = (uid, bucket_name)
+    recent = [x for x in _hits.get(key, []) if t - x < 60]
+    if len(recent) >= per_minute:
+        raise HTTPException(429, "You're doing that too quickly. Wait a moment and try again.")
+    recent.append(t)
+    _hits[key] = recent
+
+
+def org_of(user: dict) -> dict:
+    snap = db.collection("orgs").document(user["org_id"]).get()
+    return {"id": snap.id, **(snap.to_dict() or {})}
+
+
+def is_guest(user: dict) -> bool:
+    return user.get("org_role") == "guest"
+
+
+def co_members(uid: str) -> set[str]:
+    """Everyone who shares at least one chat with uid (a guest's whole visible world)."""
+    out: set[str] = set()
+    for s in db.collection("chats").where(filter=FieldFilter("members", "array_contains", uid)).stream():
+        out |= set(s.get("members") or [])
+    return out
 
 
 def now() -> datetime:
@@ -74,32 +113,32 @@ def health():
 
 @app.get("/api/me")
 def me(user=Depends(current_user)):
-    return user
+    org = org_of(user)
+    return {**user, "org": {"id": org["id"], "name": org.get("name", ""), "domains": org.get("domains", []), "settings": org.get("settings", {})}}
 
 
-class ProfileIn(BaseModel):
-    name: str
-    role: str
-
-
-@app.post("/api/me/profile")
-def update_profile(body: ProfileIn, user=Depends(current_user)):
-    name, role = re.sub(r"\s+", " ", body.name).strip()[:80], re.sub(r"\s+", " ", body.role).strip()[:80]
-    if len(name) < 2:
-        raise HTTPException(400, "Enter your full name")
-    db.collection("users").document(user["uid"]).update({"name": name, "role": role})
-    user_profile.cache_clear()
-    return {"ok": True}
+def notify(uid: str, kind: str, title: str, body: str, actor: dict | None = None, source_ref: str | None = None,
+           chat_id: str | None = None, task_id: str | None = None) -> None:
+    """Activity feed entry (mentions, assignments, task updates, reminders, meeting summaries)."""
+    if actor and uid == actor["uid"]:
+        return
+    db.collection("notifications").add(
+        {"uid": uid, "kind": kind, "title": title, "body": body[:300], "source_ref": source_ref, "chat_id": chat_id, "task_id": task_id,
+         "actor": actor["uid"] if actor else None, "actor_name": actor["name"] if actor else None,
+         "org_id": (actor or user_profile(uid))["org_id"], "ts": now(), "read": False}
+    )
 
 
 # ---------------- chats ----------------
 
-def post_message(chat: dict, user: dict, text: str, file: dict | None = None) -> str:
+def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
     ts = now()
     body = {"sender": user["uid"], "sender_name": user["name"], "text": text, "ts": ts}
     if file:
         body["file"] = file
+    if mentions:
+        body["mentions"] = mentions
     db.collection("chats").document(chat["id"]).collection("messages").document(msg_id).set(body)
     preview = text or (f"📎 {file['name']}" if file else "")
     db.collection("chats").document(chat["id"]).update(
@@ -143,7 +182,10 @@ def _channel_owner(chat: dict, uid: str) -> None:
 
 @app.post("/api/chats")
 def create_chat(body: ChatIn, user=Depends(current_user)):
-    members = sorted(set(body.member_ids) | {user["uid"]})
+    wanted = same_org(user, body.member_ids)
+    if is_guest(user):  # guests can only start chats with people they already share a channel with
+        wanted = [m for m in wanted if m in co_members(user["uid"])]
+    members = sorted(set(wanted) | {user["uid"]})
     if len(members) < 2:
         raise HTTPException(400, "A chat needs at least two members")
     is_dm = len(members) == 2 and not body.name
@@ -154,7 +196,8 @@ def create_chat(body: ChatIn, user=Depends(current_user)):
     else:
         chat_id = uuid.uuid4().hex[:20]
     db.collection("chats").document(chat_id).set(
-        {"type": "dm" if is_dm else "group", "members": members, "name": body.name or "", "last_ts": now(), "last_text": "", "ai_excluded": False}
+        {"type": "dm" if is_dm else "group", "members": members, "name": body.name or "", "last_ts": now(), "last_text": "", "ai_excluded": False,
+         "org_id": user["org_id"]}
     )
     return {"id": chat_id}
 
@@ -168,17 +211,23 @@ def create_channel(body: ChannelIn, user=Depends(current_user)):
         raise HTTPException(400, "Give the channel a name (at least 2 characters)")
     if body.visibility not in ("public", "private"):
         raise HTTPException(400, "Visibility must be public or private")
-    taken = db.collection("chats").where(filter=FieldFilter("type", "==", "channel")).where(filter=FieldFilter("name_key", "==", name.lower())).limit(1).get()
+    if is_guest(user):
+        raise HTTPException(403, "Guests can't create channels")
+    if (org_of(user).get("settings") or {}).get("channel_creation") == "admins":
+        require_admin(user)
+    taken = (db.collection("chats").where(filter=FieldFilter("org_id", "==", user["org_id"]))
+             .where(filter=FieldFilter("name_key", "==", name.lower())).limit(1).get())
     if taken:
         raise HTTPException(409, f"A channel called “{name}” already exists")
-    known = {s.id for s in db.collection("users").stream()}
-    members = sorted(({m for m in body.member_ids if m in known}) | {user["uid"]})
+    members = sorted(set(same_org(user, body.member_ids)) | {user["uid"]})
     chat_id = "ch_" + uuid.uuid4().hex[:17]
     db.collection("chats").document(chat_id).set(
         {"type": "channel", "name": name, "name_key": name.lower(), "description": body.description.strip()[:300],
          "visibility": body.visibility, "members": members, "owners": [user["uid"]], "created_by": user["uid"],
-         "created_at": now(), "last_ts": now(), "last_text": "", "ai_excluded": False, "read_at": {user["uid"]: now()}}
+         "created_at": now(), "last_ts": now(), "last_text": "", "ai_excluded": False, "read_at": {user["uid"]: now()},
+         "org_id": user["org_id"]}
     )
+    audit(user, "channel.created", chat_id, name=name, visibility=body.visibility)
     post_system(chat_id, f"{user['name']} created the channel", user["uid"])
     added = [m for m in members if m != user["uid"]]
     if added:
@@ -189,8 +238,11 @@ def create_channel(body: ChannelIn, user=Depends(current_user)):
 @app.get("/api/channels/browse")
 def browse_channels(user=Depends(current_user)):
     """Public channels anyone in the company can join. Private channels are only visible to their members."""
+    if is_guest(user):
+        return []
     rows = []
-    for s in db.collection("chats").where(filter=FieldFilter("visibility", "==", "public")).stream():
+    for s in (db.collection("chats").where(filter=FieldFilter("org_id", "==", user["org_id"]))
+              .where(filter=FieldFilter("visibility", "==", "public")).stream()):
         c = s.to_dict()
         rows.append({"id": s.id, "name": c.get("name"), "description": c.get("description", ""), "member_count": len(c.get("members") or []),
                      "joined": user["uid"] in (c.get("members") or []), "last_ts": c["last_ts"].isoformat() if c.get("last_ts") else None})
@@ -202,7 +254,8 @@ def browse_channels(user=Depends(current_user)):
 def join_channel(chat_id: str, bg: BackgroundTasks, user=Depends(current_user)):
     ref = db.collection("chats").document(chat_id)
     snap = ref.get()
-    if not snap.exists or snap.get("type") != "channel" or snap.to_dict().get("visibility") != "public":
+    if (not snap.exists or snap.get("type") != "channel" or snap.to_dict().get("visibility") != "public"
+            or snap.to_dict().get("org_id") != user["org_id"] or is_guest(user)):
         raise HTTPException(404, "Channel not found")
     if user["uid"] not in snap.get("members"):
         members = sorted(set(snap.get("members")) | {user["uid"]})
@@ -220,8 +273,9 @@ def add_members(chat_id: str, body: MembersIn, bg: BackgroundTasks, user=Depends
     chat = get_chat_for_member(chat_id, user["uid"])
     if chat.get("type") == "dm":
         raise HTTPException(400, "Start a group chat to add more people")
-    known = {s.id for s in db.collection("users").stream()}
-    added = [m for m in dict.fromkeys(body.member_ids) if m in known and m not in chat["members"]]
+    if is_guest(user):
+        raise HTTPException(403, "Guests can't add people")
+    added = [m for m in same_org(user, body.member_ids) if m not in chat["members"]]
     if not added:
         return {"ok": True, "added": []}
     members = sorted(set(chat["members"]) | set(added))
@@ -283,6 +337,12 @@ def delete_channel(chat_id: str, user=Depends(current_user)):
     if chat.get("type") != "channel":
         raise HTTPException(400, "Only channels can be deleted")
     _channel_owner(chat, user["uid"])
+    delete_chat_everything(chat_id)
+    audit(user, "channel.deleted", chat_id, name=chat.get("name"))
+    return {"ok": True}
+
+
+def delete_chat_everything(chat_id: str) -> None:
     ref = db.collection("chats").document(chat_id)
     for col, q in (("messages", ref.collection("messages")),
                    ("chunks", db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id))),
@@ -295,7 +355,6 @@ def delete_channel(chat_id: str, user=Depends(current_user)):
                     logging.warning("could not delete blob for %s", s.id)
             s.reference.delete()
     ref.delete()
-    return {"ok": True}
 
 
 @app.post("/api/chats/{chat_id}/read")
@@ -327,13 +386,25 @@ def react(chat_id: str, msg_id: str, body: ReactIn, user=Depends(current_user)):
     return {"ok": True, "on": not on}
 
 
+class MessageIn(BaseModel):
+    text: str
+    mentions: list[str] = []  # member uids, or "channel" to notify everyone in a channel
+
+
 @app.post("/api/chats/{chat_id}/messages")
-def send_message(chat_id: str, body: TextIn, bg: BackgroundTasks, user=Depends(current_user)):
+def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Empty message")
-    msg_id = post_message(chat, user, text[:4000])
+    rate_limit(user["uid"], "message", 60)
+    mentioned = [m for m in dict.fromkeys(body.mentions) if m in chat["members"] and m != user["uid"]]
+    everyone = "channel" in body.mentions and chat.get("type") == "channel" and (
+        user["uid"] in (chat.get("owners") or []) or user.get("org_role") in ("owner", "admin"))
+    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []))
+    where = chat.get("name") or "a direct message"
+    for m in (set(chat["members"]) - {user["uid"]} if everyone else mentioned):
+        notify(m, "mention", f"{user['name']} mentioned you in {where}", text, actor=user, source_ref=f"msg:{chat_id}/{msg_id}", chat_id=chat_id)
     bg.add_task(ingest.process_message, chat_id, msg_id)
     return {"id": msg_id}
 
@@ -341,20 +412,26 @@ def send_message(chat_id: str, body: TextIn, bg: BackgroundTasks, user=Depends(c
 @app.post("/api/chats/{chat_id}/files")
 async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File(...), text: str = Form(""), user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
+    rate_limit(user["uid"], "upload", 10)
+    ext = ("." + (file.filename or "").rsplit(".", 1)[-1].lower()) if "." in (file.filename or "") else ""
+    if ext not in UPLOAD_TYPES:
+        raise HTTPException(415, "That file type isn't allowed. Share a PDF, image, Word, Excel or text file.")
+    file.filename = re.sub(r"[^\w.\- ()]+", "_", file.filename)[:120]
     data = await file.read()
     if len(data) > MAX_UPLOAD:
         raise HTTPException(413, "File too large (max 20 MB)")
     file_id = uuid.uuid4().hex[:20]
     path = f"chats/{chat_id}/{file_id}/{file.filename}"
-    bucket.blob(path).upload_from_string(data, content_type=file.content_type or "application/octet-stream")
+    bucket.blob(path).upload_from_string(data, content_type=UPLOAD_TYPES[ext])
     db.collection("files").document(file_id).set(
         {
-            "name": file.filename, "mime": file.content_type, "size": len(data), "gcs_path": path,
+            "name": file.filename, "mime": UPLOAD_TYPES[ext], "size": len(data), "gcs_path": path,
             "chat_id": chat_id, "chat_name": chat.get("name", ""), "members": chat["members"],
             "uploaded_by": user["uid"], "uploaded_by_name": user["name"], "ts": now(), "status": "processing",
+            "org_id": user["org_id"],
         }
     )
-    meta = {"id": file_id, "name": file.filename, "mime": file.content_type, "size": len(data), "status": "processing"}
+    meta = {"id": file_id, "name": file.filename, "mime": UPLOAD_TYPES[ext], "size": len(data), "status": "processing"}
     msg_id = post_message(chat, user, text.strip(), file=meta)
     if text.strip():  # quick: promise/decision chips appear before the slower document extraction
         bg.add_task(ingest.process_message, chat_id, msg_id)
@@ -371,7 +448,7 @@ def download_file(file_id: str, user=Depends(current_user)):
     get_chat_for_member(f["chat_id"], user["uid"])  # current membership, not just the copy on the file
     data = bucket.blob(f["gcs_path"]).download_as_bytes()
     return Response(data, media_type=f.get("mime") or "application/octet-stream",
-                    headers={"Content-Disposition": f'inline; filename="{f["name"]}"'})
+                    headers={"Content-Disposition": f'inline; filename="{f["name"]}"', "X-Content-Type-Options": "nosniff"})
 
 
 @app.post("/api/chats/{chat_id}/summarize")
@@ -390,21 +467,27 @@ def summarize_chat(chat_id: str, user=Depends(current_user)):
 
 # ---------------- promises ----------------
 
+class TrackIn(BaseModel):
+    assign: bool = False  # assign the task to the person who made the promise (caller becomes watcher)
+
+
 @app.post("/api/chats/{chat_id}/messages/{msg_id}/track")
-def track_promise(chat_id: str, msg_id: str, user=Depends(current_user)):
-    get_chat_for_member(chat_id, user["uid"])
+def track_promise(chat_id: str, msg_id: str, body: TrackIn | None = None, user=Depends(current_user)):
+    chat = get_chat_for_member(chat_id, user["uid"])
     ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
     msg = ref.get().to_dict() or {}
     p = msg.get("promise")
     if not p:
         raise HTTPException(400, "No promise on this message")
     mine = p.get("committer", "").split()[0:1] == user["name"].split()[0:1]
-    title = p["action"] if mine else f"Follow up: {p['committer']} — {p['action']}"
-    task_id = uuid.uuid4().hex[:20]
-    db.collection("tasks").document(task_id).set(
-        {"owner": user["uid"], "title": title[:200], "due_at": p.get("due_at"), "kind": "promise", "status": "open",
-         "source_ref": f"msg:{chat_id}/{msg_id}", "counterparty": p.get("committer"), "notified": False, "created_at": now()}
-    )
+    source = f"msg:{chat_id}/{msg_id}"
+    committer_uid = msg.get("sender") if msg.get("sender") != user["uid"] else None
+    if body and body.assign and committer_uid and committer_uid in chat["members"]:
+        task_id = new_task(user, p["action"], assignee=committer_uid, due_at=p.get("due_at"), kind="promise", source_ref=source,
+                           chat_id=chat_id, watchers=[user["uid"]], counterparty=p.get("committer"))
+    else:
+        title = p["action"] if mine else f"Follow up: {p['committer']} — {p['action']}"
+        task_id = new_task(user, title, due_at=p.get("due_at"), kind="promise", source_ref=source, chat_id=chat_id, counterparty=p.get("committer"))
     ref.update({"promise.tracked_by": firestore.ArrayUnion([user["uid"]])})
     return {"task_id": task_id}
 
@@ -439,6 +522,9 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Empty message")
+    rate_limit(user["uid"], "assistant", 20)
+    if not (org_of(user).get("settings") or {}).get("ai_enabled", True):
+        raise HTTPException(403, "Your workspace admin has turned off the AI assistant")
     col = db.collection("assistant").document(user["uid"]).collection("messages")
     history = [
         {"role": s.get("role"), "text": s.get("text") or ""}
@@ -457,7 +543,8 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
     pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"]})
     latency = int((time.monotonic() - started) * 1000)
     tools = [c["tool"] for c in result["tool_calls"]]
-    db.collection("audit_log").add({"uid": user["uid"], "query": text, "tool_calls": result["tool_calls"], "tools": tools, "latency_ms": latency, "ts": now()})
+    db.collection("audit_log").add({"uid": user["uid"], "org_id": user["org_id"], "kind": "assistant", "query": text, "tool_calls": result["tool_calls"],
+                                    "tools": tools, "latency_ms": latency, "ts": now()})
     bg.add_task(log_event_bigquery, {
         "uid": user["uid"], "query": text[:1000], "tools": json.dumps(tools), "latency_ms": latency,
         "answer_chars": len(result["text"]), "cited_sources": len(set(re.findall(r"\[(?:msg|file):[^\]]+\]", result["text"]))),
@@ -476,40 +563,117 @@ def clear_assistant(user=Depends(current_user)):
 
 # ---------------- tasks & notifications ----------------
 
-def _own_task(task_id: str, uid: str):
+TASK_STATUSES = {"open", "in_progress", "blocked", "done", "dismissed"}
+
+
+def new_task(user: dict, title: str, *, assignee: str | None = None, due_at=None, kind: str = "todo", status: str = "open",
+             source_ref: str | None = None, chat_id: str | None = None, watchers: list[str] | None = None,
+             counterparty: str | None = None) -> str:
+    """Creates a task. `owner` stays the assignee (reminders, insights and the agent read it); `participants`
+    (creator + assignee + watchers) is what security rules and task lists use."""
+    assignee = (same_org(user, [assignee]) or [user["uid"]])[0] if assignee else user["uid"]
+    watchers = [w for w in same_org(user, watchers or []) if w != assignee]
+    task_id = uuid.uuid4().hex[:20]
+    db.collection("tasks").document(task_id).set(
+        {"owner": assignee, "assignee": assignee, "creator": user["uid"], "creator_name": user["name"], "watchers": watchers,
+         "participants": sorted({user["uid"], assignee, *watchers}), "title": title.strip()[:200], "due_at": due_at, "kind": kind,
+         "status": status, "source_ref": source_ref, "chat_id": chat_id, "counterparty": counterparty, "notified": False,
+         "org_id": user["org_id"], "created_at": now()}
+    )
+    if status == "open" and assignee != user["uid"]:
+        notify(assignee, "task_assigned", f"{user['name']} assigned you a task", title, actor=user, source_ref=source_ref, task_id=task_id)
+    return task_id
+
+
+def _task_for(task_id: str, user: dict):
     ref = db.collection("tasks").document(task_id)
     snap = ref.get()
-    if not snap.exists or snap.get("owner") != uid:
+    if not snap.exists or user["uid"] not in (snap.to_dict().get("participants") or [snap.get("owner")]):
         raise HTTPException(404, "Task not found")
-    return ref
+    return ref, snap.to_dict()
 
 
 @app.post("/api/tasks/{task_id}/{action}")
 def task_action(task_id: str, action: str, user=Depends(current_user)):
-    ref = _own_task(task_id, user["uid"])
-    status = {"confirm": "open", "done": "done", "reopen": "open", "dismiss": "dismissed"}.get(action)
+    ref, t = _task_for(task_id, user)
+    creator, assignee = t.get("creator", t["owner"]), t.get("assignee", t["owner"])
+    status = {"confirm": "open", "done": "done", "reopen": "open", "start": "in_progress", "block": "blocked", "dismiss": "dismissed"}.get(action)
     if not status:
         raise HTTPException(400, "Unknown action")
-    ref.update({"status": status, "updated_at": now()})
+    if action in ("confirm", "dismiss") and user["uid"] != creator and not (action == "dismiss" and user["uid"] == assignee == creator):
+        raise HTTPException(403, "Only the person who created this task can do that")
+    if action != "confirm" and action != "dismiss" and user["uid"] not in (creator, assignee):
+        raise HTTPException(403, "Only the assignee or the creator can update this task")
+    ref.update({"status": status, "updated_at": now(), "updated_by": user["uid"]})
+    if action == "confirm" and assignee != user["uid"]:
+        notify(assignee, "task_assigned", f"{user['name']} assigned you a task", t["title"], actor=user, source_ref=t.get("source_ref"), task_id=task_id)
+    elif action in ("done", "block", "start"):
+        verb = {"done": "completed", "block": "is blocked on", "start": "started"}[action]
+        for w in {creator, *t.get("watchers", [])} - {user["uid"]}:
+            notify(w, "task_update", f"{user['name']} {verb} a task", t["title"], actor=user, source_ref=t.get("source_ref"), task_id=task_id)
+        if action == "done" and t.get("chat_id"):
+            try:
+                post_system(t["chat_id"], f"{user['name']} marked “{t['title'][:80]}” done", user["uid"])
+            except Exception:
+                logging.warning("could not post task status to chat %s", t.get("chat_id"))
     return {"ok": True, "status": status}
 
 
 class TaskIn(BaseModel):
     text: str
     source_ref: str | None = None
+    assignee: str | None = None
+    due_at: str | None = None  # ISO 8601
+    watchers: list[str] = []
 
 
 @app.post("/api/tasks")
 def create_task(body: TaskIn, user=Depends(current_user)):
+    if not body.text.strip():
+        raise HTTPException(400, "Give the task a title")
     source = body.source_ref if body.source_ref and re.fullmatch(r"msg:[\w-]+/[\w-]+", body.source_ref) else None
+    chat_id = None
     if source:
-        get_chat_for_member(source[4:].split("/")[0], user["uid"])
-    task_id = uuid.uuid4().hex[:20]
-    db.collection("tasks").document(task_id).set(
-        {"owner": user["uid"], "title": body.text.strip()[:200], "due_at": None, "kind": "follow_up" if source else "todo", "status": "open",
-         "source_ref": source, "notified": False, "created_at": now()}
-    )
+        chat_id = source[4:].split("/")[0]
+        get_chat_for_member(chat_id, user["uid"])
+    if body.assignee and not same_org(user, [body.assignee]):
+        raise HTTPException(400, "That person isn't in your workspace")
+    if body.assignee and is_guest(user) and body.assignee not in co_members(user["uid"]):
+        raise HTTPException(403, "Guests can only assign tasks to people they share a chat with")
+    kind = "follow_up" if source else "todo"
+    task_id = new_task(user, body.text, assignee=body.assignee, due_at=ai.parse_iso(body.due_at), kind=kind, source_ref=source,
+                       chat_id=chat_id, watchers=body.watchers)
     return {"task_id": task_id}
+
+
+class TaskPatch(BaseModel):
+    title: str | None = None
+    due_at: str | None = None
+    clear_due: bool = False
+    assignee: str | None = None
+
+
+@app.patch("/api/tasks/{task_id}")
+def update_task(task_id: str, body: TaskPatch, user=Depends(current_user)):
+    ref, t = _task_for(task_id, user)
+    creator = t.get("creator", t["owner"])
+    update: dict = {"updated_at": now()}
+    if body.title is not None and body.title.strip():
+        update["title"] = body.title.strip()[:200]
+    if body.clear_due:
+        update["due_at"], update["notified"] = None, False
+    elif body.due_at:
+        update["due_at"], update["notified"] = ai.parse_iso(body.due_at), False
+    if body.assignee and body.assignee != t.get("assignee"):
+        if user["uid"] != creator:
+            raise HTTPException(403, "Only the creator can reassign this task")
+        new = same_org(user, [body.assignee])
+        if not new:
+            raise HTTPException(400, "That person isn't in your workspace")
+        update |= {"assignee": new[0], "owner": new[0], "participants": sorted({creator, new[0], *t.get("watchers", [])})}
+        notify(new[0], "task_assigned", f"{user['name']} assigned you a task", update.get("title", t["title"]), actor=user, task_id=task_id)
+    ref.update(update)
+    return {"ok": True}
 
 
 @app.post("/api/notifications/read")
@@ -534,11 +698,17 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
         kind = t.get("kind")
         title = {"promise": "Promise due", "follow_up": "Follow-up due"}.get(kind, "Reminder")
         db.collection("notifications").add(
-            {"uid": t["owner"], "title": title, "body": t.get("title"), "task_id": s.id, "source_ref": t.get("source_ref"), "ts": now(), "read": False}
+            {"uid": t["owner"], "kind": "reminder", "title": title, "body": t.get("title"), "task_id": s.id, "source_ref": t.get("source_ref"),
+             "org_id": t.get("org_id", ""), "ts": now(), "read": False}
         )
         s.reference.update({"notified": True})
         fired += 1
-    return {"fired": fired}
+    # statuses with an expiry ("Busy until 4 pm") go back to Available
+    cleared = 0
+    for u in db.collection("users").where(filter=FieldFilter("status.until", "<=", now())).stream():
+        u.reference.update({"status": {"state": "available", "text": "", "until": None, "set_at": now()}})
+        cleared += 1
+    return {"fired": fired, "statuses_cleared": cleared}
 
 
 class ExcludeIn(BaseModel):
@@ -579,7 +749,7 @@ def insights(user=Depends(current_user)):
     by_kind = Counter(t.get("kind", "todo") for t in live)
 
     events = [s.to_dict() for s in db.collection("audit_log").where(filter=FieldFilter("uid", "==", uid)).stream()]
-    events = [e for e in events if e.get("ts") and e["ts"] >= week]
+    events = [e for e in events if e.get("ts") and e["ts"] >= week and e.get("kind") != "security"]
     tool_use = Counter(tool for e in events for tool in (e.get("tools") or [c.get("tool") for c in e.get("tool_calls", [])]))
     lat = sorted(e["latency_ms"] for e in events if e.get("latency_ms"))
 
@@ -606,7 +776,16 @@ def insights(user=Depends(current_user)):
     }
 
 
+PUBLIC_PROFILE = ("name", "role", "email", "photo", "department", "phone", "location", "timezone", "status", "last_active", "org_role", "deactivated")
+
+
 @app.get("/api/users")
 def list_users(user=Depends(current_user)):
-    return [{"uid": s.id, **{k: v for k, v in s.to_dict().items() if k in ("name", "role", "email")}} for s in db.collection("users").stream()]
+    """Workspace directory. Guests only see the people they share a chat with."""
+    visible = co_members(user["uid"]) | {user["uid"]} if is_guest(user) else None
+    rows = []
+    for s in db.collection("users").where(filter=FieldFilter("org_id", "==", user["org_id"])).stream():
+        if visible is None or s.id in visible:
+            rows.append({"id": s.id, **{k: v for k, v in s.to_dict().items() if k in PUBLIC_PROFILE}})
+    return rows
 

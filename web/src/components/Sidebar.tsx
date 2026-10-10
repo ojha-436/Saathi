@@ -1,36 +1,45 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Bell, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, Sparkles, Star, UserPlus } from "lucide-react";
+import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle, isUnread, timeShort } from "@/lib/format";
-import type { Chat } from "@/lib/types";
+import type { Chat, NotifyLevel, UserSettings } from "@/lib/types";
 import { ChatIcon, Menu } from "./bits";
 import { useWs, type View } from "./ctx";
 
-type RailKey = "activity" | "chat" | "assistant" | "tasks" | "insights";
+export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "insights" | "admin";
 
 export function railKey(view: View): RailKey {
-  return view.kind === "chat" ? "chat" : view.kind;
+  return view.kind === "meeting" ? "home" : view.kind;
+}
+
+export function notifyLevel(chat: Chat, settings: UserSettings): NotifyLevel {
+  return settings.notify?.[chat.id] ?? settings.defaults?.[chat.type] ?? "all";
 }
 
 /** Teams-style app bar: vertical on desktop, bottom navigation on phones. */
-export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect, mobile }: {
+export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect, mobile, admin }: {
   unreadChats: number;
   unreadAlerts: number;
   openTasks: number;
   active: RailKey;
   onSelect: (k: RailKey) => void;
   mobile?: boolean;
+  admin?: boolean;
 }) {
-  const items: { key: RailKey; label: string; icon: typeof Bell; badge?: number; dot?: boolean }[] = [
+  const all: { key: RailKey; label: string; icon: typeof Bell; badge?: number; dot?: boolean }[] = [
+    { key: "home", label: "My Day", icon: Sun },
     { key: "activity", label: "Activity", icon: Bell, badge: unreadAlerts },
     { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChats },
     { key: "assistant", label: "Saathi", icon: Sparkles },
     { key: "tasks", label: "Tasks", icon: ListTodo, badge: openTasks, dot: true },
     { key: "insights", label: "Insights", icon: BarChart3 },
+    ...(admin ? [{ key: "admin" as const, label: "Admin", icon: ShieldCheck }] : []),
   ];
+  // Phones: five most-used destinations; Insights and Admin are in the profile menu.
+  const items = mobile ? all.filter((i) => i.key !== "insights" && i.key !== "admin") : all;
   return (
     <nav
       aria-label="Apps"
@@ -100,7 +109,8 @@ function useCollapsed() {
 
 /** One list for chats and channels (the Teams "Chat and channels" pattern), with Favorites on top. */
 export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigate?: () => void }) {
-  const { uid, users, view, open, dialog, toast } = useWs();
+  const { uid, users, view, open, dialog, toast, settings, account } = useWs();
+  const guest = account.org_role === "guest";
   const [filter, setFilter] = useState<Filter>("all");
   const [collapsed, toggle] = useCollapsed();
 
@@ -132,7 +142,8 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
   const row = (c: Chat) => {
     const title = chatTitle(c, uid, users);
     const active = view.kind === "chat" && view.chatId === c.id;
-    const unread = !active && isUnread(c, uid);
+    const level = notifyLevel(c, settings);
+    const unread = !active && isUnread(c, uid) && level !== "off";
     const fav = !!c.favorite_of?.includes(uid);
     const preview = c.type !== "dm" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ${c.last_text}` : c.last_text;
     return (
@@ -149,6 +160,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
                 <span className="truncate">{title}</span>
                 {c.type === "channel" && c.visibility === "private" && <Lock size={11} className="shrink-0 text-muted" aria-label="Private channel" />}
                 {c.ai_excluded && <EyeOff size={11} className="shrink-0 text-muted" aria-label="Hidden from Saathi" />}
+                {level === "off" && <BellOff size={11} className="shrink-0 text-muted" aria-label="Muted" />}
               </span>
               <span className={clsx("shrink-0 text-[11px] group-hover:invisible", unread ? "font-semibold text-brand" : "text-muted")}>{timeShort(c.last_ts)}</span>
             </span>
@@ -195,9 +207,11 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
     <aside className="flex h-full w-full flex-col border-r border-border bg-canvas" aria-label="Chats and channels">
       <div className="flex items-center gap-1 px-4 pb-2 pt-3">
         <h2 className="flex-1 text-lg font-bold tracking-tight">Chat</h2>
-        <button onClick={() => dialog("browse-channels")} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-ink" aria-label="Browse channels" title="Browse channels">
-          <Compass size={17} />
-        </button>
+        {!guest && (
+          <button onClick={() => dialog("browse-channels")} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-ink" aria-label="Browse channels" title="Browse channels">
+            <Compass size={17} />
+          </button>
+        )}
         <Menu
           label="New"
           align="right"
@@ -207,12 +221,18 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
               <MessageSquarePlus size={15} aria-hidden /> New
             </>
           }
-          items={[
-            { label: "New chat", icon: MessageSquare, onSelect: () => dialog("new-chat") },
-            { label: "Create a channel", icon: Hash, onSelect: () => dialog("new-channel") },
-            "sep",
-            { label: "Browse channels", icon: Compass, onSelect: () => dialog("browse-channels") },
-          ]}
+          items={
+            guest
+              ? [{ label: "New chat", icon: MessageSquare, onSelect: () => dialog("new-chat") }]
+              : [
+                  { label: "New chat", icon: MessageSquare, onSelect: () => dialog("new-chat") },
+                  ...(account.org.settings.channel_creation === "admins" && account.org_role === "member"
+                    ? []
+                    : [{ label: "Create a channel", icon: Hash, onSelect: () => dialog("new-channel") }]),
+                  "sep" as const,
+                  { label: "Browse channels", icon: Compass, onSelect: () => dialog("browse-channels") },
+                ]
+          }
         />
       </div>
 
@@ -249,7 +269,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
           "channels",
           "Channels",
           channels,
-          filter === "all" || filter === "channels" ? (
+          !guest && (filter === "all" || filter === "channels") ? (
             <li>
               <button onClick={() => dialog("browse-channels")} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted hover:bg-hover hover:text-ink">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-dashed border-[#c5cad3]" aria-hidden>

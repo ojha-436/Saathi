@@ -1,10 +1,10 @@
 "use client";
 
 import clsx from "clsx";
-import { FileText, Hash, Lock, MessageSquare, Users } from "lucide-react";
+import { CalendarDays, FileText, Hash, Lock, MessageSquare, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
-import { avatarColor, chatTitle, initials } from "@/lib/format";
+import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
 import { useWs } from "./ctx";
 
@@ -22,10 +22,12 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
 
 /** A clickable source chip for refs like msg:CHAT/MSG or file:ID produced by the assistant. */
 export function CiteChip({ refId }: { refId: string }) {
-  const { chats, files, users, uid, openRef } = useWs();
+  const { chats, files, users, uid, openRef, meetings } = useWs();
   let label = "source";
   let isFile = false;
-  if (refId.startsWith("file:")) {
+  if (refId.startsWith("meet:")) {
+    label = meetings[refId.slice(5)]?.title ?? "meeting";
+  } else if (refId.startsWith("file:")) {
     isFile = true;
     label = files[refId.slice(5)]?.name ?? "file";
   } else if (refId.startsWith("msg:")) {
@@ -39,7 +41,7 @@ export function CiteChip({ refId }: { refId: string }) {
       title={isFile ? `Open ${label}` : `Jump to the message in ${label}`}
       className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-blueprint/20 bg-blueprint-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-blueprint transition hover:border-blueprint/50"
     >
-      {isFile ? <FileText size={11} aria-hidden /> : <MessageSquare size={11} aria-hidden />}
+      {isFile ? <FileText size={11} aria-hidden /> : refId.startsWith("meet:") ? <CalendarDays size={11} aria-hidden /> : <MessageSquare size={11} aria-hidden />}
       <span className="truncate">{label}</span>
     </button>
   );
@@ -61,7 +63,7 @@ export function IconButton({ label, onClick, children, className }: { label: str
 
 /** Avatar for a DM, a people icon for a group, # or a lock for a channel. */
 export function ChatIcon({ chat, title, size = 36 }: { chat: Chat; title: string; size?: number }) {
-  if (chat.type === "dm") return <Avatar name={title} size={size} />;
+  if (chat.type === "dm") return <DmAvatar chat={chat} title={title} size={size} />;
   const Icon = chat.type === "group" ? Users : chat.visibility === "private" ? Lock : Hash;
   return (
     <span
@@ -137,4 +139,52 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
       <span className={clsx("inline-block h-5 w-5 rounded-full bg-white shadow transition", on ? "translate-x-5" : "translate-x-0.5")} />
     </button>
   );
+}
+
+/** A colleague's avatar with presence dot; clicking opens their profile card. */
+export function UserAvatar({ uid, size = 36, dot = true, clickable = true, ring = "ring-surface" }: { uid: string; size?: number; dot?: boolean; clickable?: boolean; ring?: string }) {
+  const { users, showProfile } = useWs();
+  const u = users[uid];
+  const p = presence(u);
+  const inner = (
+    <span className="relative inline-flex shrink-0">
+      {u?.photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={u.photo} alt="" referrerPolicy="no-referrer" className="rounded-full object-cover" style={{ width: size, height: size }} />
+      ) : (
+        <Avatar name={u?.name ?? "?"} size={size} />
+      )}
+      {dot && (
+        <span
+          className={clsx("absolute -bottom-0.5 -right-0.5 rounded-full ring-2", ring, STATUS_META[p].dot)}
+          style={{ width: Math.max(8, Math.round(size * 0.3)), height: Math.max(8, Math.round(size * 0.3)) }}
+          aria-label={STATUS_META[p].label}
+          title={STATUS_META[p].label}
+        />
+      )}
+    </span>
+  );
+  if (!clickable) return inner;
+  return (
+    <button type="button" onClick={() => showProfile(uid)} className="shrink-0 rounded-full" aria-label={`View ${u?.name ?? "profile"}`}>
+      {inner}
+    </button>
+  );
+}
+
+export const ROLE_LABEL: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member", guest: "Guest" };
+
+export function RoleBadge({ role }: { role?: string }) {
+  if (!role || role === "member") return null;
+  return (
+    <span className={clsx("rounded-full px-1.5 py-px text-[10px] font-semibold", role === "guest" ? "bg-saffron-soft text-saffron-ink" : "bg-brand-soft text-brand")}>
+      {ROLE_LABEL[role]}
+    </span>
+  );
+}
+
+function DmAvatar({ chat, title, size }: { chat: Chat; title: string; size: number }) {
+  const { uid } = useWs();
+  const other = chat.members.find((m) => m !== uid);
+  return other ? <UserAvatar uid={other} size={size} clickable={false} /> : <Avatar name={title} size={size} />;
 }
