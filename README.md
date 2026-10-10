@@ -26,6 +26,9 @@ Re-run with `uv run python -m eval.run_eval`, then `uv run python -m eval.export
 | Promise capture | Commitments detected in any chat (English/Hinglish) → one-click tracked task → reminder via Cloud Scheduler |
 | Tasks without apps | “Kal subah 10 baje … reminder” → drafted task the user confirms |
 | Document intelligence | Document AI OCR + Gemini multimodal: drawing title blocks, revision tables, MTC values, OCR confidence |
+| Workspaces & admin | Every account belongs to one workspace (invite → verified company domain → new workspace). Roles: owner, admin, member, guest (vendors see only invited channels). Admin console: members & roles, deactivate, invites, channel governance (no message access), workspace settings, audit log. Firestore rules enforce workspace + membership via token claims |
+| Messaging basics | Presence & status (available/busy/DND/away/offline, message + expiry), @mentions with notifications, per-chat notification levels + quiet hours, profile cards, settings, sign out everywhere |
+| Work management | Tasks assignable to colleagues with watchers and status (to do / in progress / blocked / done); My Day home; meeting notes/transcripts → summary, decisions, action items → assigned tasks; Saathi tools `assign_task`, `who_owes` |
 | Sign-in & accounts | Continue with Google (Firebase Auth SSO), email sign-up with password rules, password reset, first-run profile (name + job title); optional `SIGNUP_DOMAINS` allow-list for company domains |
 | Channels | Create public or private channels, browse and join public ones, add/remove members, owners rename or delete; search index and file access follow membership instantly |
 | Enterprise chat UX | Teams-style app rail, one list for chats and channels (Favorites · Channels · Chats) with Unread/Channels/Chats filters, unread markers, reactions, hover actions (add to tasks, ask Saathi), members & details panel, mobile bottom navigation |

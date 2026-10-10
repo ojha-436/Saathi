@@ -62,7 +62,10 @@ def search(uid: str, query: str, k: int = 8) -> list[dict]:
     # one result per source (a file has several chunks)
     best: dict[str, tuple[float, dict]] = {}
     for score, d in scored.values():
-        if d.get("chat_id") not in allowed:
+        if d.get("source_type") == "meeting":
+            if uid not in (d.get("members") or []):  # meeting participants are fixed when the summary is created
+                continue
+        elif d.get("chat_id") not in allowed:
             continue
         key = d.get("ref")
         if key not in best or score > best[key][0]:

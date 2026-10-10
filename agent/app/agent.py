@@ -15,7 +15,7 @@ from google.genai import types
 
 from . import ai
 from .config import AGENT_MODEL, AGENT_THINKING, COMPANY, TZ
-from .firebase import db
+from .firebase import db, user_profile
 from .search import search, user_chats
 
 log = logging.getLogger("saathi.agent")
@@ -163,22 +163,78 @@ def propose_task(title: str, due_at: str, kind: str, source_ref: str, tool_conte
         kind: One of "reminder", "todo", "follow_up".
         source_ref: The msg:/file: ref this task came from, or empty string.
     """
-    uid = _uid(tool_context)
-    task_id = uuid.uuid4().hex[:20]
-    db.collection("tasks").document(task_id).set(
-        {
-            "owner": uid,
-            "title": title.strip()[:200],
-            "due_at": ai.parse_iso(due_at),
-            "kind": kind if kind in {"reminder", "todo", "follow_up"} else "todo",
-            "status": "proposed",
-            "source_ref": source_ref or None,
-            "notified": False,
-            "created_at": datetime.now(TZ),
-        }
-    )
-    tool_context.state["proposed_tasks"] = [*tool_context.state.get("proposed_tasks", []), task_id]
+    task_id = _draft_task(tool_context, title, due_at, kind, source_ref)
     return {"task_id": task_id, "status": "awaiting_user_confirmation", "due": ai.fmt_ist(ai.parse_iso(due_at))}
+
+
+def _draft_task(tool_context: ToolContext, title: str, due_at: str, kind: str, source_ref: str, assignee: str | None = None) -> str:
+    """Proposed tasks are drafts: the user confirms the card before anything is assigned or reminded."""
+    from .main import new_task
+
+    user = user_profile(_uid(tool_context))
+    task_id = new_task(user, title, assignee=assignee, due_at=ai.parse_iso(due_at), status="proposed",
+                       kind=kind if kind in {"reminder", "todo", "follow_up"} else "todo", source_ref=source_ref or None,
+                       watchers=[user["uid"]] if assignee and assignee != user["uid"] else None)
+    tool_context.state["proposed_tasks"] = [*tool_context.state.get("proposed_tasks", []), task_id]
+    return task_id
+
+
+def _find_person(name: str, uid: str) -> dict | None:
+    """Resolves a colleague's name within the caller's workspace (guests: only people they share a chat with)."""
+    me = user_profile(uid)
+    n = name.strip().lower()
+    visible = None
+    if me["org_role"] == "guest":
+        visible = set()
+        for c in user_chats(uid).values():
+            visible |= set(c.get("members") or [])
+    best = None
+    for s in db.collection("users").where(filter=FieldFilter("org_id", "==", me["org_id"])).stream():
+        if s.to_dict().get("deactivated") or (visible is not None and s.id not in visible):
+            continue
+        full = (s.get("name") or "").lower()
+        if n == full:
+            return {"uid": s.id, "name": s.get("name")}
+        if n and (full.startswith(n) or n.split()[0] == full.split()[0]):
+            best = best or {"uid": s.id, "name": s.get("name")}
+    return best
+
+
+def assign_task(person: str, title: str, due_at: str, source_ref: str, tool_context: ToolContext) -> dict:
+    """Drafts a task ASSIGNED TO A COLLEAGUE (the user watches it). The user must confirm the card; then the colleague is notified.
+
+    Args:
+        person: Colleague's name as the user said it, e.g. "Rahul" or "Neha Verma".
+        title: Short imperative title, e.g. "Send PO for side frame castings".
+        due_at: ISO 8601 date-time with +05:30 offset, or empty string.
+        source_ref: The msg:/file:/meet: ref this task came from, or empty string.
+    """
+    who = _find_person(person, _uid(tool_context))
+    if not who:
+        return {"error": f"No one called {person} in this workspace"}
+    task_id = _draft_task(tool_context, title, due_at, "follow_up", source_ref, assignee=who["uid"])
+    return {"task_id": task_id, "assignee": who["name"], "status": "awaiting_user_confirmation", "due": ai.fmt_ist(ai.parse_iso(due_at))}
+
+
+def who_owes(person: str, tool_context: ToolContext) -> dict:
+    """Lists open tasks that OTHER people owe the user (tasks the user created or watches, assigned to someone else),
+    optionally filtered to one person. Use for "what does Rahul owe me", "what's pending with others".
+
+    Args:
+        person: Colleague's name, or empty string for everyone.
+    """
+    uid = _uid(tool_context)
+    who = _find_person(person, uid) if person.strip() else None
+    rows = []
+    for snap in db.collection("tasks").where(filter=FieldFilter("participants", "array_contains", uid)).stream():
+        t = snap.to_dict()
+        if t.get("status") not in ("open", "in_progress", "blocked") or t.get("assignee", t.get("owner")) == uid:
+            continue
+        if who and t.get("assignee") != who["uid"]:
+            continue
+        rows.append({"title": t.get("title"), "assignee": user_profile(t.get("assignee", t.get("owner")))["name"], "status": t.get("status"),
+                     "due": ai.fmt_ist(t.get("due_at")), "source_ref": t.get("source_ref")})
+    return {"owed_to_user": rows}
 
 
 def list_tasks(status: str, tool_context: ToolContext) -> dict:
@@ -191,7 +247,8 @@ def list_tasks(status: str, tool_context: ToolContext) -> dict:
     rows = []
     for snap in db.collection("tasks").where(filter=FieldFilter("owner", "==", uid)).stream():
         t = snap.to_dict()
-        if t.get("status") == "proposed" or (status in {"open", "done"} and t.get("status") != status):
+        live = "open" if t.get("status") in ("open", "in_progress", "blocked") else t.get("status")
+        if t.get("status") == "proposed" or (status in {"open", "done"} and live != status):
             continue
         rows.append(
             {"task_id": snap.id, "title": t.get("title"), "kind": t.get("kind"), "status": t.get("status"),
@@ -200,20 +257,25 @@ def list_tasks(status: str, tool_context: ToolContext) -> dict:
     return {"tasks": rows}
 
 
-TOOLS = [search_workspace, get_message_context, catch_up, lookup_document, propose_task, list_tasks]
+TOOLS = [search_workspace, get_message_context, catch_up, lookup_document, propose_task, assign_task, list_tasks, who_owes]
 
 
 def _instruction(ctx: ReadonlyContext) -> str:
     s = ctx.state
     now = datetime.now(TZ).strftime("%A %d %B %Y, %I:%M %p")
-    return f"""You are Saathi, the personal work assistant of {s.get('user_name')} ({s.get('role')}) at {COMPANY}, a railway rolling-stock component manufacturer in India.
+    company = s.get("org_name") or COMPANY
+    about = ", a railway rolling-stock component manufacturer in India" if company == COMPANY else ""
+    return f"""You are Saathi, the personal work assistant of {s.get('user_name')} ({s.get('role')}) at {company}{about}.
 Current time: {now} (Asia/Kolkata).
 
 How to work:
 - For ANY question about work content (files, drawings, what someone said, decisions, status, vendors, jobs), call tools first. Never answer from memory.
-- Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def] or [file:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
+- Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def], [file:xyz] or [meet:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
 - If tools return nothing relevant, say you could not find it in the chats and files the user can access. Never guess.
 - Revisions/approvals/document fields: use lookup_document. The latest revision is the highest revision among files with the same drawing number; say who approved it and when.
+- Assigning work to a colleague ("Rahul ko PO bhejne ka task do Friday tak", "ask Neha to send the UT report"): call assign_task. For the user's own reminders: propose_task. Either way tell the user to confirm the card.
+- "What does X owe me" / pending with others: call who_owes.
+- Meeting summaries are searchable with search_workspace; cite them as [meet:...].
 - Reminders, to-dos, follow-ups: call propose_task with an ISO 8601 time in +05:30. Resolve relative times: kal = tomorrow, parso = day after tomorrow, subah/morning = 10:00, dopahar = 14:00, shaam/evening/EOD = 18:00. Then tell the user to confirm the card below. Never claim a task is saved before confirmation.
 - "What did I miss" / catch-up: call catch_up (default 72 hours) and write a brief with these sections: **Decisions**, **Asks for you**, **Files shared**, **Open promises**. One short bullet per item, each with a citation. Skip empty sections.
 - Language: reply in the language of the user's LATEST message. English question -> English answer only. Hindi or Hinglish (Hindi written in Latin script) -> reply in the same. The language of the chat data does not matter.
@@ -244,7 +306,8 @@ async def ask(user: dict, text: str, history: list[dict]) -> dict:
     session = await session_service.create_session(
         app_name=APP_NAME,
         user_id=user["uid"],
-        state={"uid": user["uid"], "user_name": user["name"], "role": user["role"], "proposed_tasks": []},
+        state={"uid": user["uid"], "user_name": user["name"], "role": user["role"], "proposed_tasks": [],
+               "org_name": (db.collection("orgs").document(user.get("org_id") or "-").get().to_dict() or {}).get("name", "")},
     )
     convo = "\n".join(f"{h['role']}: {h['text'][:800]}" for h in history[-6:])
     prompt = (

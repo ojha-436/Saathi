@@ -61,7 +61,7 @@ class DocExtract(BaseModel):
     full_text: str
 
 
-def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str], chat: dict, extra: dict):
+def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str], chat: dict, extra: dict, recheck: bool = True):
     vec = ai.embed([embed_text])[0]
     ref = db.collection("chunks").document(chunk_id)
     ref.set(
@@ -72,9 +72,12 @@ def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str],
             "chat_id": chat["id"],
             "chat_name": chat.get("name", ""),
             "keywords": ai.keywords(embed_text),
+            "org_id": chat.get("org_id") or extra.get("org_id", ""),
             **extra,
         }
     )
+    if not recheck:
+        return
     # Membership or the name may have changed while we were embedding (join, removal, rename). Re-read after the
     # write: a change committed before this point is fixed here, one committed after it is fixed by main.sync_members.
     now_chat = db.collection("chats").document(chat["id"]).get().to_dict() or {}

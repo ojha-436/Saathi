@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Chat, UserProfile } from "./types";
+import type { Chat, StatusState, UserProfile } from "./types";
 
 const TZ = "Asia/Kolkata";
 
@@ -78,3 +78,37 @@ export function isUnread(chat: Chat, me: string) {
 }
 
 export const REACTION_EMOJI: Record<string, string> = { like: "👍", heart: "❤️", laugh: "😄", check: "✅", pray: "🙏", wow: "😮" };
+
+
+/** Effective presence: an expired status reverts to available; no heartbeat for 10 min shows away. */
+export function presence(u?: UserProfile): StatusState {
+  if (!u) return "offline";
+  const st = u.status;
+  const until = st?.until?.toMillis?.();
+  if (st && st.state !== "available" && (!until || until > Date.now())) return st.state;
+  const last = u.last_active?.toMillis?.();
+  if (!last) return "offline";
+  return Date.now() - last > 10 * 60_000 ? "away" : "available";
+}
+
+export const STATUS_META: Record<StatusState, { label: string; dot: string }> = {
+  available: { label: "Available", dot: "bg-[#2e9d5b]" },
+  busy: { label: "Busy", dot: "bg-[#d64545]" },
+  dnd: { label: "Do not disturb", dot: "bg-[#d64545]" },
+  away: { label: "Away", dot: "bg-[#e0a526]" },
+  offline: { label: "Offline", dot: "bg-[#9aa3ae]" },
+};
+
+export function statusText(u?: UserProfile) {
+  const st = u?.status;
+  const until = st?.until?.toMillis?.();
+  return st?.text && (!until || until > Date.now()) ? st.text : "";
+}
+
+export function localTime(tz?: string) {
+  try {
+    return new Date().toLocaleTimeString("en-IN", { timeZone: tz || "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}

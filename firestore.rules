@@ -1,12 +1,23 @@
 rules_version = '2';
-// Browsers only READ (real-time listeners). Every write goes through the Saathi API, which checks membership.
+// Browsers only READ (real-time listeners). Every write goes through the Saathi API, which checks workspace and membership.
+// Workspace isolation: the API sets custom claims {org_id, org_role} on each user's ID token.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function myOrg() { return request.auth.token.org_id; }
+    function isGuest() { return request.auth.token.org_role == 'guest'; }
 
-    match /users/{uid} {
-      allow read: if signedIn();
+    match /orgs/{orgId} {
+      allow read: if signedIn() && myOrg() == orgId;
     }
+    // Directory: your own profile, or people in your workspace (guests get co-members from the API instead).
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || (resource.data.org_id == myOrg() && !isGuest()));
+    }
+    match /user_settings/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+    }
+    // Chats and channels: members only. Membership is only ever granted inside the member's workspace.
     match /chats/{chatId} {
       allow read: if signedIn() && request.auth.uid in resource.data.members;
       match /messages/{msgId} {
@@ -17,7 +28,10 @@ service cloud.firestore {
       allow read: if signedIn() && request.auth.uid in resource.data.members;
     }
     match /tasks/{taskId} {
-      allow read: if signedIn() && resource.data.owner == request.auth.uid;
+      allow read: if signedIn() && (request.auth.uid in resource.data.participants || resource.data.owner == request.auth.uid);
+    }
+    match /meetings/{meetingId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participants;
     }
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
@@ -25,6 +39,7 @@ service cloud.firestore {
     match /assistant/{uid}/messages/{id} {
       allow read: if signedIn() && request.auth.uid == uid;
     }
+    // invites, connections, chunks, audit_log, and anything else: server only
     match /{document=**} {
       allow read, write: if false;
     }

@@ -67,7 +67,7 @@ MESSAGES = [
 
 
 def wipe():
-    for col in ["chunks", "files", "tasks", "notifications", "audit_log"]:
+    for col in ["chunks", "files", "tasks", "notifications", "audit_log", "meetings", "invites", "user_settings"]:
         for s in db.collection(col).stream():
             s.reference.delete()
     for chat in db.collection("chats").stream():
@@ -124,6 +124,9 @@ def main():
         ingest.process_message(cid, msg_id)
         if file_id:
             ingest.process_file(cid, msg_id, file_id)
+    from seed.migrate_orgs import main as migrate
+
+    migrate(apply=True)  # workspace, roles and token claims (Phase 2 tenancy)
     print("done. Login: prince@saathi.demo /", PASSWORD)
 
 
