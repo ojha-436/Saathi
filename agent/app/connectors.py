@@ -34,9 +34,26 @@ log = logging.getLogger("saathi.connectors")
 SCOPES = {
     "calendar": "https://www.googleapis.com/auth/calendar.readonly",
     "gmail": "https://www.googleapis.com/auth/gmail.readonly",
+    "drive": "https://www.googleapis.com/auth/drive.readonly",
 }
 BASE_SCOPES = ["openid", "email"]
 MAX_EMAILS_PER_SYNC = 30
+MAX_DRIVE_FILES = 60
+DRIVE_TEXT_EXPORT = {  # Google-native files Saathi reads as text
+    "application/vnd.google-apps.document": "text/plain",
+    "application/vnd.google-apps.presentation": "text/plain",
+    "application/vnd.google-apps.spreadsheet": "text/csv",
+}
+DRIVE_TEXT_DOWNLOAD = {"text/plain", "text/csv", "text/markdown"}
+
+
+def _set_connected(uid: str, services: list[str]) -> None:
+    """Private list the web app uses to show Gmail / Calendar / Drive in the left rail."""
+    ref = db.collection("user_settings").document(uid)
+    if ref.get().exists:
+        ref.update({"connected": services})
+    else:
+        ref.set({"org_id": user_profile(uid)["org_id"], "connected": services})
 
 
 def _client() -> dict:
@@ -137,7 +154,8 @@ def callback(bg: BackgroundTasks, state: str = "", code: str = "", error: str = 
         log.warning("google token exchange failed: %s", tok.get("error"))
         return _back("error", "Google didn't accept the sign-in. Try again.")
     granted = set((tok.get("scope") or "").split())
-    services = [s for s in st["services"] if SCOPES[s] in granted]
+    # include_granted_scopes=true: the token covers everything granted before, so adding Drive keeps Calendar/Gmail
+    services = [s for s in SCOPES if SCOPES[s] in granted]
     if not services:
         return _back("error", "No permissions were granted. Tick Calendar and/or Gmail on Google's screen.")
     info = requests.get("https://openidconnect.googleapis.com/v1/userinfo", timeout=20, headers={"Authorization": f"Bearer {tok['access_token']}"}).json()
@@ -152,6 +170,7 @@ def callback(bg: BackgroundTasks, state: str = "", code: str = "", error: str = 
         "enc_refresh": _encrypt(refresh), "status": "active", "error": None, "created_at": old.get("created_at") or datetime.now(TZ),
         "last_sync": None, "cursor": old.get("cursor", {}), "stats": {},
     })
+    _set_connected(uid, services)
     audit(user, "connector.connected", "google", services=services, account=info.get("email", ""))
     bg.add_task(sync_user, uid, {"access_token": tok["access_token"]})
     return _back("ok")
@@ -176,9 +195,11 @@ def disconnect_user(uid: str) -> None:
     for col in ("external_items", "events"):
         for s in db.collection(col).where(filter=FieldFilter("uid", "==", uid)).stream():
             s.reference.delete()
-    for s in db.collection("chunks").where(filter=FieldFilter("chat_id", "==", f"mail_{uid}")).stream():
-        s.reference.delete()
+    for cid in (f"mail_{uid}", f"drive_{uid}"):
+        for s in db.collection("chunks").where(filter=FieldFilter("chat_id", "==", cid)).stream():
+            s.reference.delete()
     db.collection("users").document(uid).update({"calendar_busy": []})
+    _set_connected(uid, [])
 
 
 @router.post("/google/sync")
@@ -240,6 +261,12 @@ def sync_user(uid: str, fresh: dict | None = None) -> None:
         except Exception as e:
             log.exception("gmail sync failed for %s", uid)
             errors.append(f"Gmail: {str(e)[:120]}")
+    if "drive" in conn.get("services", []):
+        try:
+            stats["files"] = _sync_drive(uid, user, headers)
+        except Exception as e:
+            log.exception("drive sync failed for %s", uid)
+            errors.append(f"Drive: {str(e)[:120]}")
     ref.update({"last_sync": datetime.now(TZ), "stats": stats, "error": "; ".join(errors) or None, "status": "active"})
 
 
@@ -342,6 +369,66 @@ def _sync_gmail(uid: str, user: dict, headers: dict) -> tuple[int, int]:
                        chat={"id": f"mail_{uid}", "name": "Email", "org_id": user["org_id"]}, recheck=False,
                        extra={"source_type": "email", "sender_name": sender_name, "ts": sent_at, "ref": f"mail:{item_id}", "file_name": subject})
     return len(new), promises
+
+
+def _sync_drive(uid: str, user: dict, headers: dict) -> int:
+    """Recent files you own or that were shared with you (last 60 days). Google Docs/Slides/Sheets and text files are read
+    as text so Saathi can answer questions about them; everything else is listed with its link. Only you can see or search them."""
+    from .ingest import _chunk_doc
+
+    since = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%S")
+    r = requests.get("https://www.googleapis.com/drive/v3/files", headers=headers, timeout=30, params={
+        "q": f"modifiedTime > '{since}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
+        "orderBy": "modifiedTime desc", "pageSize": MAX_DRIVE_FILES, "corpora": "user",
+        "fields": "files(id,name,mimeType,modifiedTime,webViewLink,iconLink,size,owners(displayName,emailAddress),lastModifyingUser(displayName),shared)",
+    })
+    r.raise_for_status()
+    seen = set()
+    for f in r.json().get("files", []):
+        item_id = f"{uid}_drive_{f['id']}"[:400]
+        seen.add(item_id)
+        modified = ai.parse_iso(f.get("modifiedTime"))
+        ref = db.collection("external_items").document(item_id)
+        old = ref.get().to_dict() or {}
+        owner = (f.get("owners") or [{}])[0]
+        item = {"uid": uid, "org_id": user["org_id"], "provider": "drive", "kind": "file", "name": f.get("name", "")[:200], "mime": f.get("mimeType", ""),
+                "ts": modified, "url": f.get("webViewLink"), "icon": f.get("iconLink"), "owner": owner.get("displayName") or owner.get("emailAddress", ""),
+                "modified_by": (f.get("lastModifyingUser") or {}).get("displayName", ""), "shared": bool(f.get("shared")), "size": int(f.get("size") or 0),
+                "indexed": old.get("indexed", False)}
+        changed = not old or old.get("ts") != modified
+        text = ""
+        if changed and (f["mimeType"] in DRIVE_TEXT_EXPORT or f["mimeType"] in DRIVE_TEXT_DOWNLOAD):
+            if f["mimeType"] in DRIVE_TEXT_EXPORT:
+                x = requests.get(f"https://www.googleapis.com/drive/v3/files/{f['id']}/export", headers=headers, timeout=30,
+                                 params={"mimeType": DRIVE_TEXT_EXPORT[f["mimeType"]]})
+            elif int(f.get("size") or 0) <= 2_000_000:
+                x = requests.get(f"https://www.googleapis.com/drive/v3/files/{f['id']}", headers=headers, timeout=30, params={"alt": "media"})
+            else:
+                x = None
+            if x is not None and x.ok:
+                text = x.content[:200_000].decode("utf-8", errors="ignore").strip()
+        if changed and text:
+            for c in db.collection("chunks").where(filter=FieldFilter("ref", "==", f"drive:{item_id}")).stream():
+                c.reference.delete()
+            chat = {"id": f"drive_{uid}", "name": "Google Drive", "org_id": user["org_id"]}
+            extra = {"source_type": "drive", "file_name": item["name"], "sender_name": item["modified_by"] or item["owner"], "ts": modified, "ref": f"drive:{item_id}"}
+            head = f"Drive file: {item['name']} (owner {item['owner']})\n{text[:1400]}"
+            _chunk_doc(f"drv_{f['id']}_{uid}_0"[:400], text=head, embed_text=head, members=[uid], chat=chat, recheck=False, extra=extra)
+            for i, start in enumerate(range(1400, min(len(text), 6000), 1500), start=1):
+                piece = text[start:start + 1500]
+                _chunk_doc(f"drv_{f['id']}_{uid}_{i}"[:400], text=piece, embed_text=f"{item['name']}\n{piece}", members=[uid], chat=chat, recheck=False, extra=extra)
+            item["indexed"] = True
+            item["snippet"] = re.sub(r"\s+", " ", text[:280])
+        elif old.get("snippet"):
+            item["snippet"] = old["snippet"]
+        ref.set(item)
+    # files that fell out of the window: forget them and their index
+    for s in db.collection("external_items").where(filter=FieldFilter("uid", "==", uid)).where(filter=FieldFilter("provider", "==", "drive")).stream():
+        if s.id not in seen:
+            for c in db.collection("chunks").where(filter=FieldFilter("ref", "==", f"drive:{s.id}")).stream():
+                c.reference.delete()
+            s.reference.delete()
+    return len(seen)
 
 
 # ---------------- email promises -> tasks ----------------

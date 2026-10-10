@@ -159,3 +159,39 @@ def test_push(user=Depends(current_user)):
 
     push(user["uid"], "Saathi notifications are on", "You'll get mentions, replies, tasks and reminders here.", tag="test")
     return {"ok": True}
+
+
+class PhotoIn(BaseModel):
+    data_url: str  # data:image/(jpeg|png|webp);base64,...  — resized in the browser to 256 px
+
+
+_MAGIC = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG", "webp": b"RIFF"}
+
+
+@router.post("/photo")
+def set_photo(body: PhotoIn, user=Depends(current_user)):
+    """Profile photo, stored on the profile (visible only to the workspace, like the rest of the directory)."""
+    import base64
+    import binascii
+
+    m = re.fullmatch(r"data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)", body.data_url.strip())
+    if not m:
+        raise HTTPException(400, "Upload a JPEG, PNG or WebP image")
+    try:
+        raw = base64.b64decode(m.group(2), validate=True)
+    except binascii.Error:
+        raise HTTPException(400, "That image couldn't be read")
+    if len(raw) > 150_000:
+        raise HTTPException(413, "Image too large after resizing (max 150 KB)")
+    if not raw.startswith(_MAGIC[m.group(1)]) or (m.group(1) == "webp" and raw[8:12] != b"WEBP"):
+        raise HTTPException(400, "That file isn't a valid image")
+    db.collection("users").document(user["uid"]).update({"photo": body.data_url.strip()})
+    forget_profile(user["uid"])
+    return {"ok": True}
+
+
+@router.delete("/photo")
+def remove_photo(user=Depends(current_user)):
+    db.collection("users").document(user["uid"]).update({"photo": ""})
+    forget_profile(user["uid"])
+    return {"ok": True}

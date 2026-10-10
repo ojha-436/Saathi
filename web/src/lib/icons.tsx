@@ -140,3 +140,14 @@ export const MessagesSquare = make("MessageSquareQuote");
 export const Plug = make("Workflow");
 export const Video = make("Phone");
 export const NotebookPen = make("ScrollText");
+
+/** Google Drive (line style, matches the Freehand set's weight). */
+export function DriveIcon({ size = 24, className, ...rest }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" className={clsx("shrink-0", className)} aria-hidden={rest["aria-hidden"] ?? true}>
+      <path d="M8.6 3.5h6.8l6.1 10.6-3.4 5.9H5.9l-3.4-5.9z" />
+      <path d="M8.6 3.5l6.5 11.1M15.4 3.5L9 14.6M2.5 14.1h19" />
+    </svg>
+  );
+}
+export const Camera = make("FileUp");

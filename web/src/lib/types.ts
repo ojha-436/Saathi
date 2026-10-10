@@ -36,6 +36,7 @@ export type UserSettings = {
   notify?: Record<string, NotifyLevel>;
   defaults?: { dm?: NotifyLevel; group?: NotifyLevel; channel?: NotifyLevel };
   quiet_hours?: { enabled: boolean; start: string; end: string };
+  connected?: ("calendar" | "gmail" | "drive")[];
 };
 
 export type Meeting = {
@@ -176,11 +177,11 @@ export type Insights = {
 export type Connection = {
   provider: "google";
   email: string;
-  services: ("calendar" | "gmail")[];
+  services: ("calendar" | "gmail" | "drive")[];
   status: "active" | "needs_reauth";
   error?: string | null;
   last_sync: string | null;
-  stats: { events?: number; emails?: number; email_promises?: number };
+  stats: { events?: number; emails?: number; email_promises?: number; files?: number };
 };
 
 export type CalendarEvent = {
@@ -198,6 +199,7 @@ export type CalendarEvent = {
 
 export type EmailItem = {
   id: string;
+  provider?: "gmail";
   subject: string;
   from_name: string;
   ts?: Timestamp;
@@ -206,4 +208,19 @@ export type EmailItem = {
   promise?: { committer: string; action: string; due_at?: Timestamp | null } | null;
   task_id?: string | null;
   dismissed?: boolean;
+};
+
+export type DriveFile = {
+  id: string;
+  provider: "drive";
+  name: string;
+  mime: string;
+  ts?: Timestamp;
+  url: string;
+  icon?: string;
+  owner?: string;
+  modified_by?: string;
+  shared?: boolean;
+  indexed?: boolean;
+  snippet?: string;
 };

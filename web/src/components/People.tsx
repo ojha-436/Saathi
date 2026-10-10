@@ -2,8 +2,8 @@
 
 import clsx from "clsx";
 import { signOut } from "firebase/auth";
-import { AlertTriangle, Bell, Building2, CalendarDays, CheckCircle2, Clock, Loader2, Mail, MapPin, MessageSquare, Phone, Plug, RefreshCw, ShieldCheck, Smile, UserRound, X } from "@/lib/icons";
-import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, Bell, Building2, CalendarDays, CheckCircle2, Clock, Loader2, Mail, MapPin, MessageSquare, Phone, Plug, RefreshCw, ShieldCheck, Smile, UserRound, X, DriveIcon, Camera } from "@/lib/icons";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";
 import { disablePush, enablePush, pushState, type PushState } from "@/lib/push";
@@ -264,11 +264,12 @@ function ProfileSettings({ onDone }: { onDone: () => void }) {
       }}
       className="space-y-4"
     >
-      <div className="flex items-center gap-3">
-        {me && <UserAvatar uid={me.id} size={52} clickable={false} />}
-        <div className="text-sm">
+      <div className="flex items-center gap-4">
+        {me && <UserAvatar uid={me.id} size={64} clickable={false} />}
+        <div className="min-w-0 text-sm">
           <div className="font-semibold">{f.name || "Your name"}</div>
           <div className="text-muted">{me?.email}</div>
+          <PhotoControls hasPhoto={!!me?.photo} />
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -477,7 +478,7 @@ function GoogleMark() {
 function ConnectedApps() {
   const { account, toast } = useWs();
   const [data, setData] = useState<{ connections: Connection[]; available: { google: boolean } } | null>(null);
-  const [want, setWant] = useState({ calendar: true, gmail: true });
+  const [want, setWant] = useState({ calendar: true, gmail: true, drive: true });
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(() => {
     api<{ connections: Connection[]; available: { google: boolean } }>("/api/connectors")
@@ -493,10 +494,10 @@ function ConnectedApps() {
   const g = data?.connections.find((c) => c.provider === "google");
   const guest = account.org_role === "guest";
 
-  async function connect() {
+  async function connect(services?: string[]) {
     setBusy("connect");
     try {
-      const r = await api<{ url: string }>("/api/connectors/google/start", { json: { services: Object.entries(want).filter(([, v]) => v).map(([k]) => k) } });
+      const r = await api<{ url: string }>("/api/connectors/google/start", { json: { services: services ?? Object.entries(want).filter(([, v]) => v).map(([k]) => k) } });
       location.href = r.url;
     } catch (e) {
       toast((e as Error).message);
@@ -531,7 +532,7 @@ function ConnectedApps() {
           <GoogleMark />
           <div className="min-w-0 flex-1">
             <div className="font-semibold">Google Workspace</div>
-            <div className="text-xs text-muted">Calendar and Gmail · read-only</div>
+            <div className="text-xs text-muted">Calendar, Gmail and Drive · read-only</div>
           </div>
           {g && (
             <span className={clsx("flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", g.status === "active" && !g.error ? "bg-moss-soft text-moss" : "bg-rust-soft text-rust")}>
@@ -557,12 +558,18 @@ function ConnectedApps() {
                   {g.stats.emails != null && ` · ${g.stats.emails} new, ${g.stats.email_promises ?? 0} promises found`}
                 </li>
               )}
+              {g.services.includes("drive") && (
+                <li className="flex items-center gap-2">
+                  <DriveIcon size={14} /> Drive: files changed in the last 60 days; Docs, Sheets, Slides and text files are read by Saathi
+                  {g.stats.files != null && ` · ${g.stats.files} files`}
+                </li>
+              )}
             </ul>
             <p className="text-xs text-muted">{g.last_sync ? `Last synced ${new Date(g.last_sync).toLocaleString("en-IN", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" })} · syncs every 10 minutes` : "First sync in progress…"}</p>
             {g.error && <p className="rounded-lg bg-rust-soft px-3 py-2 text-xs text-rust">{g.error}</p>}
             <div className="flex flex-wrap gap-2 pt-1">
               {g.status === "needs_reauth" ? (
-                <button onClick={connect} disabled={!!busy} className="h-9 rounded-lg bg-brand px-4 font-semibold text-white hover:bg-brand-strong">
+                <button onClick={() => connect([...g.services])} disabled={!!busy} className="h-9 rounded-lg bg-brand px-4 font-semibold text-white hover:bg-brand-strong">
                   Reconnect Google
                 </button>
               ) : (
@@ -570,8 +577,15 @@ function ConnectedApps() {
                   <RefreshCw size={14} className={busy === "sync" ? "animate-spin" : ""} /> Sync now
                 </button>
               )}
+              {(["calendar", "gmail", "drive"] as const)
+                .filter((s) => !g.services.includes(s))
+                .map((s) => (
+                  <button key={s} onClick={() => connect([...g.services, s])} disabled={!!busy} className="h-9 rounded-lg border border-border px-3 font-semibold hover:bg-hover disabled:opacity-50">
+                    + Add {s === "drive" ? "Google Drive" : s === "gmail" ? "Gmail" : "Calendar"}
+                  </button>
+                ))}
               <button
-                onClick={() => run("disconnect", "Google disconnected. Synced data deleted.", "Disconnect Google? Saathi stops reading your calendar and email and deletes everything it synced.")}
+                onClick={() => run("disconnect", "Google disconnected. Synced data deleted.", "Disconnect Google? Saathi stops reading your calendar, email and Drive and deletes everything it synced.")}
                 disabled={!!busy}
                 className="h-9 rounded-lg px-3 font-semibold text-rust hover:bg-rust-soft disabled:opacity-50"
               >
@@ -597,7 +611,13 @@ function ConnectedApps() {
                 <b>Gmail</b>: spots commitments in your email (&ldquo;we will dispatch on 15th&rdquo;) and lets you track them as tasks; ask Saathi about your email.
               </span>
             </label>
-            <button onClick={connect} disabled={!!busy || (!want.calendar && !want.gmail)} className="mt-1 flex h-10 items-center gap-2 rounded-lg border border-[#c5cad3] bg-white px-4 font-semibold hover:bg-canvas disabled:opacity-50">
+            <label className="flex items-start gap-2">
+              <input type="checkbox" checked={want.drive} onChange={(e) => setWant((w) => ({ ...w, drive: e.target.checked }))} className="mt-0.5" />
+              <span>
+                <b>Google Drive</b>: your recent files in one place, and Saathi can answer questions about your Docs, Sheets and Slides with links back to them.
+              </span>
+            </label>
+            <button onClick={() => connect()} disabled={!!busy || (!want.calendar && !want.gmail && !want.drive)} className="mt-1 flex h-10 items-center gap-2 rounded-lg border border-[#c5cad3] bg-white px-4 font-semibold hover:bg-canvas disabled:opacity-50">
               {busy === "connect" ? <Loader2 size={16} className="animate-spin" /> : <GoogleMark />} Connect Google
             </button>
             <p className="text-xs text-muted">Google may warn that the app is unverified while Saathi is in testing. Tokens are encrypted with Cloud KMS; disconnecting deletes everything synced.</p>
@@ -617,6 +637,75 @@ function ConnectedApps() {
           <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-semibold text-muted">Coming next</span>
         </section>
       ))}
+    </div>
+  );
+}
+
+
+/** Center-crops and shrinks a photo to 256×256 in the browser, so only a small image is uploaded. */
+async function toAvatarDataUrl(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("That file isn't an image we can read"));
+      i.src = url;
+    });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 256;
+    const g = canvas.getContext("2d")!;
+    g.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+    for (const q of [0.86, 0.75, 0.6]) {
+      const d = canvas.toDataURL("image/jpeg", q);
+      if (d.length < 190_000) return d;
+    }
+    throw new Error("That image is too detailed. Try another one.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function PhotoControls({ hasPhoto }: { hasPhoto: boolean }) {
+  const { toast } = useWs();
+  const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  async function pick(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast("Choose an image file (JPEG, PNG or WebP).");
+    if (file.size > 15 * 1024 * 1024) return toast("That image is over 15 MB. Choose a smaller one.");
+    setBusy(true);
+    try {
+      await api("/api/me/photo", { json: { data_url: await toAvatarDataUrl(file) } });
+      toast("Profile photo updated.");
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  }
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
+      <button type="button" onClick={() => input.current?.click()} disabled={busy} className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-semibold hover:bg-hover disabled:opacity-50">
+        {busy ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />} {hasPhoto ? "Change photo" : "Upload photo"}
+      </button>
+      {hasPhoto && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            await api("/api/me/photo", { method: "DELETE" }).then(() => toast("Photo removed."), (e) => toast((e as Error).message));
+            setBusy(false);
+          }}
+          className="h-8 rounded-lg px-2 text-xs font-semibold text-rust hover:bg-rust-soft disabled:opacity-50"
+        >
+          Remove
+        </button>
+      )}
     </div>
   );
 }

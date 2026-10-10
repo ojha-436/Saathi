@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users } from "@/lib/icons";
+import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users, DriveIcon } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
 import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
@@ -24,9 +24,24 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
 
 /** A clickable source chip for refs like msg:CHAT/MSG or file:ID produced by the assistant. */
 export function CiteChip({ refId }: { refId: string }) {
-  const { chats, files, users, uid, openRef, meetings, emails } = useWs();
+  const { chats, files, users, uid, openRef, meetings, emails, driveFiles } = useWs();
   let label = "source";
   let isFile = false;
+  if (refId.startsWith("drive:")) {
+    const f = driveFiles[refId.slice(6)];
+    return (
+      <a
+        href={f?.url ?? "https://drive.google.com"}
+        target="_blank"
+        rel="noreferrer"
+        title={f ? `Open “${f.name}” in Google Drive` : "Open in Google Drive"}
+        className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-moss/25 bg-moss-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-moss transition hover:border-moss/50"
+      >
+        <DriveIcon size={11} aria-hidden />
+        <span className="truncate">{f?.name ?? "Drive file"}</span>
+      </a>
+    );
+  }
   if (refId.startsWith("mail:")) {
     const e = emails[refId.slice(5)];
     return (
