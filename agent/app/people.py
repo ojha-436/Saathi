@@ -63,7 +63,7 @@ def set_status(body: StatusIn, user=Depends(current_user)):
     elif body.clear_after_minutes:
         until = t + timedelta(minutes=max(1, min(body.clear_after_minutes, 60 * 24 * 14)))
     db.collection("users").document(user["uid"]).update(
-        {"status": {"state": body.state, "text": _clean(body.text, 100), "until": until, "set_at": t}, "last_active": t}
+        {"status": {"state": body.state, "text": "" if "(calendar)" in body.text else _clean(body.text, 100), "until": until, "set_at": t}, "last_active": t}
     )
     return {"ok": True}
 

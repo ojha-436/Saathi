@@ -269,7 +269,12 @@ export default function Landing() {
           <span className="inline-flex items-center gap-2">
             <LogoMark size={22} /> Saathi · Google Cloud AI Builder Cup 2026
           </span>
-          <span className="font-mono text-xs">Gemini on Vertex AI · ADK · Document AI · Firestore · BigQuery · Cloud Run</span>
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link href="/privacy" className="font-medium text-ink hover:underline">
+              Privacy Policy
+            </Link>
+            <span className="font-mono text-xs">Gemini on Vertex AI · ADK · Document AI · Firestore · BigQuery · Cloud Run</span>
+          </span>
         </div>
         <p className="mx-auto max-w-7xl px-5 pb-6 text-xs text-muted lg:px-8">
           Icons: <a className="underline" href="https://www.streamlinehq.com/icons/freehand-free">Freehand Line (free)</a> by Streamline, licensed{" "}

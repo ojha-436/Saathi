@@ -43,7 +43,11 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         </Link>
         <div className="mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center">{children}</div>
         <p className="mx-auto mt-8 max-w-[420px] text-center text-xs text-muted">
-          Protected by Firebase Authentication. By continuing you agree to use Saathi for work purposes in line with your organisation&rsquo;s policies.
+          Protected by Firebase Authentication. By continuing you agree to use Saathi for work purposes in line with your organisation&rsquo;s policies. See our{" "}
+          <Link href="/privacy" className="font-medium underline">
+            Privacy Policy
+          </Link>
+          .
         </p>
       </main>
     </div>
