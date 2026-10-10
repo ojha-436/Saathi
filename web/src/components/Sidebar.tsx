@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus } from "lucide-react";
+import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus } from "@/lib/icons";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle, isUnread, timeShort } from "@/lib/format";

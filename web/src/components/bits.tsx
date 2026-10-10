@@ -1,21 +1,24 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarDays, FileText, Hash, Lock, MessageSquare, Users } from "lucide-react";
+import { CalendarDays, FileText, Hash, Lock, MessageSquare, Users } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
-import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
+import { STATUS_META, avatarColor, chatTitle, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
+import { USER_ICON } from "@/lib/streamline-icons";
 import { useWs } from "./ctx";
 
+/** One person icon (Streamline Freehand) on the same pastel circle for everyone. */
 export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (
     <span
-      className={clsx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white", avatarColor(name))}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
-      aria-hidden
+      className="inline-flex shrink-0 items-center justify-center rounded-full text-ink ring-2 ring-white"
+      style={{ width: size, height: size, background: "#cfd8ff" }}
+      role="img"
+      aria-label={name}
     >
-      {initials(name)}
+      <svg width={size * 0.66} height={size * 0.66} viewBox="0 0 24 24" aria-hidden dangerouslySetInnerHTML={{ __html: USER_ICON }} />
     </span>
   );
 }

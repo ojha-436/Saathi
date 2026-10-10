@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Copy, Globe, Hash, History, Loader2, Lock, MailPlus, RefreshCw, Settings2, ShieldCheck, Trash2, UserX, Users } from "lucide-react";
+import { Copy, Globe, Hash, History, Loader2, Lock, MailPlus, RefreshCw, Settings2, ShieldCheck, Trash2, UserX, Users } from "@/lib/icons";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { OrgRole } from "@/lib/types";

@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { signOut } from "firebase/auth";
-import { Bell, Building2, Clock, Loader2, Mail, MapPin, MessageSquare, Phone, ShieldCheck, Smile, UserRound, X } from "lucide-react";
+import { Bell, Building2, Clock, Loader2, Mail, MapPin, MessageSquare, Phone, ShieldCheck, Smile, UserRound, X } from "@/lib/icons";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";

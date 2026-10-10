@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, CheckCircle2, FileUp, Gavel, Loader2, Send, Sparkles, UserCheck, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileUp, Gavel, Loader2, Send, Sparkles, UserCheck, Users } from "@/lib/icons";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle, dueLabel, toDate } from "@/lib/format";

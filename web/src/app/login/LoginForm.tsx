@@ -1,7 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
-import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Eye, EyeOff, Loader2 } from "@/lib/icons";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";

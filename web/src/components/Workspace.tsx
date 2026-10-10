@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { signOut } from "firebase/auth";
-import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile } from "lucide-react";
+import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";

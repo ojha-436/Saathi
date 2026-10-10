@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%" height="100%">
+  <!-- Ground Shadow -->
+  <ellipse cx="145" cy="278" rx="60" ry="7" fill="#c3ced6" />
+
+  <!-- Outer Black Body (Head + Speech Bubble Tail + Ears) -->
+  <g fill="#000000">
+    <!-- Left Ear Protrusion -->
+    <circle cx="48" cy="115" r="16" />
+
+    <!-- Right Ear Protrusion -->
+    <circle cx="252" cy="115" r="16" />
+
+    <!-- Main Silhouette & Chat Tail -->
+    <path d="
+      M 150 32
+      C 220 32 256 68 256 115
+      C 256 162 216 204 150 204
+      L 130 204
+      L 130 252
+      C 114 220 86 182 66 162
+      C 44 140 44 130 44 115
+      C 44 68 80 32 150 32
+      Z
+    " />
+  </g>
+
+  <!-- Inner Visor (White Capsule) -->
+  <rect 
+    x="65" 
+    y="66" 
+    width="160" 
+    height="100" 
+    rx="50" 
+    fill="#ffffff" 
+  />
+
+  <!-- Eyes -->
+  <circle cx="107" cy="116" r="15" fill="#000000" />
+  <circle cx="183" cy="116" r="15" fill="#000000" />
+</svg>

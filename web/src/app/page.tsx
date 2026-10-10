@@ -13,9 +13,10 @@ import {
   ShieldCheck,
   Sparkles,
   Workflow,
-} from "lucide-react";
+} from "@/lib/icons";
 import Link from "next/link";
 import { Logo, LogoMark } from "@/components/Logo";
+import { RevealOnScroll } from "@/components/RevealOnScroll";
 import { EVAL } from "@/lib/eval";
 
 export const metadata = { title: "Saathi — the AI workspace that remembers" };
@@ -30,28 +31,29 @@ const NAV = [
 export default function Landing() {
   return (
     <div className="min-h-dvh bg-paper text-ink">
+      <RevealOnScroll />
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">
         Skip to content
       </a>
 
       {/* ---------------- header ---------------- */}
-      <header className="sticky top-0 z-50 border-b border-line/70 bg-paper/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-5 lg:px-8">
+      <header className="sticky top-3 z-50 px-3 sm:px-5">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 rounded-full border border-white/60 bg-paper/70 px-4 shadow-[0_8px_30px_-12px_rgba(23,19,19,0.25)] backdrop-blur-xl lg:px-5">
           <Link href="/" aria-label="Saathi home">
             <Logo />
           </Link>
           <nav aria-label="Primary" className="hidden flex-1 items-center gap-7 text-sm text-muted md:flex">
             {NAV.map((n) => (
-              <a key={n.href} href={n.href} className="transition-colors hover:text-ink">
+              <a key={n.href} href={n.href} className="nav-link pb-0.5 hover:text-ink">
                 {n.label}
               </a>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <Link href="/login" className="hidden rounded-lg px-3.5 py-2 text-sm font-medium text-ink hover:bg-paper-2 sm:inline-flex">
+            <Link href="/login" className="hidden rounded-full px-4 py-2 text-sm font-medium text-ink hover:bg-paper-2 sm:inline-flex">
               Sign in
             </Link>
-            <Link href="/login?demo=1" className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-paper shadow-sm transition hover:bg-ink-3">
+            <Link href="/login?demo=1" className="inline-flex items-center gap-1.5 rounded-full bg-saffron px-4 py-2 text-sm font-semibold text-ink transition hover:brightness-95">
               Open live demo <ArrowRight size={15} />
             </Link>
           </div>
@@ -61,16 +63,16 @@ export default function Landing() {
       <main id="main">
         {/* ---------------- hero ---------------- */}
         <section className="relative overflow-hidden">
-          <div className="bg-graph pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,black_20%,transparent_70%)]" />
-          <div className="relative mx-auto grid max-w-7xl gap-14 px-5 pb-20 pt-16 lg:grid-cols-[1.02fr_1fr] lg:gap-10 lg:px-8 lg:pb-28 lg:pt-24">
+          <div className="glow pointer-events-none absolute inset-0" />
+          <div className="relative mx-auto grid max-w-7xl gap-14 px-5 pb-20 pt-20 lg:grid-cols-[1.02fr_1fr] lg:gap-10 lg:px-8 lg:pb-28 lg:pt-28">
             <div>
-              <p className="rise inline-flex items-center gap-2 rounded-full border border-line bg-paper-2/70 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+              <p className="rise inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/50 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted backdrop-blur">
                 <span className="h-1.5 w-1.5 rounded-full bg-saffron" /> Future of Work · Built on Google Cloud
               </p>
-              <h1 className="rise mt-6 font-display text-[52px] leading-[0.98] tracking-[-0.02em] text-ink sm:text-[68px] lg:text-[84px]" style={{ animationDelay: "80ms" }}>
+              <h1 className="rise mt-6 font-display text-[46px] leading-[1] text-ink sm:text-[60px] lg:text-[76px]" style={{ animationDelay: "80ms" }}>
                 Work remembers.
                 <br />
-                <em className="text-saffron-ink">So you don&rsquo;t have to.</em>
+                <span className="text-ink/45">So you don&rsquo;t have to.</span>
               </h1>
               <p className="rise mt-6 max-w-xl text-lg leading-relaxed text-muted" style={{ animationDelay: "160ms" }}>
                 Saathi is team chat with a personal AI colleague built in. It finds any file or message in seconds, briefs you on what you missed, and quietly
@@ -78,10 +80,10 @@ export default function Landing() {
                 to configure.
               </p>
               <div className="rise mt-9 flex flex-wrap items-center gap-3" style={{ animationDelay: "240ms" }}>
-                <Link href="/login?demo=1" className="group inline-flex items-center gap-2 rounded-xl bg-ink px-6 py-3.5 text-[15px] font-semibold text-paper shadow-[0_10px_30px_-12px_rgba(11,27,43,0.6)] transition hover:bg-ink-3">
+                <Link href="/login?demo=1" className="group inline-flex items-center gap-2 rounded-full bg-saffron px-7 py-4 text-[15px] font-semibold text-ink transition hover:brightness-95">
                   Try the live workspace <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
-                <a href="#how" className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-6 py-3.5 text-[15px] font-semibold text-ink transition hover:border-ink/30">
+                <a href="#how" className="inline-flex items-center gap-2 rounded-full border border-ink/25 px-7 py-4 text-[15px] font-semibold text-ink transition hover:bg-white/50">
                   See how it works
                 </a>
               </div>
@@ -98,7 +100,7 @@ export default function Landing() {
         </section>
 
         {/* ---------------- problem ---------------- */}
-        <section className="border-y border-line bg-paper-2/60">
+        <section data-reveal className="border-y border-line bg-paper-2/60">
           <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
             <p className="font-mono text-xs uppercase tracking-[0.16em] text-saffron-ink">The problem</p>
             <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight sm:text-5xl">Knowledge is trapped in chat history, and every small task needs another app.</h2>
@@ -119,7 +121,7 @@ export default function Landing() {
         </section>
 
         {/* ---------------- features ---------------- */}
-        <section id="product" className="mx-auto max-w-7xl scroll-mt-20 px-5 py-24 lg:px-8">
+        <section data-reveal id="product" className="mx-auto max-w-7xl scroll-mt-20 px-5 py-24 lg:px-8">
           <div className="max-w-2xl">
             <p className="font-mono text-xs uppercase tracking-[0.16em] text-saffron-ink">The product</p>
             <h2 className="mt-3 font-display text-4xl leading-tight sm:text-5xl">One workspace. One assistant that actually knows your work.</h2>
@@ -152,7 +154,7 @@ export default function Landing() {
 
         {/* ---------------- how ---------------- */}
         <section id="how" className="scroll-mt-16 border-y border-line bg-paper-2/60">
-          <div className="mx-auto max-w-7xl px-5 py-24 lg:px-8">
+          <div data-reveal className="mx-auto max-w-7xl px-5 py-24 lg:px-8">
             <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.16em] text-saffron-ink">How it works</p>
@@ -183,7 +185,7 @@ export default function Landing() {
 
         {/* ---------------- manufacturing ---------------- */}
         <section id="manufacturing" className="blueprint-grid relative scroll-mt-16 overflow-hidden text-paper">
-          <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 py-24 lg:grid-cols-2 lg:px-8">
+          <div data-reveal className="mx-auto grid max-w-7xl items-center gap-14 px-5 py-24 lg:grid-cols-2 lg:px-8">
             <div>
               <p className="font-mono text-xs uppercase tracking-[0.16em] text-saffron">Manufacturing pack</p>
               <h2 className="mt-3 font-display text-4xl leading-tight sm:text-5xl">
@@ -213,7 +215,7 @@ export default function Landing() {
         </section>
 
         {/* ---------------- trust ---------------- */}
-        <section id="trust" className="mx-auto max-w-7xl scroll-mt-16 px-5 py-24 lg:px-8">
+        <section data-reveal id="trust" className="mx-auto max-w-7xl scroll-mt-16 px-5 py-24 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
             <div>
               <p className="font-mono text-xs uppercase tracking-[0.16em] text-saffron-ink">Trust & security</p>
@@ -243,7 +245,7 @@ export default function Landing() {
         </section>
 
         {/* ---------------- CTA ---------------- */}
-        <section className="px-5 pb-24 lg:px-8">
+        <section data-reveal className="px-5 pb-24 lg:px-8">
           <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-ink px-8 py-16 text-paper sm:px-14">
             <div className="blueprint-grid absolute inset-0 opacity-60" />
             <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
@@ -254,7 +256,7 @@ export default function Landing() {
                 </h2>
                 <p className="mt-4 max-w-lg text-paper/70">The demo workspace is live: a fictional rail-components company with real drawings, certificates and conversations. Sign in as any colleague.</p>
               </div>
-              <Link href="/login?demo=1" className="group inline-flex shrink-0 items-center gap-2 rounded-xl bg-saffron px-7 py-4 font-semibold text-ink transition hover:brightness-105">
+              <Link href="/login?demo=1" className="group inline-flex shrink-0 items-center gap-2 rounded-full bg-saffron px-7 py-4 font-semibold text-ink transition hover:brightness-105">
                 Enter the workspace <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
@@ -269,6 +271,10 @@ export default function Landing() {
           </span>
           <span className="font-mono text-xs">Gemini on Vertex AI · ADK · Document AI · Firestore · BigQuery · Cloud Run</span>
         </div>
+        <p className="mx-auto max-w-7xl px-5 pb-6 text-xs text-muted lg:px-8">
+          Icons: <a className="underline" href="https://www.streamlinehq.com/icons/freehand-free">Freehand Line (free)</a> by Streamline, licensed{" "}
+          <a className="underline" href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+        </p>
       </footer>
     </div>
   );
@@ -300,7 +306,7 @@ function Feature({
   children?: React.ReactNode;
 }) {
   return (
-    <article className={`group relative overflow-hidden rounded-2xl border p-7 transition ${dark ? "border-ink bg-ink text-paper" : "border-line bg-paper hover:border-ink/25"} ${className ?? ""}`}>
+    <article className={`lift group relative overflow-hidden rounded-2xl border p-7 ${dark ? "border-ink bg-ink text-paper" : "border-line bg-paper hover:border-ink/25"} ${className ?? ""}`}>
       <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${dark ? "bg-saffron text-ink" : "bg-saffron-soft text-saffron-ink"}`}>
         <Icon size={19} aria-hidden />
       </span>
@@ -353,19 +359,24 @@ function HeroMock() {
         </div>
       </div>
 
-      {/* title block: the signature element */}
-      <div className="absolute -bottom-10 -left-2 w-[270px] rotate-[-2deg] border-2 border-ink bg-paper font-mono text-[10.5px] shadow-xl sm:-left-6">
-        {[
-          ["DRAWING No.", "SRC-BF-2041"],
-          ["TITLE", "BOGIE SIDE FRAME — GA"],
-          ["REVISION", "C"],
-          ["APPROVED", "N. VERMA (QA)"],
-        ].map(([k, v], i) => (
-          <div key={k} className={`grid grid-cols-[96px_1fr] ${i ? "border-t border-ink" : ""}`}>
-            <span className="border-r border-ink px-2 py-1.5 text-muted">{k}</span>
-            <span className={`px-2 py-1.5 font-semibold ${k === "REVISION" ? "text-saffron-ink" : ""}`}>{v}</span>
+      {/* below the chat window: one card with the drawing title block + animation */}
+      <div className="mt-4 flex items-center gap-5 rounded-2xl border border-ink/10 bg-white/80 p-4 shadow-[0_20px_40px_-24px_rgba(23,19,19,0.35)] backdrop-blur">
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-saffron-ink">Reads the drawing, not just the PDF</p>
+          <div className="border-2 border-ink bg-paper font-mono text-[10.5px]">
+            {[
+              ["DRAWING No.", "SRC-BF-2041"],
+              ["TITLE", "BOGIE SIDE FRAME — GA"],
+              ["REVISION", "C"],
+              ["APPROVED", "N. VERMA (QA)"],
+            ].map(([k, v], i) => (
+              <div key={k} className={`grid grid-cols-[92px_1fr] ${i ? "border-t border-ink" : ""}`}>
+                <span className="border-r border-ink px-2 py-1.5 text-muted">{k}</span>
+                <span className={`px-2 py-1.5 font-semibold ${k === "REVISION" ? "text-saffron-ink" : ""}`}>{v}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );
@@ -385,18 +396,18 @@ function DrawingPanel() {
         </g>
         <text x="230" y="62" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="11" textAnchor="middle">2470</text>
         <text x="230" y="236" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="10" textAnchor="middle">DETAIL A · FILLET 10 mm</text>
-        <circle cx="230" cy="214" r="9" fill="none" stroke="#e8891c" strokeWidth="1.6" />
+        <circle cx="230" cy="214" r="9" fill="none" stroke="#c8f031" strokeWidth="1.6" />
         <g fontFamily="var(--font-mono)" fontSize="10.5">
-          <rect x="250" y="262" width="250" height="88" fill="#0b1b2b" stroke="#9fc0ec" />
+          <rect x="250" y="262" width="250" height="88" fill="#171313" stroke="#9fc0ec" />
           <path d="M250 284h250M250 306h250M250 328h250M340 262v88" stroke="#9fc0ec" />
           <text x="258" y="277" fill="#9fc0ec">DRG No.</text>
-          <text x="348" y="277" fill="#f6f3ec">SRC-BF-2041</text>
+          <text x="348" y="277" fill="#efeae9">SRC-BF-2041</text>
           <text x="258" y="299" fill="#9fc0ec">REV</text>
-          <text x="348" y="299" fill="#e8891c" fontWeight="700">C · supersedes B</text>
+          <text x="348" y="299" fill="#c8f031" fontWeight="700">C · supersedes B</text>
           <text x="258" y="321" fill="#9fc0ec">APPROVED</text>
-          <text x="348" y="321" fill="#f6f3ec">N. VERMA · 06 OCT</text>
+          <text x="348" y="321" fill="#efeae9">N. VERMA · 06 OCT</text>
           <text x="258" y="343" fill="#9fc0ec">READ BY</text>
-          <text x="348" y="343" fill="#f6f3ec">Saathi · Document AI</text>
+          <text x="348" y="343" fill="#efeae9">Saathi · Document AI</text>
         </g>
       </svg>
     </div>

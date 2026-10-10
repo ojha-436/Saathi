@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, FileSearch, Handshake, Loader2, Radar, RotateCcw, Sparkles, Timer } from "lucide-react";
+import { ArrowUp, FileSearch, Handshake, Loader2, Radar, RotateCcw, Sparkles, Timer } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAssistant } from "@/lib/hooks";
