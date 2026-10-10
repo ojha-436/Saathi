@@ -2,13 +2,13 @@
 
 import clsx from "clsx";
 import { signOut } from "firebase/auth";
-import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon } from "@/lib/icons";
+import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";
 import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
-import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useSettings, useTasks, useUsers } from "@/lib/hooks";
+import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useSettings, useTasks, useUsers } from "@/lib/hooks";
 import type { Account, DriveFile, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
@@ -20,6 +20,7 @@ import { BrowseChannelsDialog, CommandPalette, CreateChannelDialog, NewChatDialo
 import { InsightsView } from "./InsightsView";
 import { LogoMark } from "./Logo";
 import { CalendarView, DriveView, GmailView } from "./Integrations";
+import { QualityView, ReportDialog } from "./Quality";
 import { MeetingView, NewMeetingDialog } from "./Meetings";
 import { MyDayView } from "./MyDay";
 import { ProfileCard, SettingsDialog, StatusDialog, StatusIcon } from "./People";
@@ -38,6 +39,11 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const notices = useNotices(uid);
   const meetingList = useMeetings(uid);
   const settings = useSettings(uid);
+  const recordList = useRecords(guest ? undefined : uid);
+  const records = useMemo(() => Object.fromEntries(recordList.map((r) => [r.id, r])), [recordList]);
+  // Register refreshes when drawing files finish processing (their doc fields change)
+  const registerVersion = fileList.filter((f) => f.doc?.drawing_no).map((f) => `${f.id}:${f.doc?.revision}`).join("|");
+  const register = useRegister(!guest, registerVersion.length + registerVersion.split("|").length);
   const events = useEvents(uid);
   const emailList = useEmailItems(uid);
   const emails = useMemo(() => Object.fromEntries(emailList.filter((e) => (e as { provider?: string }).provider !== "drive").map((e) => [e.id, e])), [emailList]);
@@ -93,6 +99,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         const [chatId, msgId] = ref.slice(4).split("/");
         open({ kind: "chat", chatId, focusMsg: msgId });
       } else if (ref.startsWith("meet:")) open({ kind: "meeting", id: ref.slice(5) });
+      else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
     },
     [open],
   );
@@ -204,7 +211,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   return (
     <Ctx.Provider
       value={{
-        uid, account, me, users, chats, files, meetings, events, emails, driveFiles, settings, view, open, openRef, toast, dialog: setDlg,
+        uid, account, me, users, chats, files, meetings, events, emails, driveFiles, records, register, settings, view, open, openRef, toast, dialog: setDlg,
         newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true),
       }}
     >
@@ -247,6 +254,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                 { label: "Settings", icon: Settings, onSelect: () => setDlg("settings") },
                 ...(admin ? [{ label: "Workspace admin", icon: ShieldCheck, onSelect: () => open({ kind: "admin" }) }] : []),
                 { label: "My insights", icon: BarChart3, onSelect: () => open({ kind: "insights" }) },
+                ...(!guest ? [{ label: "Quality & plant records", icon: Gavel, onSelect: () => open({ kind: "quality" }) }] : []),
                 // Phones: connected apps live here (the bottom bar has five slots)
                 ...(connected.includes("gmail") ? [{ label: "Gmail", icon: Mail, onSelect: () => open({ kind: "gmail" }) }] : []),
                 ...(connected.includes("calendar") ? [{ label: "Calendar", icon: CalendarDays, onSelect: () => open({ kind: "calendar" }) }] : []),
@@ -266,7 +274,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <AppRail unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} emailPromises={emailPromises} />
+          <AppRail unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} emailPromises={emailPromises} openRecords={recordList.filter((r) => r.status !== "closed" && r.owner === uid).length} guest={guest} />
 
           {listPane && (
             <div className={clsx("w-full shrink-0 lg:block lg:w-80", mobileList ? "block" : "hidden")}>
@@ -284,12 +292,22 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "meeting" && <MeetingView id={view.id} tasks={tasks} />}
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
             {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
+            {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
             {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
             {view.kind === "calendar" && connected.includes("calendar") && <CalendarView />}
             {view.kind === "drive" && connected.includes("drive") && <DriveView />}
           </main>
         </div>
 
+        {!guest && view.kind !== "chat" && (
+          <button
+            onClick={() => setDlg("report")}
+            className="fixed bottom-20 right-4 z-30 flex h-12 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white shadow-xl lg:hidden"
+            aria-label="Report an issue"
+          >
+            <Plus size={18} /> Report
+          </button>
+        )}
         <AppRail mobile unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} />
 
         <div className="pointer-events-none fixed bottom-20 right-4 z-[70] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 lg:bottom-5" role="status" aria-live="polite">
@@ -316,6 +334,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         />
       )}
       {dlg === "status" && <StatusDialog onClose={() => setDlg(null)} />}
+      {dlg === "report" && <ReportDialog onClose={() => setDlg(null)} />}
       {(dlg === "meeting-new" || meetingPrefill) && (
         <NewMeetingDialog
           prefill={meetingPrefill ?? {}}

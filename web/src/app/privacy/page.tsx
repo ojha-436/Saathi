@@ -115,6 +115,16 @@ export default async function PrivacyPage() {
             <ul>
               <li>Messages, thread replies, reactions, @mentions, files you share (PDF, images, Word, Excel, text) and their text extracted by OCR.</li>
               <li>Tasks, reminders, meeting notes and transcripts you upload or paste, and summaries generated from them.</li>
+              <li>
+                Plant records you file (defect reports / NCRs, machine downtime, safety near-misses): the photos and voice notes you attach, the fields Saathi
+                drafts from them, and the corrective actions and status history. If you report a safety near-miss anonymously, your identity is not stored with
+                it.
+              </li>
+              <li>Voice dictation: audio is sent to our AI provider only to produce the text and is not stored. Voice notes attached to a plant record are stored with that record.</li>
+              <li>
+                Drawing control: a register of drawing numbers, revisions, release status and approver, built from drawings shared in Saathi, and a log of
+                controlled copies printed (who and when).
+              </li>
               <li>Information Saathi derives from that content: detected promises and decisions, document fields (for example drawing numbers and revisions), and search indexes.</li>
               <li>Your conversations with the Saathi assistant, including the questions you ask and its answers, so you can see your history.</li>
             </ul>
@@ -131,6 +141,10 @@ export default async function PrivacyPage() {
               <li>An audit log of security and administrative events: sign-ins and workspace joins, invitations, role changes, deactivations, channel creation and deletion, app connections, and sign-out of all sessions.</li>
               <li>Assistant usage records: the question asked, which tools ran and how long the answer took. They are used to secure and improve the service. Admins see that a question was asked, never its text.</li>
               <li>Standard server logs (for example IP address, browser type, request time and errors) kept by Google Cloud.</li>
+              <li>
+                QR scans of controlled drawings: time, verdict and a one-way hash of the network address, used to show where obsolete copies are still in
+                circulation. The public scan page shows only the drawing number, revision and whether it is current, never the drawing or anyone&rsquo;s name.
+              </li>
             </ul>
           </section>
 
@@ -234,6 +248,11 @@ export default async function PrivacyPage() {
               </li>
               <li>
                 <b>Guests</b> (for example vendors) see only the channels they were invited to and the people in them.
+              </li>
+              <li>
+                <b>Plant records</b> are visible to the person who filed them (unless anonymous), the assigned owner and the workspace&rsquo;s quality team
+                (or its admins if no quality team is set). Released drawing revisions are visible across the workspace; drafts only to people who can open the
+                file.
               </li>
               <li>
                 <b>Workspace admins</b> can manage members, roles, invitations and channels, and view the audit log. They see channel names and membership, not the

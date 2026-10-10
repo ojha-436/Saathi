@@ -4,7 +4,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query, where, type Query }
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getDb } from "./firebase";
-import type { AssistantMsg, CalendarEvent, Chat, EmailItem, FileDoc, Meeting, Message, Notice, Task, UserProfile, UserSettings } from "./types";
+import type { AssistantMsg, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, Task, UserProfile, UserSettings } from "./types";
 
 function useLive<T>(make: () => Query | null, key: string): T[] {
   const [rows, setRows] = useState<T[]>([]);
@@ -96,3 +96,22 @@ export const useEvents = (uid?: string) =>
 
 export const useEmailItems = (uid?: string) =>
   useLive<EmailItem>(() => (uid ? query(collection(getDb(), "external_items"), where("uid", "==", uid), limit(200)) : null), `emails:${uid}`);
+
+export const useRecords = (uid?: string) =>
+  useLive<PlantRecord>(() => (uid ? query(collection(getDb(), "records"), where("participants", "array-contains", uid), limit(300)) : null), `records:${uid}`);
+
+/** Drawing register (API-filtered: drafts only for people who can open them). Refreshes when files change. */
+export function useRegister(enabled: boolean, version: number): Drawing[] {
+  const [rows, setRows] = useState<Drawing[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    let stop = false;
+    api<Drawing[]>("/api/drawings")
+      .then((r) => !stop && setRows(r))
+      .catch(() => {});
+    return () => {
+      stop = true;
+    };
+  }, [enabled, version]);
+  return rows;
+}

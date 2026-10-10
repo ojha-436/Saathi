@@ -24,7 +24,7 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
 
 /** A clickable source chip for refs like msg:CHAT/MSG or file:ID produced by the assistant. */
 export function CiteChip({ refId }: { refId: string }) {
-  const { chats, files, users, uid, openRef, meetings, emails, driveFiles } = useWs();
+  const { chats, files, users, uid, openRef, meetings, emails, driveFiles, records } = useWs();
   let label = "source";
   let isFile = false;
   if (refId.startsWith("drive:")) {
@@ -57,7 +57,9 @@ export function CiteChip({ refId }: { refId: string }) {
       </a>
     );
   }
-  if (refId.startsWith("meet:")) {
+  if (refId.startsWith("rec:")) {
+    label = records[refId.slice(4)]?.number ?? "plant record";
+  } else if (refId.startsWith("meet:")) {
     label = meetings[refId.slice(5)]?.title ?? "meeting";
   } else if (refId.startsWith("file:")) {
     isFile = true;

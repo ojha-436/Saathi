@@ -13,7 +13,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, ingest, meetings, people, push
+from . import admin, ai, connectors, drawings, ingest, meetings, people, push, records
 from .agent import ask
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
 from .firebase import audit, bucket, current_user, db, get_chat_for_member, require_admin, same_org, user_profile
@@ -24,6 +24,8 @@ app.include_router(people.router)
 app.include_router(admin.router)
 app.include_router(meetings.router)
 app.include_router(connectors.router)
+app.include_router(drawings.router)
+app.include_router(records.router)
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
 )

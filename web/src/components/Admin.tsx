@@ -397,13 +397,16 @@ function WorkspaceTab() {
   const [creation, setCreation] = useState(account.org.settings.channel_creation ?? "everyone");
   const [ai, setAi] = useState(account.org.settings.ai_enabled ?? true);
   const [google, setGoogle] = useState(account.org.settings.integrations_google ?? true);
+  const [qrPublic, setQrPublic] = useState(account.org.settings.qr_public ?? true);
+  const [quality, setQuality] = useState<string[]>(account.org.settings.quality_team ?? []);
+  const { users } = useWs();
   const [busy, setBusy] = useState(false);
   async function save() {
     setBusy(true);
     try {
       await api("/api/admin/org", {
         method: "PATCH",
-        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai, integrations_google: google },
+        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai, integrations_google: google, qr_public: qrPublic, quality_team: quality },
       });
       toast("Workspace settings saved. Reload to see them everywhere.");
     } catch (e) {
@@ -453,6 +456,30 @@ function WorkspaceTab() {
             <div className="text-xs text-muted">Members can connect their own Google account (read-only). Turning this off disconnects everyone and deletes synced data.</div>
           </div>
           <Switch on={google} onChange={setGoogle} label="Allow Google connections" />
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <div>
+            <div className="text-sm font-semibold">QR drawing check without sign-in</div>
+            <div className="text-xs text-muted">Scanning a controlled copy shows only drawing number, revision and current/obsolete. Turn off to require signing in.</div>
+          </div>
+          <Switch on={qrPublic} onChange={setQrPublic} label="Public QR verdict" />
+        </div>
+      </section>
+      <section className="rounded-xl border border-border bg-surface p-4">
+        <div className="text-sm font-semibold">Quality team</div>
+        <div className="text-xs text-muted">Owns and sees every defect, downtime and safety report. If empty, workspace admins do.</div>
+        <div className="mt-2 flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+          {Object.values(users)
+            .filter((u) => !u.deactivated && u.org_role !== "guest")
+            .map((u) => {
+              const on = quality.includes(u.id);
+              return (
+                <button key={u.id} type="button" aria-pressed={on} onClick={() => setQuality((q) => (on ? q.filter((x) => x !== u.id) : [...q, u.id]))} className={clsx("h-8 rounded-full border px-3 text-xs", on ? "border-brand bg-brand-soft font-semibold text-brand" : "border-border text-muted hover:text-ink")}>
+                  {on && "✓ "}
+                  {u.name}
+                </button>
+              );
+            })}
         </div>
       </section>
       <button onClick={save} disabled={busy} className="flex h-9 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-50">

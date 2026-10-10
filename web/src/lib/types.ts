@@ -28,7 +28,12 @@ export type Account = {
   email: string;
   org_id: string;
   org_role: OrgRole;
-  org: { id: string; name: string; domains: string[]; settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean } };
+  org: {
+    id: string;
+    name: string;
+    domains: string[];
+    settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; quality_team?: string[]; qr_public?: boolean };
+  };
 };
 
 export type NotifyLevel = "all" | "mentions" | "off";
@@ -37,6 +42,7 @@ export type UserSettings = {
   defaults?: { dm?: NotifyLevel; group?: NotifyLevel; channel?: NotifyLevel };
   quiet_hours?: { enabled: boolean; start: string; end: string };
   connected?: ("calendar" | "gmail" | "drive")[];
+  snoozed?: Record<string, string>; // Needs-you item key -> ISO time
 };
 
 export type Meeting = {
@@ -137,7 +143,7 @@ export type Task = {
 export type Notice = {
   id: string;
   uid: string;
-  kind?: "mention" | "thread_reply" | "task_assigned" | "task_update" | "reminder" | "meeting";
+  kind?: "mention" | "thread_reply" | "task_assigned" | "task_update" | "reminder" | "meeting" | "record";
   actor_name?: string | null;
   chat_id?: string | null;
   task_id?: string | null;
@@ -223,4 +229,61 @@ export type DriveFile = {
   shared?: boolean;
   indexed?: boolean;
   snippet?: string;
+};
+
+export type DrawingRev = {
+  rev: string;
+  status: "released" | "superseded" | "in_work";
+  approved_by?: string | null;
+  date?: string | null;
+  file_id?: string | null;
+  file_name?: string | null;
+  chat_id?: string | null;
+  can_open: boolean;
+  overridden?: boolean;
+};
+
+export type Drawing = { id: string; drawing_no: string; title: string; current_rev: string | null; revisions: DrawingRev[]; source: string; updated_at: string | null };
+
+export type RecordType = "ncr" | "downtime" | "safety";
+export type RecordFields = {
+  title?: string | null;
+  description?: string | null;
+  transcript?: string | null;
+  part_name?: string | null;
+  drawing_no?: string | null;
+  revision?: string | null;
+  job_no?: string | null;
+  heat_no?: string | null;
+  machine?: string | null;
+  location?: string | null;
+  quantity?: string | null;
+  defect_type?: string | null;
+  severity?: "minor" | "major" | "critical" | null;
+  downtime_reason?: string | null;
+  hazard?: string | null;
+  suggested_action?: string | null;
+};
+export type RecordLinks = {
+  revision_check?: { drawing_no: string; current_rev: string | null; reported_rev: string | null; superseded: boolean };
+  mtc?: { file_id: string; name: string };
+};
+export type PlantRecord = {
+  id: string;
+  type: RecordType;
+  number: string;
+  status: string;
+  fields: RecordFields;
+  owner: string;
+  reporter?: string | null;
+  reporter_name?: string | null;
+  anonymous?: boolean;
+  participants: string[];
+  media: { kind: "photo" | "voice"; mime: string }[];
+  chat_id?: string | null;
+  capa?: { containment?: string; root_cause?: string; corrective_action?: string; verification?: string };
+  history: { status: string; by?: string | null; ts?: Timestamp; note?: string }[];
+  links?: RecordLinks;
+  created_at?: Timestamp;
+  updated_at?: Timestamp;
 };

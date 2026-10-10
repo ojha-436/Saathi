@@ -151,7 +151,7 @@ def lookup_document(query: str, tool_context: ToolContext) -> dict:
         }
         for _, _, fid, f, doc in matches[:6]
     ]
-    return {"documents": docs, "note": "Latest revision = highest revision letter/number among documents with the same drawing_no."}
+    return {"documents": docs, "note": "For which revision is current or released, trust revision_status (drafts are not released)."}
 
 
 def propose_task(title: str, due_at: str, kind: str, source_ref: str, tool_context: ToolContext) -> dict:
@@ -281,7 +281,27 @@ def get_calendar(start_day: int, days: int, tool_context: ToolContext) -> dict:
     return {"events": rows}
 
 
-TOOLS = [search_workspace, get_message_context, catch_up, lookup_document, propose_task, assign_task, list_tasks, who_owes, get_calendar]
+def revision_status(drawing_no: str, tool_context: ToolContext) -> dict:
+    """The controlled drawing register: the CURRENT released revision of a drawing, which revisions are superseded, and who
+    approved them. Use it whenever a drawing revision is mentioned, before saying a revision is usable, and for
+    "which revision is latest" questions.
+
+    Args:
+        drawing_no: Drawing number, e.g. "SRC-BF-2041".
+    """
+    from .drawings import lookup
+
+    uid = _uid(tool_context)
+    d = lookup(user_profile(uid)["org_id"], drawing_no, uid)
+    if not d:
+        return {"error": f"{drawing_no} is not in the drawing register. Fall back to lookup_document."}
+    return {"drawing_no": d["drawing_no"], "title": d["title"], "current_rev": d["current_rev"],
+            "revisions": [{"rev": r["rev"], "status": r["status"], "approved_by": r.get("approved_by"), "date": r.get("date"),
+                           "ref": f"file:{r['file_id']}" if r.get("file_id") else None} for r in d["revisions"]],
+            "note": "Never recommend a superseded or in-work revision for production; point to current_rev."}
+
+
+TOOLS = [search_workspace, get_message_context, catch_up, lookup_document, revision_status, propose_task, assign_task, list_tasks, who_owes, get_calendar]
 
 
 def _instruction(ctx: ReadonlyContext) -> str:
@@ -296,10 +316,10 @@ How to work:
 - For ANY question about work content (files, drawings, what someone said, decisions, status, vendors, jobs), call tools first. Never answer from memory.
 - Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def], [file:xyz], [meet:xyz], [mail:xyz] or [drive:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
 - If tools return nothing relevant, say you could not find it in the chats and files the user can access. Never guess.
-- Revisions/approvals/document fields: use lookup_document. The latest revision is the highest revision among files with the same drawing number; say who approved it and when.
+- Drawing revisions: call revision_status first (the controlled register). If a superseded or draft revision comes up, say clearly that it must not be used and name the current revision. Other document fields: lookup_document. Say who approved the current revision and when.
 - Assigning work to a colleague ("Rahul ko PO bhejne ka task do Friday tak", "ask Neha to send the UT report"): call assign_task. For the user's own reminders: propose_task. Either way tell the user to confirm the card.
 - "What does X owe me" / pending with others: call who_owes.
-- Meeting summaries are searchable with search_workspace; cite them as [meet:...]. The user's own emails (if Gmail is connected) and Google Drive files (if Drive is connected) are searchable too; cite them as [mail:...] and [drive:...].
+- Meeting summaries are searchable with search_workspace; cite them as [meet:...]. Plant records (NCR, downtime, safety) the user can see are searchable too; cite them as [rec:...]. The user's own emails (if Gmail is connected) and Google Drive files (if Drive is connected) are searchable too; cite them as [mail:...] and [drive:...].
 - Calendar questions and "prep me for my next meeting": call get_calendar, then search_workspace for the meeting topic and attendee names, and who_owes for attendees. Brief: purpose, open items with each attendee, relevant files, decisions. Cite sources.
 - Reminders, to-dos, follow-ups: call propose_task with an ISO 8601 time in +05:30. Resolve relative times: kal = tomorrow, parso = day after tomorrow, subah/morning = 10:00, dopahar = 14:00, shaam/evening/EOD = 18:00. Then tell the user to confirm the card below. Never claim a task is saved before confirmation.
 - "What did I miss" / catch-up: call catch_up (default 72 hours) and write a brief with these sections: **Decisions**, **Asks for you**, **Files shared**, **Open promises**. One short bullet per item, each with a citation. Skip empty sections.

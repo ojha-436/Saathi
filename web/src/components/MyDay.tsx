@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X } from "@/lib/icons";
+import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X, Gavel } from "@/lib/icons";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { enablePush, pushState, type PushState } from "@/lib/push";
 import { dueLabel, toDate } from "@/lib/format";
 import type { Notice, Task } from "@/lib/types";
 import { useWs } from "./ctx";
+import { NeedsYou } from "./NeedsYou";
 import { TaskRow } from "./Tasks";
 
 const LIVE = ["open", "in_progress", "blocked"];
@@ -111,6 +112,11 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} className="flex h-10 items-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-white hover:bg-ink-3">
               <Radar size={16} className="text-saffron" /> Brief me
             </button>
+            {account.org_role !== "guest" && (
+              <button onClick={() => dialog("report")} className="flex h-10 items-center gap-2 rounded-lg border border-rust/40 bg-surface px-3.5 text-sm font-semibold text-rust hover:bg-rust-soft">
+                <Gavel size={16} /> Report issue
+              </button>
+            )}
             <button onClick={() => newTask()} className="flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-3.5 text-sm font-semibold hover:bg-hover">
               <Plus size={16} /> Task
             </button>
@@ -153,7 +159,11 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
           </div>
         )}
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-6">
+          <NeedsYou tasks={tasks} notices={notices} />
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <Card icon={ListTodo} title="Due today" count={dueToday.length} action={<GoLink onClick={() => open({ kind: "tasks" })} />}>
             {dueToday.length ? dueToday.map((t) => <TaskRow key={t.id} t={t} compact />) : <Empty text="Nothing due today. 🎉" />}
             {nextUp.length > 0 && (
