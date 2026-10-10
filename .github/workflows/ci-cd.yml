@@ -33,6 +33,7 @@ jobs:
     outputs:
       api: ${{ steps.pick.outputs.api }}
       web: ${{ steps.pick.outputs.web }}
+      rules: ${{ steps.filter.outputs.rules }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -45,6 +46,9 @@ jobs:
             web:
               - 'web/**'
               - '.github/workflows/ci-cd.yml'
+            rules:
+              - 'firestore.rules'
+              - 'firebase.json'
       - id: pick
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -90,6 +94,30 @@ jobs:
       - run: npm ci
       - name: Type-check and build
         run: npm run build
+
+  deploy-rules:
+    # Security rules ship before the code that depends on them
+    needs: changes
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.changes.outputs.rules == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-firestore-rules
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: Deploy Firestore security rules
+        run: npx --yes firebase-tools@15.26.0 deploy --only firestore:rules --project "$PROJECT_ID" --non-interactive
 
   deploy-api:
     needs: [changes, check-api]
