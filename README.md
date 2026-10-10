@@ -89,7 +89,7 @@ uv run python -m seed.reset       # fast reset: clears assistant chats, tasks, a
 Merging to `main` deploys automatically through GitHub Actions (`.github/workflows/ci-cd.yml`):
 
 1. Open a pull request into `main`. CI builds and type-checks `web/` and installs and compiles `agent/` (only the folders the PR touches).
-2. Merge it. The push to `main` re-runs the checks, then deploys only what changed: `agent/**` → **saathi-api**, `web/**` → **saathi-web** (API first when both change), followed by a health check.
+2. Merge it. The push to `main` re-runs the checks, then deploys only what changed: `firestore.rules` → Firestore security rules (first), `agent/**` → **saathi-api**, `web/**` → **saathi-web** (API first when both change), followed by a health check.
 3. Watch it under **Actions** or **Deployments → production** on GitHub. Each Cloud Run revision is labelled with the commit SHA.
 
 To redeploy without a code change: **Actions → CI/CD → Run workflow** (choose api, web or both) on `main`.

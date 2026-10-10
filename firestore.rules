@@ -28,7 +28,7 @@ service cloud.firestore {
       allow read: if signedIn() && request.auth.uid in resource.data.members;
     }
     match /tasks/{taskId} {
-      allow read: if signedIn() && (request.auth.uid in resource.data.participants || resource.data.owner == request.auth.uid);
+      allow read: if signedIn() && request.auth.uid in resource.data.participants;
     }
     match /meetings/{meetingId} {
       allow read: if signedIn() && request.auth.uid in resource.data.participants;
