@@ -1,0 +1,32 @@
+rules_version = '2';
+// Browsers only READ (real-time listeners). Every write goes through the Saathi API, which checks membership.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+    }
+    match /chats/{chatId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      match /messages/{msgId} {
+        allow read: if signedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+      }
+    }
+    match /files/{fileId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+    }
+    match /tasks/{taskId} {
+      allow read: if signedIn() && resource.data.owner == request.auth.uid;
+    }
+    match /notifications/{id} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+    match /assistant/{uid}/messages/{id} {
+      allow read: if signedIn() && request.auth.uid == uid;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
