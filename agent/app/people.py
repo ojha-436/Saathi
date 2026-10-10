@@ -4,11 +4,10 @@ import time
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from firebase_admin import auth
 from pydantic import BaseModel
 
 from .config import TZ
-from .firebase import audit, current_user, db, forget_profile
+from .firebase import audit, auth, current_user, db, forget_profile
 
 router = APIRouter(prefix="/api/me")
 

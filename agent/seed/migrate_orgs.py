@@ -7,9 +7,7 @@ Idempotent: re-running only fills gaps.
 """
 import sys
 
-from firebase_admin import auth
-
-from app.firebase import db, set_claims
+from app.firebase import auth, db, set_claims
 
 ORG_ID = "shakti-rail"
 ORG = {"name": "Shakti Rail Components", "domains": ["saathi.demo"], "settings": {"channel_creation": "everyone", "ai_enabled": True}}

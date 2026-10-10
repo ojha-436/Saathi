@@ -21,12 +21,11 @@ import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import RedirectResponse
 from google.cloud import kms
-from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
 from . import ai
 from .config import CRON_SECRET, GOOGLE_OAUTH_CLIENT, KMS_KEY, PUBLIC_API_URL, TZ, WEB_URL
-from .firebase import audit, current_user, db, user_profile
+from .firebase import audit, current_user, db, FieldFilter, user_profile
 
 router = APIRouter(prefix="/api/connectors")
 log = logging.getLogger("saathi.connectors")

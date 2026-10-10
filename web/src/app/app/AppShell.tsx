@@ -1,36 +1,35 @@
 "use client";
 
-import { onAuthStateChanged, sendEmailVerification, signOut, type User } from "firebase/auth";
 import { MailCheck } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogoMark } from "@/components/Logo";
 import { Workspace } from "@/components/Workspace";
 import { api } from "@/lib/api";
-import { getFbAuth } from "@/lib/firebase";
+import { onAuth, refreshToken, reloadUser, resendVerification, signOut, type AuthUser } from "@/lib/auth";
 import type { Account } from "@/lib/types";
 
 export function AppShell() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null | undefined>(undefined);
+  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
   const [account, setAccount] = useState<Account | null>(null);
   const [verify, setVerify] = useState("");
   const [failed, setFailed] = useState("");
   const [sent, setSent] = useState(false);
 
-  async function load(u: User) {
+  async function load() {
     setFailed("");
     try {
       // First sign-in joins a workspace (invite, verified domain, or a new one) and sets the token's workspace claims.
       const a = await api<Account>("/api/me");
-      await u.getIdToken(true); // pick up {org_id, org_role} claims so security rules see the workspace
+      await refreshToken(); // pick up {org_id, org_role} claims so security rules see the workspace
       setVerify("");
       setAccount(a);
     } catch (e) {
       const msg = (e as Error).message;
       if (msg.startsWith("verify-email:")) setVerify(msg.slice(13).trim());
       else if (msg.includes("organisation") || msg.includes("deactivated")) {
-        await signOut(getFbAuth());
+        await signOut();
         router.replace(`/login?error=${msg.includes("deactivated") ? "deactivated" : "domain"}`);
       } else setFailed(msg);
     }
@@ -38,11 +37,11 @@ export function AppShell() {
 
   useEffect(
     () =>
-      onAuthStateChanged(getFbAuth(), (u) => {
+      onAuth((u) => {
         setUser(u);
         setAccount(null);
         if (!u) return router.replace("/login");
-        load(u);
+        load();
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [router],
@@ -61,7 +60,7 @@ export function AppShell() {
         <div className="mt-2 flex gap-2">
           <button
             onClick={async () => {
-              await sendEmailVerification(user).catch(() => {});
+              await resendVerification().catch(() => {});
               setSent(true);
             }}
             className="h-10 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-canvas"
@@ -70,16 +69,16 @@ export function AppShell() {
           </button>
           <button
             onClick={async () => {
-              await user.reload();
-              await user.getIdToken(true);
-              load(user);
+              await reloadUser();
+              await refreshToken();
+              load();
             }}
             className="h-10 rounded-lg bg-brand px-4 text-sm font-semibold text-white"
           >
             I&rsquo;ve verified
           </button>
         </div>
-        <button onClick={() => signOut(getFbAuth())} className="mt-3 text-sm text-muted hover:underline">
+        <button onClick={() => signOut()} className="mt-3 text-sm text-muted hover:underline">
           Use a different account
         </button>
       </div>

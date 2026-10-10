@@ -1,12 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { signOut } from "firebase/auth";
+import { signOut } from "@/lib/auth";
 import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { getFbAuth } from "@/lib/firebase";
 import { STATUS_META, isUnread, presence, statusText } from "@/lib/format";
 import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useSettings, useTasks, useUsers } from "@/lib/hooks";
 import type { Account, StatusState } from "@/lib/types";
@@ -223,7 +222,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                   label: "Sign out",
                   icon: LogOut,
                   onSelect: async () => {
-                    await signOut(getFbAuth());
+                    await signOut();
                     router.replace("/");
                   },
                 },

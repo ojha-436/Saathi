@@ -2,6 +2,8 @@
  *  so no environment values are baked into the build or committed to the repo. */
 export type SaathiConfig = {
   apiUrl: string;
+  /** SAATHI_LOCAL=1: no Firebase; sign-in and data come from the local Saathi API. */
+  localMode: boolean;
   firebase: {
     apiKey: string;
     authDomain: string;
@@ -22,6 +24,7 @@ export function serverConfig(): SaathiConfig {
   const e = process.env;
   return {
     apiUrl: e.SAATHI_API_URL ?? "http://localhost:8080",
+    localMode: e.SAATHI_LOCAL === "1",
     firebase: {
       apiKey: e.FIREBASE_API_KEY ?? "",
       authDomain: e.FIREBASE_AUTH_DOMAIN ?? "",

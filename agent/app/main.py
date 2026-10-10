@@ -9,14 +9,12 @@ from datetime import datetime, timedelta
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
 from . import admin, ai, connectors, ingest, meetings, people
 from .agent import ask
-from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
-from .firebase import audit, bucket, current_user, db, get_chat_for_member, require_admin, same_org, user_profile
+from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, TZ
+from .firebase import auth, audit, bucket, current_user, db, FieldFilter, firestore, get_chat_for_member, require_admin, same_org, user_profile
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Saathi API")
@@ -25,7 +23,8 @@ app.include_router(admin.router)
 app.include_router(meetings.router)
 app.include_router(connectors.router)
 app.add_middleware(
-    CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
+    CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?" if LOCAL_MODE else None,
 )
 
 MAX_UPLOAD = 20 * 1024 * 1024
@@ -105,6 +104,93 @@ class FavoriteIn(BaseModel):
 
 
 REACTIONS = {"like", "heart", "laugh", "check", "pray", "wow"}
+
+
+# ---------------- local mode: sign-in and read API (replaces Firebase Auth + Firestore listeners) ----------------
+
+def _jsonable(v):
+    if isinstance(v, datetime):
+        return {"__ts__": int(v.timestamp() * 1000)}
+    if isinstance(v, dict):
+        return {k: _jsonable(x) for k, x in v.items() if k != "embedding"}
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    return v
+
+
+class LocalLoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class LocalSignupIn(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+
+
+class LocalQueryIn(BaseModel):
+    path: str
+    where: list[list] = []
+    order_by: list | None = None  # [field, "asc" | "desc"]
+    limit: int | None = None
+
+
+if LOCAL_MODE:
+
+    @app.post("/api/local/login")
+    def local_login(body: LocalLoginIn):
+        uid = auth.login(body.email, body.password)
+        if not uid:
+            raise HTTPException(401, "Invalid email or password")
+        return {"uid": uid, "token": f"local:{uid}", "email": body.email.strip().lower()}
+
+    @app.post("/api/local/signup")
+    def local_signup(body: LocalSignupIn):
+        email = body.email.strip().lower()
+        if "@" not in email or len(body.password) < 8:
+            raise HTTPException(400, "Enter a valid email and a password of at least 8 characters")
+        if auth.login(email, body.password) or list(db.collection("_auth").where("email", "==", email).limit(1).stream()):
+            raise HTTPException(409, "An account with this email already exists")
+        created = auth.create_user(email=email, password=body.password, display_name=body.name.strip())
+        return {"uid": created.uid, "token": f"local:{created.uid}", "email": email}
+
+    @app.post("/api/local/query")
+    def local_query(body: LocalQueryIn, user=Depends(current_user)):
+        """Read-only equivalent of the browser Firestore listeners, with the same access rules as firestore.rules."""
+        uid, parts = user["uid"], body.path.strip("/").split("/")
+        has = lambda f, op, v: [f, op, v] in body.where  # noqa: E731
+        allowed = False
+        if parts == ["users"]:
+            allowed = has("org_id", "==", user["org_id"]) and not is_guest(user)
+        elif parts == ["chats"]:
+            allowed = has("members", "array-contains", uid)
+        elif len(parts) == 3 and parts[0] == "chats" and parts[2] == "messages":
+            allowed = uid in (db.collection("chats").document(parts[1]).get().get("members") or [])
+        elif parts in (["files"], ):
+            allowed = has("members", "array-contains", uid)
+        elif parts in (["tasks"], ["meetings"]):
+            allowed = has("participants", "array-contains", uid)
+        elif parts in (["events"], ["external_items"], ["notifications"]):
+            allowed = has("uid", "==", uid)
+        elif len(parts) == 3 and parts[0] == "assistant" and parts[2] == "messages":
+            allowed = parts[1] == uid
+        if not allowed:
+            raise HTTPException(403, "Not allowed")
+        ops = {"array-contains": "array_contains"}
+        q = db.collection(parts[0]) if len(parts) == 1 else db.collection(parts[0]).document(parts[1]).collection(parts[2])
+        for field, op, value in body.where:
+            q = q.where(filter=FieldFilter(field, ops.get(op, op), value))
+        if body.order_by:
+            q = q.order_by(body.order_by[0], direction=firestore.Query.DESCENDING if body.order_by[1] == "desc" else firestore.Query.ASCENDING)
+        if body.limit:
+            q = q.limit(body.limit)
+        return [{"id": s.id, **_jsonable(s.to_dict())} for s in q.stream()]
+
+    @app.get("/api/local/settings")
+    def local_settings(user=Depends(current_user)):
+        """The user_settings/{uid} document (own settings only)."""
+        return _jsonable(db.collection("user_settings").document(user["uid"]).get().to_dict() or {})
 
 
 @app.get("/health")
@@ -458,6 +544,9 @@ def summarize_chat(chat_id: str, user=Depends(current_user)):
     col = db.collection("chats").document(chat_id).collection("messages")
     snaps = list(col.order_by("ts", direction=firestore.Query.DESCENDING).limit(60).stream())
     lines = [f"{s.get('sender_name')} ({ai.fmt_ist(s.get('ts'))}): {s.get('text') or ''} {('[file: ' + s.get('file')['name'] + ']') if s.to_dict().get('file') else ''}" for s in reversed(snaps)]
+    if ai.client is None:  # offline: most recent messages as bullets
+        bullets = "\n".join(f"- {ln}" for ln in [x for x in lines if x.strip()][-6:])
+        return {"summary": f"Gemini is not configured, so here are the latest messages instead:\n{bullets}"}
     summary = ai.generate_text(
         f"Summarise this workplace chat '{chat.get('name') or 'direct message'}' for {user['name']} in at most 6 bullets: "
         f"key points, decisions, pending asks with owners and dates. Match the chat's language.\n\n" + "\n".join(lines),

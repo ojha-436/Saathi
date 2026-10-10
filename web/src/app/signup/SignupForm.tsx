@@ -1,13 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { createUserWithEmailAndPassword, onAuthStateChanged, updateProfile } from "firebase/auth";
 import { Check, Eye, EyeOff, Loader2 } from "@/lib/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { getFbAuth } from "@/lib/firebase";
+import { deleteCurrentUser, onAuth, signUpWithPassword } from "@/lib/auth";
 import { AuthShell, Divider, GoogleButton, authMessage, inputCls, signInWithGoogle } from "../login/AuthShell";
 
 const RULES = [
@@ -30,7 +29,7 @@ export function SignupForm() {
   // Already signed in? Go straight to the workspace (but not while this form is creating the account).
   useEffect(
     () =>
-      onAuthStateChanged(getFbAuth(), (u) => {
+      onAuth((u) => {
         if (u && !creating.current) router.replace("/app");
       }),
     [router],
@@ -47,8 +46,7 @@ export function SignupForm() {
     setError(null);
     creating.current = true;
     try {
-      const cred = await createUserWithEmailAndPassword(getFbAuth(), email.trim(), password);
-      await updateProfile(cred.user, { displayName: name.trim() });
+      await signUpWithPassword(email.trim(), password, name.trim());
       await api("/api/me/profile", { json: { name: name.trim(), role: role.trim() } });
       router.replace("/app");
     } catch (err) {
@@ -56,7 +54,7 @@ export function SignupForm() {
       const msg = (err as Error).message;
       // The API refuses email domains outside the organisation's allow-list
       if (msg.includes("organisation")) {
-        await getFbAuth().currentUser?.delete().catch(() => {});
+        await deleteCurrentUser().catch(() => {});
         setError({ field: "email", text: msg });
       } else setError(authMessage(err));
       setBusy(null);

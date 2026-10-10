@@ -1,3 +1,5 @@
+import hashlib
+import math
 import random
 import re
 import time
@@ -6,9 +8,26 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 
-from .config import EMBED_DIM, EMBED_MODEL, FAST_MODEL, GENAI_LOCATION, PROJECT, TZ
+from .config import EMBED_DIM, EMBED_MODEL, FAST_MODEL, GEMINI_API_KEY, GENAI_LOCATION, LOCAL_MODE, PROJECT, TZ
 
-client = genai.Client(vertexai=True, project=PROJECT, location=GENAI_LOCATION)
+if LOCAL_MODE:
+    # AI Studio key if provided, otherwise None: embeddings then use the offline hashing model below.
+    client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+else:
+    client = genai.Client(vertexai=True, project=PROJECT, location=GENAI_LOCATION)
+
+NO_LLM = "Gemini is not configured. Set GEMINI_API_KEY (Google AI Studio) to enable AI features."
+
+
+def _hash_embed(text: str) -> list[float]:
+    """Offline embedding: hashed bag of words + bigrams, L2-normalised. Good enough for keyword-ish local search."""
+    vec = [0.0] * EMBED_DIM
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    for tok in words + [f"{a}_{b}" for a, b in zip(words, words[1:])]:
+        h = int.from_bytes(hashlib.md5(tok.encode()).digest()[:8], "big")
+        vec[h % EMBED_DIM] += 1.0 if h & (1 << 40) else -1.0
+    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+    return [v / norm for v in vec]
 
 
 def _retry(fn, attempts: int = 6):
@@ -23,6 +42,8 @@ def _retry(fn, attempts: int = 6):
 
 
 def embed(texts: list[str], task: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
+    if client is None:
+        return [_hash_embed(t[:6000]) for t in texts]
     # gemini-embedding-001 on Vertex accepts one input per request
     out = []
     for t in texts:
@@ -36,6 +57,8 @@ def embed(texts: list[str], task: str = "RETRIEVAL_DOCUMENT") -> list[list[float
 
 
 def generate_json(prompt: str, schema, model: str = FAST_MODEL, parts: list | None = None):
+    if client is None:
+        raise RuntimeError(NO_LLM)
     r = _retry(lambda: client.models.generate_content(
         model=model,
         contents=[*(parts or []), prompt],
@@ -47,6 +70,8 @@ def generate_json(prompt: str, schema, model: str = FAST_MODEL, parts: list | No
 
 
 def generate_text(prompt: str, model: str = FAST_MODEL) -> str:
+    if client is None:
+        raise RuntimeError(NO_LLM)
     r = _retry(lambda: client.models.generate_content(
         model=model, contents=prompt, config=types.GenerateContentConfig(temperature=0.3)
     ))

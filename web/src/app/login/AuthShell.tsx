@@ -5,6 +5,7 @@ import { Loader2, LockKeyhole, ShieldCheck, Sparkles } from "@/lib/icons";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { getFbAuth } from "@/lib/firebase";
+import { googleUnavailableLocally, isLocal } from "@/lib/auth";
 
 /** Two-column sign-in layout shared by /login and /signup. */
 export function AuthShell({ children }: { children: React.ReactNode }) {
@@ -69,6 +70,7 @@ export function authMessage(err: unknown): { field: "email" | "password" | "name
 }
 
 export async function signInWithGoogle() {
+  if (isLocal()) throw googleUnavailableLocally();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
   return signInWithPopup(getFbAuth(), provider);

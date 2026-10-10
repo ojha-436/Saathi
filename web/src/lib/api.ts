@@ -1,9 +1,10 @@
-import { apiUrl, getFbAuth } from "./firebase";
+import { getToken } from "./auth";
+import { apiUrl } from "./firebase";
 
 type Opts = { method?: string; json?: unknown; form?: FormData };
 
 export async function api<T = unknown>(path: string, opts: Opts = {}): Promise<T> {
-  const token = await getFbAuth().currentUser?.getIdToken();
+  const token = await getToken();
   const res = await fetch(apiUrl() + path, {
     method: opts.method ?? (opts.json !== undefined || opts.form ? "POST" : "GET"),
     headers: {
@@ -26,7 +27,7 @@ export async function api<T = unknown>(path: string, opts: Opts = {}): Promise<T
 export async function openFile(fileId: string) {
   const win = window.open("", "_blank");
   try {
-    const token = await getFbAuth().currentUser?.getIdToken();
+    const token = await getToken();
     const res = await fetch(`${apiUrl()}/api/files/${fileId}`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error("File not available");
     const url = URL.createObjectURL(await res.blob());
