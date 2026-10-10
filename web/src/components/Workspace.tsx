@@ -44,6 +44,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const [view, setView] = useState<View>({ kind: "home" });
   // Phones show one pane at a time: the chat list, or the open conversation.
   const [mobileList, setMobileList] = useState(false);
+  // Deep link from a push notification: /app?open=msg:CHAT/MSG (also meet:, mail:)
+  const [deepLink] = useState(() => new URLSearchParams(location.search).get("open") ?? "");
   const [oauthReturn] = useState(() => {
     const q = new URLSearchParams(location.search);
     if (q.get("connected") !== "google") return "";
@@ -95,6 +97,25 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     const t = setTimeout(() => toast(oauthReturn), 0);
     return () => clearTimeout(t);
   }, [oauthReturn, toast]);
+
+  useEffect(() => {
+    if (!deepLink) return;
+    history.replaceState(null, "", "/app");
+    const t = setTimeout(() => openRef(deepLink), 0);
+    return () => clearTimeout(t);
+  }, [deepLink, openRef]);
+
+  // A notification clicked while the app is already open: the service worker asks this tab to navigate.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type !== "saathi-open") return;
+      const ref = new URL(e.data.url).searchParams.get("open");
+      if (ref) openRef(ref);
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, [openRef]);
 
   // Presence heartbeat while the app is open and visible.
   useEffect(() => {

@@ -90,6 +90,10 @@ export type Message = {
   ts?: Timestamp;
   system?: boolean;
   mentions?: string[];
+  parent_id?: string;
+  reply_count?: number;
+  last_reply_ts?: Timestamp;
+  reply_users?: string[];
   reactions?: Partial<Record<Reaction, string[]>>;
   file?: {
     id: string;
@@ -132,7 +136,7 @@ export type Task = {
 export type Notice = {
   id: string;
   uid: string;
-  kind?: "mention" | "task_assigned" | "task_update" | "reminder" | "meeting";
+  kind?: "mention" | "thread_reply" | "task_assigned" | "task_update" | "reminder" | "meeting";
   actor_name?: string | null;
   chat_id?: string | null;
   task_id?: string | null;
