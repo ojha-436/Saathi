@@ -19,7 +19,7 @@ self.addEventListener("push", (event) => {
         body: d.body || "",
         tag: d.tag || "saathi",
         renotify: true,
-        icon: "/saathi-ai.svg",
+        icon: "/icon-192.png",
         badge: "/saathi-ai.svg",
         data: { url: d.url || "/app" },
       });
