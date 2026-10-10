@@ -65,7 +65,7 @@ jobs:
         working-directory: agent
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.12"
       - name: Install locked dependencies
