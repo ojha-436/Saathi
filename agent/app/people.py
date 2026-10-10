@@ -86,6 +86,7 @@ class SettingsIn(BaseModel):
     level: str | None = None  # all | mentions | off for chat_id
     quiet_hours: dict | None = None  # {"enabled": bool, "start": "20:00", "end": "08:00"}
     defaults: dict | None = None  # {"dm": "all", "group": "all", "channel": "mentions"}
+    snooze: dict | None = None  # {"key": "task:abc", "until": ISO time or null to unsnooze}
 
 
 @router.post("/settings")
@@ -106,6 +107,14 @@ def update_settings(body: SettingsIn, user=Depends(current_user)):
             if q.get(k) and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(q[k])):
                 raise HTTPException(400, "Quiet hours use HH:MM")
         update["quiet_hours"] = {"enabled": bool(q.get("enabled")), "start": q.get("start", "20:00"), "end": q.get("end", "08:00")}
+    if body.snooze is not None:
+        key = str(body.snooze.get("key") or "")
+        if not re.fullmatch(r"[a-z]+:[A-Za-z0-9_\-/]{1,120}", key):
+            raise HTTPException(400, "Invalid item")
+        from . import ai
+
+        until = ai.parse_iso(body.snooze.get("until"))
+        update[f"snoozed.{key.replace('/', '|').replace('.', '_')}"] = until.isoformat() if until else firestore.DELETE_FIELD
     if body.defaults is not None:
         update["defaults"] = {k: v for k, v in body.defaults.items() if k in ("dm", "group", "channel") and v in NOTIFY_LEVELS}
     if ref.get().exists:
@@ -115,6 +124,9 @@ def update_settings(body: SettingsIn, user=Depends(current_user)):
         for k, v in update.items():  # set() doesn't expand dotted keys
             if k.startswith("notify."):
                 nested.setdefault("notify", {})[k[7:]] = v
+            elif k.startswith("snoozed."):
+                if v is not firestore.DELETE_FIELD:
+                    nested.setdefault("snoozed", {})[k[8:]] = v
             else:
                 nested[k] = v
         ref.set(nested)

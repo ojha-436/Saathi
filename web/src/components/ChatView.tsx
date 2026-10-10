@@ -1,37 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import {
-  ArrowLeft,
-  Check,
-  Copy,
-  Eye,
-  EyeOff,
-  FileText,
-  Gavel,
-  Handshake,
-  Info,
-  Bell,
-  Reply,
-  MessagesSquare,
-  BellOff,
-  AtSign,
-  ListPlus,
-  Loader2,
-  LogOut,
-  MoreHorizontal,
-  Paperclip,
-  ScanText,
-  SendHorizontal,
-  Smile,
-  Sparkles,
-  Star,
-  Trash2,
-  UserPlus,
-  Users,
-  Wand2,
-  X,
-} from "@/lib/icons";
+import { ArrowLeft, Check, Copy, Eye, EyeOff, FileText, Gavel, Handshake, Info, Bell, Reply, MessagesSquare, BellOff, AtSign, ListPlus, Loader2, LogOut, MoreHorizontal, Paperclip, ScanText, SendHorizontal, Smile, Sparkles, Star, Trash2, UserPlus, Users, Wand2, X, AlertTriangle } from "@/lib/icons";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
@@ -40,6 +10,7 @@ import type { Chat, Message, Reaction, UserProfile } from "@/lib/types";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
+import { MicButton } from "./Quality";
 import { notifyLevel } from "./Sidebar";
 
 /** Highlights @Name tokens for people actually mentioned on the message (and @channel). */
@@ -749,6 +720,7 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
           <button onClick={() => fileRef.current?.click()} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Attach a PDF or image" aria-label="Attach file">
             <Paperclip size={17} />
           </button>
+          <MicButton onText={(t) => setText((prev) => (prev ? `${prev} ${t}` : t))} />
           <div className="relative">
             <button onClick={() => setEmoji((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Emoji" aria-label="Insert emoji" aria-expanded={emoji}>
               <Smile size={17} />
@@ -1018,6 +990,32 @@ function Empty({ icon: Icon, text }: { icon: typeof Gavel; text: string }) {
   );
 }
 
+/** Revision Guard: compares a drawing file's revision with the controlled register. */
+function RevisionGuard({ drawingNo, revision }: { drawingNo: string; revision: string }) {
+  const { register } = useWs();
+  const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const rev = revision.replace(/\(.*?\)/g, "").replace(/rev(ision)?\.?\s*/i, "").trim().toUpperCase().split(/[\s/,;]+/)[0];
+  const d = register.find((x) => norm(x.drawing_no) === norm(drawingNo));
+  const r = d?.revisions.find((x) => x.rev === rev);
+  if (!d || !r) return null;
+  const cur = d.revisions.find((x) => x.rev === d.current_rev);
+  if (r.status === "superseded")
+    return (
+      <span role="alert" className="mt-2 flex items-start gap-1.5 rounded-lg border border-rust/30 bg-rust-soft px-2 py-1.5 text-xs font-medium text-rust">
+        <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden /> Superseded. Do not use for production. Current is Rev {d.current_rev}
+        {cur?.approved_by ? `, approved by ${cur.approved_by}` : ""}
+        {cur?.date ? ` on ${cur.date}` : ""}.
+      </span>
+    );
+  if (r.status === "in_work")
+    return (
+      <span className="mt-2 flex items-start gap-1.5 rounded-lg border border-saffron/40 bg-saffron-soft px-2 py-1.5 text-xs font-medium text-saffron-ink">
+        <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden /> Draft, not released for production{d.current_rev ? ` (released: Rev ${d.current_rev})` : ""}.
+      </span>
+    );
+  return <span className="mt-1.5 block text-[11px] font-semibold text-moss">✓ Current released revision</span>;
+}
+
 function FileCard({ file }: { file: NonNullable<Message["file"]> }) {
   const doc = file.doc;
   const processing = file.status === "processing";
@@ -1050,6 +1048,7 @@ function FileCard({ file }: { file: NonNullable<Message["file"]> }) {
               )}
             </span>
             {doc.summary && <span className="mt-1.5 line-clamp-2 block text-xs leading-relaxed text-muted">{doc.summary}</span>}
+            {doc.doc_type === "engineering_drawing" && doc.drawing_no && doc.revision && <RevisionGuard drawingNo={doc.drawing_no} revision={doc.revision} />}
           </>
         ) : null}
       </span>

@@ -235,6 +235,9 @@ def process_file(chat_id: str, msg_id: str, file_id: str) -> None:
         }
     )
 
+    from .drawings import rebuild_for_file
+
+    rebuild_for_file(file_id)  # drawing register / Revision Guard (released state is workspace knowledge)
     if chat.get("ai_excluded"):
         return
     field_lines = "; ".join(f"{k.name}: {k.value}" for k in doc.key_fields)

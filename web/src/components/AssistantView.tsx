@@ -7,6 +7,7 @@ import { useAssistant } from "@/lib/hooks";
 import type { Task } from "@/lib/types";
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
+import { MicButton } from "./Quality";
 import { ProposedTaskCard } from "./Tasks";
 
 const STARTERS = [
@@ -191,6 +192,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
             placeholder="Ask anything about your work, in English or Hinglish…"
             className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] outline-none"
           />
+          <MicButton onText={(t) => setText((prev) => (prev ? `${prev} ${t}` : t))} className="h-10" />
           <button disabled={busy || !text.trim()} className="flex h-10 w-10 items-center justify-center rounded-xl bg-saffron text-ink transition hover:brightness-105 disabled:opacity-30" aria-label="Ask">
             {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
           </button>

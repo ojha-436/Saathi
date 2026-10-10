@@ -179,6 +179,8 @@ class OrgIn(BaseModel):
     channel_creation: str | None = None  # everyone | admins
     ai_enabled: bool | None = None
     integrations_google: bool | None = None
+    quality_team: list[str] | None = None  # uids who own/see every plant record (NCR, downtime, safety)
+    qr_public: bool | None = None  # QR scans show current/obsolete without sign-in
 
 
 @router.patch("/org")
@@ -211,6 +213,12 @@ def update_org(body: OrgIn, admin=Depends(admin_user)):
         update["settings.channel_creation"] = body.channel_creation
     if body.ai_enabled is not None:
         update["settings.ai_enabled"] = body.ai_enabled
+    if body.quality_team is not None:
+        from .firebase import same_org
+
+        update["settings.quality_team"] = same_org(admin, body.quality_team)
+    if body.qr_public is not None:
+        update["settings.qr_public"] = body.qr_public
     if body.integrations_google is not None:
         update["settings.integrations_google"] = body.integrations_google
         if not body.integrations_google:  # turning it off disconnects everyone in the workspace
