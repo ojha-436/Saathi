@@ -12,6 +12,8 @@ import {
   Handshake,
   Info,
   Bell,
+  Reply,
+  MessagesSquare,
   BellOff,
   AtSign,
   ListPlus,
@@ -76,6 +78,17 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
   const [summarizing, setSummarizing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState<string | undefined>(focusMsg);
+  // Thread panel: an explicit choice, or (when opened from a link to a reply) the reply's parent. "" = closed by the user.
+  const [threadSel, setThread] = useState<string | null>(null);
+  const focusParent = messages.find((m) => m.id === focusMsg)?.parent_id ?? null;
+  const threadId = threadSel === "" ? null : (threadSel ?? focusParent);
+  const mainMessages = useMemo(() => messages.filter((m) => !m.parent_id), [messages]);
+  const threadRoot = threadId ? messages.find((m) => m.id === threadId) : undefined;
+  const threadReplies = useMemo(() => (threadId ? messages.filter((m) => m.parent_id === threadId) : []), [messages, threadId]);
+  const openThread = (id: string) => {
+    setPanel(null);
+    setThread(id);
+  };
 
   const decisions = useMemo(() => messages.filter((m) => m.decision), [messages]);
   const files = useMemo(() => messages.filter((m) => m.file), [messages]);
@@ -90,14 +103,14 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
   useEffect(() => {
     if (tab !== "messages") return;
     if (flash) {
-      const el = document.getElementById(`m-${flash}`);
+      const el = document.getElementById(`m-${flash}`) ?? document.getElementById(`t-${flash}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         const t = setTimeout(() => setFlash(undefined), 2600);
         return () => clearTimeout(t);
       }
     } else bottomRef.current?.scrollIntoView();
-  }, [flash, messages.length, tab]);
+  }, [flash, messages.length, tab, threadId]);
 
   // Mark the conversation read while it is open.
   const lastTs = chat?.last_ts?.toMillis();
@@ -287,7 +300,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
         {tab === "messages" && (
           <div className="scrollbar-thin flex-1 overflow-y-auto px-2 py-4 lg:px-5">
             <Welcome chat={chat} title={title} onAddPeople={() => setPanel("members")} empty={!messages.some((m) => !m.system)} />
-            <MessageList messages={messages} chat={chat} title={title} flash={flash} />
+            <MessageList messages={mainMessages} chat={chat} title={title} flash={flash} onOpenThread={openThread} />
             <div ref={bottomRef} />
           </div>
         )}
@@ -343,7 +356,13 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
         <Composer chat={chat} title={title} />
       </section>
 
-      {panel && (
+      {threadRoot && (
+        <>
+          <button className="fixed inset-0 z-40 bg-ink/40 xl:hidden" onClick={() => setThread("")} aria-label="Close thread" />
+          <ThreadPanel chat={chat} title={title} root={threadRoot} replies={threadReplies} flash={flash} onClose={() => setThread("")} />
+        </>
+      )}
+      {panel && !threadRoot && (
         <>
           <button className="fixed inset-0 z-40 bg-ink/40 xl:hidden" onClick={() => setPanel(null)} aria-label="Close details" />
           <DetailsPanel chat={chat} title={title} tab={panel} setTab={setPanel} isOwner={isOwner} onToggleAi={toggleAi} onLeave={leave} />
@@ -381,7 +400,7 @@ function Welcome({ chat, title, empty, onAddPeople }: { chat: Chat; title: strin
   );
 }
 
-function MessageList({ messages, chat, title, flash }: { messages: Message[]; chat: Chat; title: string; flash?: string }) {
+function MessageList({ messages, chat, title, flash, onOpenThread }: { messages: Message[]; chat: Chat; title: string; flash?: string; onOpenThread: (id: string) => void }) {
   const { uid } = useWs();
   let lastDay = "";
   return (
@@ -407,7 +426,7 @@ function MessageList({ messages, chat, title, flash }: { messages: Message[]; ch
                 {m.text} · {clock(m.ts)}
               </p>
             ) : (
-              <MessageRow m={m} mine={m.sender === uid} grouped={grouped} bubbles={chat.type !== "channel"} highlight={flash === m.id} chatId={chat.id} chatName={title} />
+              <MessageRow m={m} mine={m.sender === uid} grouped={grouped && !prev?.reply_count} bubbles={chat.type !== "channel"} highlight={flash === m.id} chatId={chat.id} chatName={title} onOpenThread={onOpenThread} />
             )}
           </div>
         );
@@ -416,7 +435,12 @@ function MessageList({ messages, chat, title, flash }: { messages: Message[]; ch
   );
 }
 
-function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: { m: Message; mine: boolean; grouped: boolean; bubbles: boolean; highlight: boolean; chatId: string; chatName: string }) {
+function MessageRow({
+  m, mine, grouped, bubbles, highlight, chatId, chatName, onOpenThread, domPrefix = "m",
+}: {
+  m: Message; mine: boolean; grouped: boolean; bubbles: boolean; highlight: boolean; chatId: string; chatName: string;
+  onOpenThread?: (id: string) => void; domPrefix?: string;
+}) {
   const { uid, users, showProfile } = useWs();
   const right = bubbles && mine;
   const body = (
@@ -437,7 +461,7 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
 
   return (
     <div
-      id={`m-${m.id}`}
+      id={`${domPrefix}-${m.id}`}
       className={clsx(
         "group relative flex gap-2.5 rounded-xl px-2 transition-colors duration-500",
         grouped ? "py-0.5" : "pt-2.5 pb-0.5",
@@ -466,13 +490,14 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
           <div className="w-full max-w-3xl">{body}</div>
         )}
         <Reactions m={m} chatId={chatId} />
+        {onOpenThread && !!m.reply_count && <ThreadSummary m={m} onOpen={() => onOpenThread(m.id)} />}
       </div>
-      <MessageActions m={m} chatId={chatId} chatName={chatName} align={right ? "left" : "right"} />
+      <MessageActions m={m} chatId={chatId} chatName={chatName} align={right ? "left" : "right"} onReply={onOpenThread && (() => onOpenThread(m.id))} />
     </div>
   );
 }
 
-function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: string; chatName: string; align: "left" | "right" }) {
+function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; chatId: string; chatName: string; align: "left" | "right"; onReply?: () => void }) {
   const { open, toast, newTask, uid } = useWs();
   async function react(r: Reaction) {
     try {
@@ -501,6 +526,11 @@ function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: st
         </button>
       ))}
       <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+      {onReply && (
+        <button onClick={onReply} className={btn} aria-label="Reply in thread" title="Reply in thread">
+          <Reply size={15} />
+        </button>
+      )}
       <button onClick={addTask} className={btn} aria-label="Create task from message" title="Create task…">
         <ListPlus size={15} />
       </button>
@@ -554,11 +584,14 @@ function Reactions({ m, chatId }: { m: Message; chatId: string }) {
   );
 }
 
-function Composer({ chat, title }: { chat: Chat; title: string }) {
+function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat; title: string; parentId?: string; inputId?: string }) {
   const { toast, users, uid, account } = useWs();
   const chatId = chat.id;
   const isChannel = chat.type === "channel";
   const [text, setText] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const caretRef = useRef<number | null>(null);
   const [mentioned, setMentioned] = useState<Record<string, string>>({}); // uid -> inserted "@Name"
   const [query, setQuery] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
@@ -589,7 +622,6 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     caretRef.current = before.length; // placed synchronously after React writes the new value (see layout effect)
   }
 
-  const caretRef = useRef<number | null>(null);
   useLayoutEffect(() => {
     const el = inputRef.current;
     if (el && caretRef.current !== null) {
@@ -600,8 +632,6 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
   }, [text]);
   const [sending, setSending] = useState(false);
   const [emoji, setEmoji] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -618,7 +648,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
       const mentions = Object.entries(mentioned)
         .filter(([, tag]) => body.includes(tag))
         .map(([id]) => id);
-      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions } });
+      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, parent_id: parentId ?? null } });
       setText("");
       setMentioned({});
     } catch (e) {
@@ -634,6 +664,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     const form = new FormData();
     form.append("file", file);
     form.append("text", text.trim());
+    if (parentId) form.append("parent_id", parentId);
     setSending(true);
     try {
       await api(`/api/chats/${chatId}/files`, { form });
@@ -650,11 +681,11 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
   return (
     <div className="shrink-0 px-3 pb-3 pt-1 lg:px-5">
       <div className="relative rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.05)] transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
-        <label htmlFor="composer" className="sr-only">
-          Message {title}
+        <label htmlFor={inputId} className="sr-only">
+          {parentId ? "Reply in thread" : `Message ${title}`}
         </label>
         <textarea
-          id="composer"
+          id={inputId}
           ref={inputRef}
           value={text}
           onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
@@ -681,7 +712,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             }
           }}
           rows={1}
-          placeholder={isChannel ? `Post in ${title} · type @ to mention` : `Type a message to ${title}`}
+          placeholder={parentId ? "Reply in thread · type @ to mention" : isChannel ? `Post in ${title} · type @ to mention` : `Type a message to ${title}`}
           className="block max-h-40 min-h-11 w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[14.5px] outline-none"
           aria-autocomplete="list"
         />
@@ -1076,3 +1107,61 @@ function PromiseChip({ m, chatId }: { m: Message; chatId: string }) {
   );
 }
 
+
+function ThreadSummary({ m, onOpen }: { m: Message; onOpen: () => void }) {
+  const { users } = useWs();
+  const who = (m.reply_users ?? []).slice(-3);
+  return (
+    <button onClick={onOpen} className="mt-1 flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-hover">
+      <span className="flex -space-x-1.5">
+        {who.map((u) => (
+          <span key={u} className="rounded-full ring-2 ring-surface">
+            <Avatar name={users[u]?.name ?? "?"} size={18} />
+          </span>
+        ))}
+      </span>
+      <span className="font-semibold text-brand">
+        {m.reply_count} {m.reply_count === 1 ? "reply" : "replies"}
+      </span>
+      {m.last_reply_ts && <span className="text-muted">Last reply {timeShort(m.last_reply_ts)}</span>}
+    </button>
+  );
+}
+
+function ThreadPanel({ chat, title, root, replies, flash, onClose }: { chat: Chat; title: string; root: Message; replies: Message[]; flash?: string; onClose: () => void }) {
+  const { uid } = useWs();
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!flash) endRef.current?.scrollIntoView();
+  }, [replies.length, flash]);
+  return (
+    <aside className="ws-pop fixed inset-y-0 right-0 z-50 flex w-[26rem] max-w-[94vw] flex-col border-l border-border bg-surface shadow-2xl xl:static xl:z-auto xl:shadow-none" aria-label="Thread">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+        <MessagesSquare size={17} className="text-muted" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-bold">Thread</h2>
+          <p className="truncate text-[11px] text-muted">{title}</p>
+        </div>
+        <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-hover" aria-label="Close thread">
+          <X size={17} />
+        </button>
+      </div>
+      <div className="scrollbar-thin flex-1 overflow-y-auto px-1 py-3">
+        <MessageRow m={root} mine={root.sender === uid} grouped={false} bubbles={false} highlight={flash === root.id} chatId={chat.id} chatName={title} domPrefix="t" />
+        <div className="my-2 flex items-center gap-3 px-3 text-xs text-muted" role="separator">
+          <span>
+            {replies.length} {replies.length === 1 ? "reply" : "replies"}
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        {replies.map((r, i) => {
+          const prev = replies[i - 1];
+          const grouped = !!prev && prev.sender === r.sender && (r.ts?.toMillis() ?? 0) - (prev.ts?.toMillis() ?? 0) < GROUP_GAP_MS;
+          return <MessageRow key={r.id} m={r} mine={r.sender === uid} grouped={grouped} bubbles={false} highlight={flash === r.id} chatId={chat.id} chatName={title} domPrefix="t" />;
+        })}
+        <div ref={endRef} />
+      </div>
+      <Composer chat={chat} title={title} parentId={root.id} inputId="thread-composer" />
+    </aside>
+  );
+}

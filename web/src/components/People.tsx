@@ -6,6 +6,7 @@ import { AlertTriangle, Bell, Building2, CalendarDays, CheckCircle2, Clock, Load
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { getFbAuth } from "@/lib/firebase";
+import { disablePush, enablePush, pushState, type PushState } from "@/lib/push";
 import { STATUS_META, localTime, presence, statusText } from "@/lib/format";
 import type { Connection, NotifyLevel, StatusState } from "@/lib/types";
 import { RoleBadge, Switch, UserAvatar } from "./bits";
@@ -307,6 +308,49 @@ function ProfileSettings({ onDone }: { onDone: () => void }) {
   );
 }
 
+function PushSettings() {
+  const { toast } = useWs();
+  const [state, setState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    pushState().then(setState);
+  }, []);
+  async function toggle(on: boolean) {
+    setBusy(true);
+    try {
+      const s = on ? await enablePush() : await disablePush();
+      setState(s);
+      if (on && s === "denied") toast("Notifications are blocked for this site. Allow them in your browser's site settings.");
+      if (on && s === "on") toast("Push notifications are on for this browser.");
+    } catch (e) {
+      toast(`Couldn't turn on notifications: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="rounded-xl border border-border p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Push notifications on this device</h3>
+          <p className="text-sm text-muted">Mentions, thread replies, new messages (per chat setting), tasks and reminders, even when Saathi is closed.</p>
+        </div>
+        {state === null || busy ? <Loader2 size={18} className="animate-spin text-muted" /> : state === "unsupported" ? null : <Switch on={state === "on"} onChange={toggle} label="Push notifications" />}
+      </div>
+      {state === "unsupported" && <p className="mt-2 text-xs text-muted">This browser doesn&rsquo;t support web push. On iPhone, add Saathi to your Home Screen first (Share → Add to Home Screen).</p>}
+      {state === "denied" && <p className="mt-2 text-xs text-rust">Blocked in this browser. Click the lock icon in the address bar → Notifications → Allow, then turn this on.</p>}
+      {state === "on" && (
+        <button
+          onClick={() => api("/api/me/push/test", { method: "POST" }).then(() => toast("Test sent. Switch to another tab or app to see it."), (e) => toast((e as Error).message))}
+          className="mt-2 text-xs font-semibold text-brand hover:underline"
+        >
+          Send a test notification
+        </button>
+      )}
+    </section>
+  );
+}
+
 function NotificationSettings() {
   const { settings, toast } = useWs();
   const d = settings.defaults ?? {};
@@ -325,6 +369,7 @@ function NotificationSettings() {
   ];
   return (
     <div className="space-y-6">
+      <PushSettings />
       <section>
         <h3 className="font-semibold">Default for new conversations</h3>
         <p className="text-sm text-muted">You can override any chat from its ⋯ menu. @mentions, task assignments and reminders always reach you.</p>

@@ -8,6 +8,8 @@ from firebase_admin import auth
 from pydantic import BaseModel
 
 from .config import TZ
+from google.cloud import firestore
+
 from .firebase import audit, current_user, db, forget_profile
 
 router = APIRouter(prefix="/api/me")
@@ -124,4 +126,36 @@ def sign_out_everywhere(user=Depends(current_user)):
     """Invalidates every refresh token: other devices are signed out within the hour (immediately for the API)."""
     auth.revoke_refresh_tokens(user["uid"])
     audit(user, "user.sessions_revoked", user["uid"])
+    return {"ok": True}
+
+
+class PushIn(BaseModel):
+    token: str
+    enabled: bool = True
+
+
+@router.post("/push")
+def register_push(body: PushIn, user=Depends(current_user)):
+    """Registers (or removes) this browser's FCM token. Tokens are private to the user."""
+    token = body.token.strip()
+    if not 20 <= len(token) <= 4096:
+        raise HTTPException(400, "Invalid push token")
+    ref = db.collection("user_settings").document(user["uid"])
+    op = firestore.ArrayUnion if body.enabled else firestore.ArrayRemove
+    if ref.get().exists:
+        ref.update({"push_tokens": op([token])})
+    elif body.enabled:
+        ref.set({"org_id": user["org_id"], "push_tokens": [token]})
+    if body.enabled:
+        tokens = (ref.get().to_dict() or {}).get("push_tokens") or []
+        if len(tokens) > 10:  # keep the 10 most recent devices
+            ref.update({"push_tokens": tokens[-10:]})
+    return {"ok": True}
+
+
+@router.post("/push/test")
+def test_push(user=Depends(current_user)):
+    from .push import push
+
+    push(user["uid"], "Saathi notifications are on", "You'll get mentions, replies, tasks and reminders here.", tag="test")
     return {"ok": True}
