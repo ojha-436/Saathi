@@ -11,6 +11,7 @@ export type View =
   | { kind: "activity" }
   | { kind: "admin" }
   | { kind: "meeting"; id: string }
+  | { kind: "chats" }
   | { kind: "chat"; chatId: string; focusMsg?: string };
 
 export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new";

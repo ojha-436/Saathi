@@ -49,6 +49,7 @@ export function SignupForm() {
     try {
       const cred = await createUserWithEmailAndPassword(getFbAuth(), email.trim(), password);
       await updateProfile(cred.user, { displayName: name.trim() });
+      await cred.user.getIdToken(true); // so the workspace is created with the typed name, not the email
       await api("/api/me/profile", { json: { name: name.trim(), role: role.trim() } });
       router.replace("/app");
     } catch (err) {
