@@ -26,6 +26,16 @@
   --color-rust-soft: #f7e3de;
   --color-plum: #5b3fa0;
   --color-plum-soft: #ece6f7;
+
+  /* Workspace (enterprise chat) surfaces: neutral, high-density, brand blue for selection */
+  --color-canvas: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-hover: #eceef2;
+  --color-border: #e2e5ea;
+  --color-brand: #2457a6;
+  --color-brand-strong: #1b4687;
+  --color-brand-soft: #e7eefa;
+  --color-rail: #0b1b2b;
 }
 
 html,
@@ -44,6 +54,16 @@ body {
   outline: 2px solid var(--color-saffron);
   outline-offset: 2px;
   border-radius: 6px;
+}
+/* Text fields show focus with their own border + ring; skip the global outline so they don't get two rings */
+input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+/* Visually hidden radios (privacy cards) pass focus to their card */
+label:has(> input.sr-only:focus-visible) {
+  outline: 2px solid var(--color-saffron);
+  outline-offset: 2px;
 }
 
 button,
@@ -185,6 +205,15 @@ html {
   border: 1px solid var(--color-line);
   padding: 4px 8px;
   text-align: left;
+}
+
+.ws-pop {
+  animation: rise 0.16s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-pop {
+    animation: none !important;
+  }
 }
 
 .scrollbar-thin {

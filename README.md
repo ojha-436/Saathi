@@ -13,7 +13,7 @@ Team chat with a personal AI colleague built in. Saathi **finds any chat or file
 | Permission leaks (adversarial questions) | 0 | 0 |
 | Plain-language task parsing (date + hour, English & Hinglish) | 4/4 | — |
 | Promise detection precision / recall (20 labelled messages) | 1.0 / 1.0 | ≥ 0.80 precision |
-| Median answer latency | 7.0 s | < 5 s (not yet met) |
+| Median answer latency | 7.2 s | < 5 s (not yet met) |
 
 Re-run with `uv run python -m eval.run_eval`, then `uv run python -m eval.export_web` to refresh the numbers shown on the landing page.
 
@@ -21,12 +21,15 @@ Re-run with `uv run python -m eval.run_eval`, then `uv run python -m eval.export
 
 | Area | What it does |
 | --- | --- |
-| Ask Saathi | ADK agent (Gemini 3 Flash) with 6 permission-scoped tools; every claim cited as a clickable source chip |
+| Ask Saathi | ADK agent (Gemini 3.8 Flash, low thinking level) with 6 permission-scoped tools; every claim cited as a clickable source chip |
 | Catch-up | “Today / 3 days / This week” brief: decisions, asks for you, files, open promises |
 | Promise capture | Commitments detected in any chat (English/Hinglish) → one-click tracked task → reminder via Cloud Scheduler |
 | Tasks without apps | “Kal subah 10 baje … reminder” → drafted task the user confirms |
 | Document intelligence | Document AI OCR + Gemini multimodal: drawing title blocks, revision tables, MTC values, OCR confidence |
-| Chat tabs | Messages · Decisions (auto-logged timeline) · Files (extracted fields) |
+| Sign-in & accounts | Continue with Google (Firebase Auth SSO), email sign-up with password rules, password reset, first-run profile (name + job title); optional `SIGNUP_DOMAINS` allow-list for company domains |
+| Channels | Create public or private channels, browse and join public ones, add/remove members, owners rename or delete; search index and file access follow membership instantly |
+| Enterprise chat UX | Teams-style app rail, one list for chats and channels (Favorites · Channels · Chats) with Unread/Channels/Chats filters, unread markers, reactions, hover actions (add to tasks, ask Saathi), members & details panel, mobile bottom navigation |
+| Chat tabs | Messages/Posts · Decisions (auto-logged timeline) · Files (extracted fields) |
 | Privacy control | Per-chat “Hidden from AI” toggle removes the chat from the index |
 | Insights | Personal 7-day view: tasks, overdue, promises, assistant usage, decisions |
 | ⌘K palette | Jump to any chat or file, or send the query straight to Saathi |
@@ -35,15 +38,16 @@ Re-run with `uv run python -m eval.run_eval`, then `uv run python -m eval.export
 ## Architecture
 
 ```
-web/   Next.js 16 on Cloud Run (saathi-web) — landing (/), sign-in (/login), workspace (/app)
+web/   Next.js 16 on Cloud Run (saathi-web) — landing (/), sign-in (/login), sign-up (/signup), workspace (/app)
        Firebase Auth; Firestore real-time listeners (read-only via firestore.rules)
        Runtime config: read from env vars at request time and injected into the page (nothing baked in)
   │ REST + Firebase ID token
 agent/ FastAPI + Google ADK on Cloud Run (saathi-api, asia-south1)
   ├─ Saathi agent: search_workspace, get_message_context, catch_up, lookup_document, propose_task, list_tasks
   ├─ Ingest: gemini-embedding-001 → Firestore vector index (members pre-filter);
-  │          promise/decision detection (regex pre-filter → Gemini 2.5 Flash-Lite, JSON schema);
-  │          Document AI OCR (asia-south1) + Gemini 2.5 Flash extraction
+  │          promise/decision detection (regex pre-filter → Gemini 3.5 Flash-Lite, JSON schema);
+  │          Document AI OCR (asia-south1) + Gemini 3.8 Flash extraction
+  ├─ Channels: /api/channels (create, browse, join), /api/chats/{id}/members, PATCH/DELETE /api/chats/{id}
   ├─ /api/insights, /api/chats/{id}/ai-exclude, /api/cron/reminders (Cloud Scheduler, secret from Secret Manager)
   └─ BigQuery streaming of assistant events
 Data: Firestore + Cloud Storage + Document AI in asia-south1 (Mumbai)
@@ -57,7 +61,7 @@ No environment files or secrets are committed (`.env*` is git-ignored; only `web
 | --- | --- |
 | Web (local) | `cp web/.env.example web/.env.local` and fill in the Firebase web config + API URL |
 | Web (Cloud Run) | `gcloud run deploy saathi-web --set-env-vars SAATHI_API_URL=…,FIREBASE_API_KEY=…,…` |
-| API | Env vars on Cloud Run: `DOCAI_PROCESSOR`, `BQ_TABLE`, `ALLOWED_ORIGINS`, model overrides (`AGENT_MODEL`, …) |
+| API | Env vars on Cloud Run: `DOCAI_PROCESSOR`, `BQ_TABLE`, `ALLOWED_ORIGINS`, `SIGNUP_DOMAINS` (optional), model overrides (`AGENT_MODEL`, `FAST_MODEL`, `VISION_MODEL`, `AGENT_THINKING`) |
 | Cron secret | Secret Manager `saathi-cron-secret`, mounted as `CRON_SECRET` |
 
 ## Run locally

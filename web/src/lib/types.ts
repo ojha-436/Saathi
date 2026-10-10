@@ -4,14 +4,24 @@ export type UserProfile = { id: string; name: string; role: string; email: strin
 
 export type Chat = {
   id: string;
-  type: "dm" | "group";
+  type: "dm" | "group" | "channel";
   name: string;
   members: string[];
+  description?: string;
+  visibility?: "public" | "private";
+  owners?: string[];
+  created_by?: string;
   last_ts?: Timestamp;
   last_text?: string;
   last_sender?: string;
   ai_excluded?: boolean;
+  read_at?: Record<string, Timestamp>;
+  favorite_of?: string[];
 };
+
+export type ChannelSummary = { id: string; name: string; description: string; member_count: number; joined: boolean; last_ts: string | null };
+
+export type Reaction = "like" | "heart" | "laugh" | "check" | "pray" | "wow";
 
 export type DocSummary = {
   doc_type?: string;
@@ -28,6 +38,8 @@ export type Message = {
   sender_name: string;
   text: string;
   ts?: Timestamp;
+  system?: boolean;
+  reactions?: Partial<Record<Reaction, string[]>>;
   file?: {
     id: string;
     name: string;

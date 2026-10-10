@@ -29,7 +29,7 @@ CHATS = {
     "dm_neha_prince": ("dm", "", ["neha", "prince"]),
     "dm_prince_rahul": ("dm", "", ["prince", "rahul"]),
     "dm_amit_neha": ("dm", "", ["amit", "neha"]),
-    "grp_bogie": ("group", "Bogie Project - BG Coach", ["prince", "amit", "neha", "kavya", "rahul"]),
+    "grp_bogie": ("channel", "Bogie Project - BG Coach", ["prince", "amit", "neha", "kavya", "rahul"]),
     "grp_bay2": ("group", "Shop Floor - Bay 2", ["prince", "suresh", "neha"]),
 }
 
@@ -97,9 +97,11 @@ def main():
     ensure_users()
     names = {u: v[0] for u, v in USERS.items()}
     for cid, (ctype, cname, members) in CHATS.items():
-        db.collection("chats").document(cid).set(
-            {"type": ctype, "name": cname, "members": sorted(members), "last_ts": at(30, 9, 0), "last_text": "", "ai_excluded": False}
-        )
+        chat = {"type": ctype, "name": cname, "members": sorted(members), "last_ts": at(30, 9, 0), "last_text": "", "ai_excluded": False}
+        if ctype == "channel":
+            chat |= {"name_key": cname.lower(), "visibility": "public", "owners": ["kavya"], "created_by": "kavya",
+                     "description": "BG coach bogie prototype: drawings, QA and vendor updates"}
+        db.collection("chats").document(cid).set(chat)
     for i, (cid, sender, ts, text, fname) in enumerate(MESSAGES):
         ctype, cname, members = CHATS[cid]
         msg_id = f"seed{i:03d}"

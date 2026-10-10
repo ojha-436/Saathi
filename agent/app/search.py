@@ -56,9 +56,14 @@ def search(uid: str, query: str, k: int = 8) -> list[dict]:
             base = scored.get(snap.id, (0.35, d))[0]
             scored[snap.id] = (base + 0.12 * hits, d)
 
+    # Defence in depth: only chats the caller is a member of right now (covers any stale chunk permissions)
+    allowed = set(user_chats(uid))
+
     # one result per source (a file has several chunks)
     best: dict[str, tuple[float, dict]] = {}
     for score, d in scored.values():
+        if d.get("chat_id") not in allowed:
+            continue
         key = d.get("ref")
         if key not in best or score > best[key][0]:
             best[key] = (score, d)

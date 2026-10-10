@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from . import ai, ingest
 from .agent import ask
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
-from .firebase import bucket, current_user, db, get_chat_for_member
+from .firebase import bucket, current_user, db, get_chat_for_member, user_profile
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Saathi API")
@@ -40,6 +40,33 @@ class ChatIn(BaseModel):
     name: str | None = None
 
 
+class ChannelIn(BaseModel):
+    name: str
+    description: str = ""
+    visibility: str = "public"  # public: anyone in the company can find and join; private: invite only
+    member_ids: list[str] = []
+
+
+class ChatPatch(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class MembersIn(BaseModel):
+    member_ids: list[str]
+
+
+class ReactIn(BaseModel):
+    reaction: str
+
+
+class FavoriteIn(BaseModel):
+    favorite: bool
+
+
+REACTIONS = {"like", "heart", "laugh", "check", "pray", "wow"}
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
@@ -48,6 +75,21 @@ def health():
 @app.get("/api/me")
 def me(user=Depends(current_user)):
     return user
+
+
+class ProfileIn(BaseModel):
+    name: str
+    role: str
+
+
+@app.post("/api/me/profile")
+def update_profile(body: ProfileIn, user=Depends(current_user)):
+    name, role = re.sub(r"\s+", " ", body.name).strip()[:80], re.sub(r"\s+", " ", body.role).strip()[:80]
+    if len(name) < 2:
+        raise HTTPException(400, "Enter your full name")
+    db.collection("users").document(user["uid"]).update({"name": name, "role": role})
+    user_profile.cache_clear()
+    return {"ok": True}
 
 
 # ---------------- chats ----------------
@@ -60,8 +102,43 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None) ->
         body["file"] = file
     db.collection("chats").document(chat["id"]).collection("messages").document(msg_id).set(body)
     preview = text or (f"📎 {file['name']}" if file else "")
-    db.collection("chats").document(chat["id"]).update({"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"]})
+    db.collection("chats").document(chat["id"]).update(
+        {"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"], f"read_at.{user['uid']}": ts}
+    )
     return msg_id
+
+
+def post_system(chat_id: str, text: str, actor: str) -> None:
+    """Membership/settings events shown inline in the conversation. Never indexed for search."""
+    ts = now()
+    db.collection("chats").document(chat_id).collection("messages").document().set(
+        {"sender": "system", "sender_name": "", "text": text, "ts": ts, "system": True}
+    )
+    db.collection("chats").document(chat_id).update({"last_ts": ts, "last_text": text[:120], "last_sender": "", f"read_at.{actor}": ts})
+
+
+def sync_members(chat_id: str, members: list[str]) -> None:
+    """Keeps search chunks and file permissions in step with chat membership, so the assistant and
+    file downloads immediately follow joins, invites and removals."""
+    batch, n = db.batch(), 0
+    for col in ("chunks", "files"):
+        for snap in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
+            batch.update(snap.reference, {"members": members})
+            n += 1
+            if n % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+    batch.commit()
+
+
+def _names(uids: list[str]) -> str:
+    names = [user_profile(u)["name"] for u in uids]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _channel_owner(chat: dict, uid: str) -> None:
+    if uid not in (chat.get("owners") or []):
+        raise HTTPException(403, "Only channel owners can do that")
 
 
 @app.post("/api/chats")
@@ -80,6 +157,174 @@ def create_chat(body: ChatIn, user=Depends(current_user)):
         {"type": "dm" if is_dm else "group", "members": members, "name": body.name or "", "last_ts": now(), "last_text": "", "ai_excluded": False}
     )
     return {"id": chat_id}
+
+
+# ---------------- channels ----------------
+
+@app.post("/api/channels")
+def create_channel(body: ChannelIn, user=Depends(current_user)):
+    name = re.sub(r"\s+", " ", body.name).strip()[:60]
+    if len(name) < 2:
+        raise HTTPException(400, "Give the channel a name (at least 2 characters)")
+    if body.visibility not in ("public", "private"):
+        raise HTTPException(400, "Visibility must be public or private")
+    taken = db.collection("chats").where(filter=FieldFilter("type", "==", "channel")).where(filter=FieldFilter("name_key", "==", name.lower())).limit(1).get()
+    if taken:
+        raise HTTPException(409, f"A channel called “{name}” already exists")
+    known = {s.id for s in db.collection("users").stream()}
+    members = sorted(({m for m in body.member_ids if m in known}) | {user["uid"]})
+    chat_id = "ch_" + uuid.uuid4().hex[:17]
+    db.collection("chats").document(chat_id).set(
+        {"type": "channel", "name": name, "name_key": name.lower(), "description": body.description.strip()[:300],
+         "visibility": body.visibility, "members": members, "owners": [user["uid"]], "created_by": user["uid"],
+         "created_at": now(), "last_ts": now(), "last_text": "", "ai_excluded": False, "read_at": {user["uid"]: now()}}
+    )
+    post_system(chat_id, f"{user['name']} created the channel", user["uid"])
+    added = [m for m in members if m != user["uid"]]
+    if added:
+        post_system(chat_id, f"{user['name']} added {_names(added)}", user["uid"])
+    return {"id": chat_id}
+
+
+@app.get("/api/channels/browse")
+def browse_channels(user=Depends(current_user)):
+    """Public channels anyone in the company can join. Private channels are only visible to their members."""
+    rows = []
+    for s in db.collection("chats").where(filter=FieldFilter("visibility", "==", "public")).stream():
+        c = s.to_dict()
+        rows.append({"id": s.id, "name": c.get("name"), "description": c.get("description", ""), "member_count": len(c.get("members") or []),
+                     "joined": user["uid"] in (c.get("members") or []), "last_ts": c["last_ts"].isoformat() if c.get("last_ts") else None})
+    rows.sort(key=lambda r: (r["joined"], -(r["member_count"])))
+    return rows
+
+
+@app.post("/api/channels/{chat_id}/join")
+def join_channel(chat_id: str, bg: BackgroundTasks, user=Depends(current_user)):
+    ref = db.collection("chats").document(chat_id)
+    snap = ref.get()
+    if not snap.exists or snap.get("type") != "channel" or snap.to_dict().get("visibility") != "public":
+        raise HTTPException(404, "Channel not found")
+    if user["uid"] not in snap.get("members"):
+        members = sorted(set(snap.get("members")) | {user["uid"]})
+        update = {"members": members, f"read_at.{user['uid']}": now()}
+        if not snap.to_dict().get("owners"):
+            update["owners"] = [user["uid"]]  # an abandoned channel gets its next member as owner
+        ref.update(update)
+        post_system(chat_id, f"{user['name']} joined the channel", user["uid"])
+        bg.add_task(sync_members, chat_id, members)
+    return {"id": chat_id}
+
+
+@app.post("/api/chats/{chat_id}/members")
+def add_members(chat_id: str, body: MembersIn, bg: BackgroundTasks, user=Depends(current_user)):
+    chat = get_chat_for_member(chat_id, user["uid"])
+    if chat.get("type") == "dm":
+        raise HTTPException(400, "Start a group chat to add more people")
+    known = {s.id for s in db.collection("users").stream()}
+    added = [m for m in dict.fromkeys(body.member_ids) if m in known and m not in chat["members"]]
+    if not added:
+        return {"ok": True, "added": []}
+    members = sorted(set(chat["members"]) | set(added))
+    db.collection("chats").document(chat_id).update({"members": members})
+    post_system(chat_id, f"{user['name']} added {_names(added)}", user["uid"])
+    bg.add_task(sync_members, chat_id, members)
+    return {"ok": True, "added": added}
+
+
+@app.delete("/api/chats/{chat_id}/members/{member_id}")
+def remove_member(chat_id: str, member_id: str, bg: BackgroundTasks, user=Depends(current_user)):
+    """Leave (member_id == caller) or remove someone (channel owners only). Removed people lose access to history."""
+    chat = get_chat_for_member(chat_id, user["uid"])
+    if chat.get("type") == "dm":
+        raise HTTPException(400, "You can't leave a direct message")
+    leaving = member_id == user["uid"]
+    if not leaving:
+        if chat.get("type") == "channel":
+            _channel_owner(chat, user["uid"])
+        if member_id not in chat["members"]:
+            raise HTTPException(404, "Not a member")
+    members = [m for m in chat["members"] if m != member_id]
+    owners = [o for o in (chat.get("owners") or []) if o != member_id]
+    if chat.get("type") == "channel" and members and not owners:
+        owners = [members[0]]  # a channel always keeps an owner
+    db.collection("chats").document(chat_id).update({"members": members, "owners": owners})
+    who = user_profile(member_id)["name"]
+    post_system(chat_id, f"{who} left" if leaving else f"{user['name']} removed {who}", user["uid"])
+    bg.add_task(sync_members, chat_id, members)
+    return {"ok": True}
+
+
+@app.patch("/api/chats/{chat_id}")
+def update_chat(chat_id: str, body: ChatPatch, user=Depends(current_user)):
+    chat = get_chat_for_member(chat_id, user["uid"])
+    if chat.get("type") == "dm":
+        raise HTTPException(400, "Direct messages have no name")
+    if chat.get("type") == "channel":
+        _channel_owner(chat, user["uid"])
+    update = {}
+    if body.name is not None and body.name.strip() and body.name.strip() != chat.get("name"):
+        update["name"] = re.sub(r"\s+", " ", body.name).strip()[:60]
+        update["name_key"] = update["name"].lower()
+    if body.description is not None and body.description.strip() != chat.get("description", ""):
+        update["description"] = body.description.strip()[:300]
+    if update:
+        db.collection("chats").document(chat_id).update(update)
+        if "name" in update:
+            post_system(chat_id, f"{user['name']} renamed the {chat['type']} to “{update['name']}”", user["uid"])
+            for c in db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
+                c.reference.update({"chat_name": update["name"]})
+    return {"ok": True}
+
+
+@app.delete("/api/chats/{chat_id}")
+def delete_channel(chat_id: str, user=Depends(current_user)):
+    """Channel owners can delete a channel with its messages, files and search index."""
+    chat = get_chat_for_member(chat_id, user["uid"])
+    if chat.get("type") != "channel":
+        raise HTTPException(400, "Only channels can be deleted")
+    _channel_owner(chat, user["uid"])
+    ref = db.collection("chats").document(chat_id)
+    for col, q in (("messages", ref.collection("messages")),
+                   ("chunks", db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id))),
+                   ("files", db.collection("files").where(filter=FieldFilter("chat_id", "==", chat_id)))):
+        for s in q.stream():
+            if col == "files" and s.to_dict().get("gcs_path"):
+                try:
+                    bucket.blob(s.get("gcs_path")).delete()
+                except Exception:
+                    logging.warning("could not delete blob for %s", s.id)
+            s.reference.delete()
+    ref.delete()
+    return {"ok": True}
+
+
+@app.post("/api/chats/{chat_id}/read")
+def mark_read(chat_id: str, user=Depends(current_user)):
+    get_chat_for_member(chat_id, user["uid"])
+    db.collection("chats").document(chat_id).update({f"read_at.{user['uid']}": now()})
+    return {"ok": True}
+
+
+@app.post("/api/chats/{chat_id}/favorite")
+def set_favorite(chat_id: str, body: FavoriteIn, user=Depends(current_user)):
+    get_chat_for_member(chat_id, user["uid"])
+    op = firestore.ArrayUnion if body.favorite else firestore.ArrayRemove
+    db.collection("chats").document(chat_id).update({"favorite_of": op([user["uid"]])})
+    return {"ok": True}
+
+
+@app.post("/api/chats/{chat_id}/messages/{msg_id}/react")
+def react(chat_id: str, msg_id: str, body: ReactIn, user=Depends(current_user)):
+    get_chat_for_member(chat_id, user["uid"])
+    if body.reaction not in REACTIONS:
+        raise HTTPException(400, "Unknown reaction")
+    ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(404, "Message not found")
+    on = user["uid"] in ((snap.to_dict().get("reactions") or {}).get(body.reaction) or [])
+    ref.update({f"reactions.{body.reaction}": (firestore.ArrayRemove if on else firestore.ArrayUnion)([user["uid"]])})
+    return {"ok": True, "on": not on}
 
 
 @app.post("/api/chats/{chat_id}/messages")
@@ -123,6 +368,7 @@ def download_file(file_id: str, user=Depends(current_user)):
     if not snap.exists or user["uid"] not in (snap.get("members") or []):
         raise HTTPException(404, "File not found")
     f = snap.to_dict()
+    get_chat_for_member(f["chat_id"], user["uid"])  # current membership, not just the copy on the file
     data = bucket.blob(f["gcs_path"]).download_as_bytes()
     return Response(data, media_type=f.get("mime") or "application/octet-stream",
                     headers={"Content-Disposition": f'inline; filename="{f["name"]}"'})
@@ -248,12 +494,20 @@ def task_action(task_id: str, action: str, user=Depends(current_user)):
     return {"ok": True, "status": status}
 
 
+class TaskIn(BaseModel):
+    text: str
+    source_ref: str | None = None
+
+
 @app.post("/api/tasks")
-def create_task(body: TextIn, user=Depends(current_user)):
+def create_task(body: TaskIn, user=Depends(current_user)):
+    source = body.source_ref if body.source_ref and re.fullmatch(r"msg:[\w-]+/[\w-]+", body.source_ref) else None
+    if source:
+        get_chat_for_member(source[4:].split("/")[0], user["uid"])
     task_id = uuid.uuid4().hex[:20]
     db.collection("tasks").document(task_id).set(
-        {"owner": user["uid"], "title": body.text.strip()[:200], "due_at": None, "kind": "todo", "status": "open",
-         "notified": False, "created_at": now()}
+        {"owner": user["uid"], "title": body.text.strip()[:200], "due_at": None, "kind": "follow_up" if source else "todo", "status": "open",
+         "source_ref": source, "notified": False, "created_at": now()}
     )
     return {"task_id": task_id}
 

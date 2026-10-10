@@ -63,19 +63,19 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
   const greet = +hour < 12 ? "Good morning" : +hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-paper" aria-label="Ask Saathi">
-      <header className="flex items-center gap-3 border-b border-line px-4 py-3 lg:px-6">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-saffron text-ink">
+    <section className="flex min-h-0 flex-1 flex-col bg-surface" aria-label="Ask Saathi">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#d4691a] text-white">
           <Sparkles size={18} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-[26px] leading-tight">Ask Saathi</h1>
-          <p className="truncate text-xs text-muted">Searches only the chats and files you can access · every answer cites its source</p>
+          <h1 className="text-[15px] font-bold leading-tight">Ask Saathi</h1>
+          <p className="hidden truncate text-xs text-muted sm:block">Searches only the chats and files you can access · every answer cites its source</p>
         </div>
         {messages.length > 0 && (
           <button
             onClick={() => api("/api/assistant/clear", { method: "POST" })}
-            className="flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted hover:bg-paper-2 hover:text-ink"
+            className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted hover:bg-hover hover:text-ink"
           >
             <RotateCcw size={14} /> New conversation
           </button>
@@ -99,7 +99,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
                     <Radar size={14} /> Catch up
                   </p>
                   <p className="mt-2 font-display text-3xl leading-tight">Been away? Get the brief.</p>
-                  <p className="mt-1 max-w-md text-sm text-paper/70">Decisions, asks for you, files shared and open promises from every chat, each line with its source.</p>
+                  <p className="mt-1 max-w-md text-sm text-paper/70">Decisions, asks for you, files shared and open promises from every chat and channel, each line with its source.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {RANGES.map((r) => (
@@ -122,7 +122,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
                 <button
                   key={s.text}
                   onClick={() => ask(s.text)}
-                  className="rise flex min-h-[64px] items-start gap-3 rounded-xl border border-line bg-white px-4 py-3 text-left text-sm transition hover:border-ink/30"
+                  className="rise flex min-h-[64px] items-start gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-left text-sm transition hover:border-[#c5cad3] hover:shadow-sm"
                   style={{ animationDelay: `${180 + i * 40}ms` }}
                 >
                   <s.icon size={16} className="mt-0.5 shrink-0 text-saffron-ink" aria-hidden />
@@ -137,21 +137,21 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
           {messages.map((m) =>
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-[15px] text-paper">{m.text}</div>
+                <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-brand-soft px-4 py-2.5 text-[15px] text-ink">{m.text}</div>
               </div>
             ) : (
               <div key={m.id} className="flex gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-saffron text-ink">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#d4691a] text-white">
                   <Sparkles size={14} aria-hidden />
                 </span>
-                <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-line bg-white px-5 py-4 text-[15px]">
+                <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-border bg-surface px-5 py-4 text-[15px]">
                   {m.pending ? (
                     <div className="space-y-2" role="status" aria-label="Saathi is searching">
                       <span className="flex items-center gap-2 text-sm text-muted">
                         <Loader2 size={14} className="animate-spin" /> Searching your chats and files…
                       </span>
-                      <span className="block h-3 w-4/5 animate-pulse rounded bg-paper-2" />
-                      <span className="block h-3 w-3/5 animate-pulse rounded bg-paper-2" />
+                      <span className="block h-3 w-4/5 animate-pulse rounded bg-canvas" />
+                      <span className="block h-3 w-3/5 animate-pulse rounded bg-canvas" />
                     </div>
                   ) : (
                     <Markdown text={m.text} />
@@ -165,13 +165,13 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
         </div>
       </div>
 
-      <div className="border-t border-line px-4 py-3 lg:px-6">
+      <div className="px-4 pb-3 pt-1 lg:px-6">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             ask(text);
           }}
-          className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-line bg-white p-2 transition focus-within:border-ink focus-within:ring-4 focus-within:ring-saffron/15"
+          className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border bg-surface p-2 transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15"
         >
           <label htmlFor="ask" className="sr-only">
             Ask Saathi

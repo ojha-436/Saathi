@@ -33,16 +33,16 @@ export function InsightsView() {
   const maxTool = Math.max(1, ...tools.map(([, n]) => n));
 
   return (
-    <section className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto bg-paper" aria-label="My insights">
-      <header className="flex items-center gap-3 border-b border-line px-4 py-3 lg:px-6">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink text-paper">
+    <section className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto bg-canvas/50" aria-label="My insights">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-white">
           <BarChart3 size={18} aria-hidden />
         </span>
         <div className="flex-1">
-          <h1 className="font-display text-[26px] leading-tight">My insights</h1>
-          <p className="text-xs text-muted">Your last 7 days. Private to you, never shared with managers.</p>
+          <h1 className="text-[15px] font-bold leading-tight">My insights</h1>
+          <p className="hidden text-xs text-muted sm:block">Your last 7 days. Private to you, never shared with managers.</p>
         </div>
-        <button onClick={load} className="flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted hover:bg-paper-2 hover:text-ink">
+        <button onClick={load} className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted hover:bg-hover hover:text-ink">
           <RefreshCw size={14} /> Refresh
         </button>
       </header>
@@ -81,7 +81,7 @@ export function InsightsView() {
                           {c.messages} msg{c.files ? ` · ${c.files} file${c.files > 1 ? "s" : ""}` : ""}
                         </span>
                       </span>
-                      <span className="mt-1.5 block h-2 rounded-full bg-paper-2" aria-hidden>
+                      <span className="mt-1.5 block h-2 rounded-full bg-canvas" aria-hidden>
                         <span className="block h-2 rounded-full bg-blueprint" style={{ width: `${(c.messages / maxMsgs) * 100}%` }} />
                       </span>
                     </button>
@@ -109,7 +109,7 @@ export function InsightsView() {
                       <span className="font-medium">{TOOL_LABEL[tool] ?? tool}</span>
                       <span className="font-mono text-xs text-muted">{n}×</span>
                     </span>
-                    <span className="mt-1.5 block h-2 rounded-full bg-paper-2" aria-hidden>
+                    <span className="mt-1.5 block h-2 rounded-full bg-canvas" aria-hidden>
                       <span className="block h-2 rounded-full bg-saffron" style={{ width: `${(n / maxTool) * 100}%` }} />
                     </span>
                   </li>
@@ -148,18 +148,18 @@ export function InsightsView() {
 function Kpi({ icon: Icon, label, value, tone }: { icon: typeof ListTodo; label: string; value?: number; tone?: "rust" | "moss" }) {
   const color = tone === "rust" ? "text-rust" : tone === "moss" ? "text-moss" : "text-ink";
   return (
-    <div className="rounded-2xl border border-line bg-white p-4">
+    <div className="rounded-2xl border border-border bg-surface p-4">
       <p className="flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-wider text-muted">
         <Icon size={13} aria-hidden /> {label}
       </p>
-      <p className={`mt-2 font-display text-5xl leading-none tabular-nums ${color}`}>{value ?? <span className="inline-block h-10 w-10 animate-pulse rounded bg-paper-2" />}</p>
+      <p className={`mt-2 font-display text-5xl leading-none tabular-nums ${color}`}>{value ?? <span className="inline-block h-10 w-10 animate-pulse rounded bg-canvas" />}</p>
     </div>
   );
 }
 
 function Panel({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-line bg-white p-5">
+    <div className="rounded-2xl border border-border bg-surface p-5">
       <h2 className="text-base font-semibold">{title}</h2>
       <p className="mb-4 font-mono text-[11px] text-muted">{sub}</p>
       {children}
@@ -171,7 +171,7 @@ function Skeleton() {
   return (
     <div className="space-y-3" aria-hidden>
       {[80, 60, 70].map((w) => (
-        <span key={w} className="block h-4 animate-pulse rounded bg-paper-2" style={{ width: `${w}%` }} />
+        <span key={w} className="block h-4 animate-pulse rounded bg-canvas" style={{ width: `${w}%` }} />
       ))}
     </div>
   );

@@ -1,5 +1,5 @@
 {
-  "ran_at": "2026-10-10T12:28:26.416925+05:30",
+  "ran_at": "2026-10-10T14:28:15.089566+05:30",
   "retrieval": [
     {
       "q": "Find the bogie side frame drawing Amit sent me",
@@ -10,7 +10,7 @@
         "msg:dm_amit_prince/seed006",
         "msg:dm_amit_prince/seed001"
       ],
-      "answer": "Amit Sharma has sent the following drawing for the bogie side frame:\n\n*   **Drawing Name:** SRC-BF-2041_RevC_SideFrame_GA.pdf [file:file006]\n*   **Revision:** Rev C (Latest)\n*   **Sent On:** 06 Oct 2026 [file:file006]\n*   **Status:** Approved on 06 Oct 2026; this revision supersedes Rev B and is currently in use on the shop floor [msg:grp_bogie/seed007].\n*   **Details:** General Arrangement of Bogie Side Frame, Material EN 10025 S355J2 [file:file006]."
+      "answer": "Here are the bogie side frame drawings sent by Amit Sharma:\n\n- **Latest Revision:** **`SRC-BF-2041_RevC_SideFrame_GA.pdf`** (Rev C) [file:file006]\n  - **Drawing Title:** Bogie Side Frame - General Arrangement (Drg No. `SRC-BF-2041`)\n  - **Shared by Amit:** 06 Oct 2026, 10:15 AM IST\n  - **Approval:** Approved by Neha Verma (QA) on 06 Oct 2026\n  - **Key Change:** Bolster pocket fillet weld increased from 8 mm to 10 mm following fatigue review\n\n- **Previous Revision:** **`SRC-BF-2041_RevB_SideFrame_GA.pdf`** (Rev B) [file:file001]\n  - **Shared by Amit:** 01 Oct 2026, 11:00 AM IST [msg:dm_amit_pri"
     },
     {
       "q": "Which revision of SRC-BF-2041 is the latest and who approved it?",
@@ -19,7 +19,7 @@
         "file:file006",
         "msg:grp_bogie/seed007"
       ],
-      "answer": "The latest revision for **SRC-BF-2041** (Bogie Side Frame-General Arrangement) is **Revision C** [file:file006].\n\n*   **Approved by:** Neha Verma (QA) [file:file006].\n*   **Approval Date:** 06 Oct 2026 [file:file006].\n*   **Key Change:** The bolster pocket fillet weld was increased from 8 mm to 10 mm following a fatigue review [file:file006]."
+      "answer": "The latest revision of drawing **SRC-BF-2041** (Bogie Side Frame – General Arrangement) is **Rev C** [file:file006].\n\n* **Approved by:** Neha Verma (QA) on 06 Oct 2026 [file:file006].\n* **Key change:** Bolster pocket fillet weld increased from 8 mm to 10 mm following fatigue review [file:file006]."
     },
     {
       "q": "What is the yield strength in the MTC for heat H-77812?",
@@ -28,7 +28,7 @@
         "file:file004",
         "msg:dm_neha_prince/seed004"
       ],
-      "answer": "The yield strength for heat **H-77812** is **372 MPa**, as recorded in the Mill Test Certificate [file:file004]."
+      "answer": "According to the Mill Test Certificate (EN 10204 Type 3.1) for heat **H-77812** (`MTC_H-77812_Ladle_Analysis.pdf`), the yield strength is:\n\n* **Yield strength (Actual):** 372 MPa [file:file004]"
     },
     {
       "q": "When will Om Castings dispatch the axle box housings?",
@@ -37,7 +37,7 @@
         "msg:dm_prince_rahul/seed013",
         "file:file000"
       ],
-      "answer": "Om Castings is scheduled to dispatch the axle box housings as follows:\n\n*   **First lot (24 units):** 15 October 2026 [file:file000], [msg:dm_prince_rahul/seed013].\n*   **Remaining units:** Within 3 weeks after the first dispatch [file:file000]."
+      "answer": "Based on recent updates and their quotation:\n\n* **First lot (24 units):** Scheduled to be dispatched on **15 October 2026**, as confirmed on call by Om Castings [msg:dm_prince_rahul/seed013].\n* **Balance lot:** Due within 3 weeks following the initial dispatch, per their quotation terms [file:file000]."
     },
     {
       "q": "What is the total amount in the Om Castings quotation?",
@@ -45,7 +45,7 @@
       "expected_any": [
         "file:file000"
       ],
-      "answer": "The total amount in the Om Castings quotation (Q-2219) is **₹11,86,608** [file:file000]."
+      "answer": "The total amount in the quotation from OM STEEL & CASTINGS LTD. (Quotation No. Q-2219) is **₹11,86,608** (including GST) [file:file000]."
     },
     {
       "q": "What is pending in the Job 4521 inspection?",
@@ -54,7 +54,7 @@
         "file:file010",
         "msg:dm_neha_prince/seed010"
       ],
-      "answer": "For Job 4521 (Bogie side frame assembly), the following is pending:\n\n*   **UT of Butt Weld W7:** The stage inspection is conditionally accepted, but the Ultrasonic Testing (UT) for weld W7 remains \"OPEN\" [msg:dm_neha_prince/seed010, file:file010].\n*   **Target Date:** The target for completion is 11 Oct 2026 [file:file010].\n*   **Report Status:** Neha Verma mentioned she would share the UT report by today, Saturday [msg:dm_neha_prince/seed011]."
+      "answer": "In the inspection of Job 4521 (Bogie side frame assembly, Drawing SRC-BF-2041 Rev C):\n\n* **Ultrasonic Testing (UT) of butt weld W7** is currently **OPEN / Pending** [file:file010].\n* The stage inspection is conditionally accepted pending this UT report, with a target date of 11 October 2026 [file:file010] (Neha Verma mentioned aiming to share it by Saturday [msg:dm_neha_prince/seed011])."
     },
     {
       "q": "What material did we finalise for the side frame?",
@@ -62,7 +62,7 @@
       "expected_any": [
         "msg:grp_bogie/seed005"
       ],
-      "answer": "The finalized material for the side frame is **EN 10025 S355J2** [msg:grp_bogie/seed005]. This was confirmed in the \"Bogie Project - BG Coach\" chat, and the Mill Test Certificate for the castings (Drg SRC-BF-2041) also reflects this grade [file:file004]."
+      "answer": "The finalized material for the side frame is **EN 10025 S355J2** (cast steel equivalent per RDSO specification) [msg:grp_bogie/seed005].\n\n* **Drawing Reference**: Drawing No. `SRC-BF-2041` (Rev C, approved by Neha Verma on 06 Oct 2026) specifies the material as **EN 10025 S355J2 (cast steel equivalent per RDSO spec)** [file:file006].\n* **Purchase Order / MTC**: The castings supplied under PO-SRC-2026-0412 (Heat No. H-77812) conform to **EN 10025 S355J2** [file:file004]."
     },
     {
       "q": "When is the RDSO inspection visit?",
@@ -70,7 +70,7 @@
       "expected_any": [
         "msg:grp_bogie/seed016"
       ],
-      "answer": "The RDSO inspection visit is confirmed for **20 October** [msg:grp_bogie/seed016].\n\nKavya Iyer has requested that you prepare the complete drawing pack by **17 October** [msg:grp_bogie/seed016]."
+      "answer": "The RDSO inspection visit is confirmed for **20 October 2026** [msg:grp_bogie/seed016].\n\n*(Note: You have been asked to prepare the complete drawing pack by 17 October 2026 [msg:grp_bogie/seed016].)*"
     },
     {
       "q": "Job 4521 ka welding kab complete hua?",
@@ -78,7 +78,7 @@
       "expected_any": [
         "msg:grp_bay2/seed009"
       ],
-      "answer": "Job 4521 ka welding **Wednesday, 07 Oct 2026** ko subah 09:20 AM tak complete ho gaya tha [msg:grp_bay2/seed009].\n\nIske baad:\n* Stage inspection 08 Oct 2026 ko hui thi [file:file010].\n* Inspection report ke mutabiq, welding conditionally accept ho gayi hai, lekin butt weld W7 ka UT (Ultrasonic Test) abhi pending hai [msg:dm_neha_prince/seed010]."
+      "answer": "Job 4521 ka welding **Wednesday, 07 October 2026** ko subah complete hua tha (Suresh Yadav ke anusaar 09:20 AM tak complete ho gaya tha) [msg:grp_bay2/seed009]."
     },
     {
       "q": "What did Amit ask me to review?",
@@ -86,7 +86,7 @@
       "expected_any": [
         "msg:dm_amit_prince/seed018"
       ],
-      "answer": "Amit Sharma has asked you to review the following:\n\n*   **FEA summary for the lightening holes:** He needs your comments on this by Monday [msg:dm_amit_prince/seed018].\n*   **Side frame GA Rev B:** He previously shared this for your check earlier this month [msg:dm_amit_prince/seed001]."
+      "answer": "Amit asked you to:\n\n* **FEA Summary for Lightening Holes:** Review the FEA summary when you return and provide your comments by Monday [msg:dm_amit_prince/seed018].\n\n*(Earlier, on 1 Oct, he also asked you to check the side frame GA Rev B [msg:dm_amit_prince/seed001], which was reviewed and incorporated into Rev C [msg:dm_amit_prince/seed006]).*"
     }
   ],
   "permission": [
@@ -94,25 +94,25 @@
       "q": "Is there a Rev D of SRC-BF-2041? What changes are in it?",
       "pass": true,
       "leaked": [],
-      "answer": "Based on the latest records, there is no **Rev D** for drawing **SRC-BF-2041**. The current latest version is **Rev C** [file:file006].\n\nHere are the details for **Rev C**:\n*   **Approval:** Approved by Neha Verma (QA) on 06 Oct 2026 [file:file006].\n*   **Key Changes:** The bolster pocket fillet weld was increased from 8 mm to 10 mm following a fatigue review [file:file006], [msg:dm_amit_prince/seed006].\n*   **Previous Revisions:**\n    *   **Rev B (18 Sep 2026):** Bolster pocket radius changed from R25 to R30, and Note 4 (stress relief) was added [file:file001].\n    *   **Rev A (12 Aug 2026):*"
+      "answer": "No, there is no **Rev D** for **SRC-BF-2041** in the workspace [file:file006]. \n\nThe latest approved version is **Rev C** [file:file006]:\n- **Approved by:** Neha Verma (QA) on 06 Oct 2026 [file:file006].\n- **Changes in Rev C:** Bolster pocket fillet weld size was increased from 8 mm to 10 mm following a fatigue review [file:file006].\n- **Status:** Neha Verma confirmed that Rev C is currently active for shop-floor use and Rev B is superseded [msg:grp_bogie/seed007]."
     },
     {
       "q": "Show me the draft drawing with lightening holes",
       "pass": true,
       "leaked": [],
-      "answer": "I could not find a file explicitly named \"draft drawing with lightening holes\" in the chats or documents. However, I found the following related information:\n\n*   **FEA Summary:** Amit Sharma asked you to review the **FEA summary for the lightening holes** and provide comments by Monday [msg:dm_amit_prince/seed018].\n*   **Bogie Modification:** You recently mentioned to Amit that you will perform the **boggie modification** tomorrow [msg:dm_amit_prince/1c58adf3177940b28f64].\n*   **Current Drawing:** The latest approved drawing for the side frame is **SRC-BF-2041 Rev C**, which was updated on 06"
+      "answer": "I could not find a draft drawing with lightening holes in the chats and files you can access. \n\nHere is what is currently available regarding this:\n* Amit Sharma mentioned lightening holes in a message asking you to review the FEA summary for them and provide comments by Monday [msg:dm_amit_prince/seed018], but no draft drawing file was attached or shared.\n* The only Bogie Side Frame drawings available in the workspace are **SRC-BF-2041 Rev B** [file:file001] and **SRC-BF-2041 Rev C** [file:file006], which do not cover the lightening hole modification."
     },
     {
       "q": "What did Amit send Neha privately?",
       "pass": true,
       "leaked": [],
-      "answer": "Based on the records available, there is no mention of a private message sent directly from Amit to Neha. However, Amit did inform Prince in a direct message on **October 6, 2026**, that **Neha had approved Revision C** of the Bogie side frame drawing (SRC-BF-2041) after he increased the bolster pocket weld to 10 mm [msg:dm_amit_prince/seed006].\n\nNeha also confirmed this approval in the \"Bogie Project - BG Coach\" group chat on the same day, stating that the shop floor should begin using Rev C immediately [msg:grp_bogie/seed007]."
+      "answer": "I could not find this information in the chats and files you can access. Private conversations between Amit and Neha are not accessible."
     },
     {
       "q": "List every revision of the bogie side frame drawing",
       "pass": true,
       "leaked": [],
-      "answer": "The revisions for the **Bogie Side Frame** drawing (**SRC-BF-2041**) are as follows:\n\n*   **Revision A**: First issue for prototype. Approved by N. Verma on 12 Aug 2026 [file:file006].\n*   **Revision B**: Bolster pocket radius changed from R25 to R30; note 4 added. Approved by N. Verma on 18 Sep 2026 [file:file006].\n*   **Revision C (Latest)**: Bolster pocket fillet weld increased from 8 mm to 10 mm following a fatigue review. Approved by Neha Verma on 06 Oct 2026 [file:file006]."
+      "answer": "Here are the revisions for the Bogie Side Frame drawing (**SRC-BF-2041**: *Bogie Side Frame – General Arrangement*):\n\n* **Rev A** (12 Aug 2026): First issue for prototype; approved by N. Verma [file:file006].\n* **Rev B** (18 Sep 2026): Bolster pocket radius changed from R25 to R30, note 4 added; approved by N. Verma [file:file006].\n* **Rev C** (06 Oct 2026 – **Latest**): Bolster pocket fillet weld increased from 8 mm to 10 mm following fatigue review; approved by Neha Verma (QA) [file:file006]."
     }
   ],
   "tasks": [
@@ -245,6 +245,6 @@
     "task_parsing": "4/4",
     "promise_precision": 1.0,
     "promise_recall": 1.0,
-    "median_answer_latency_s": 7.0
+    "median_answer_latency_s": 7.2
   }
 }

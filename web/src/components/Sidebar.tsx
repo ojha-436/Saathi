@@ -1,130 +1,282 @@
 "use client";
 
 import clsx from "clsx";
-import { signOut } from "firebase/auth";
-import { BarChart3, EyeOff, LogOut, Plus, Search, Sparkles, Users } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { getFbAuth } from "@/lib/firebase";
-import { chatTitle, timeShort } from "@/lib/format";
+import { BarChart3, Bell, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, Sparkles, Star, UserPlus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { api } from "@/lib/api";
+import { chatTitle, isUnread, timeShort } from "@/lib/format";
 import type { Chat } from "@/lib/types";
-import { Avatar } from "./bits";
+import { ChatIcon, Menu } from "./bits";
 import { useWs, type View } from "./ctx";
-import { LogoMark } from "./Logo";
 
-export function Sidebar({
-  chatList,
-  onNavigate,
-  onNewChat,
-  onPalette,
-}: {
-  chatList: Chat[];
-  onNavigate?: () => void;
-  onNewChat: () => void;
-  onPalette: () => void;
+type RailKey = "activity" | "chat" | "assistant" | "tasks" | "insights";
+
+export function railKey(view: View): RailKey {
+  return view.kind === "chat" ? "chat" : view.kind;
+}
+
+/** Teams-style app bar: vertical on desktop, bottom navigation on phones. */
+export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect, mobile }: {
+  unreadChats: number;
+  unreadAlerts: number;
+  openTasks: number;
+  active: RailKey;
+  onSelect: (k: RailKey) => void;
+  mobile?: boolean;
 }) {
-  const { uid, me, users, view, open } = useWs();
-  const router = useRouter();
+  const items: { key: RailKey; label: string; icon: typeof Bell; badge?: number; dot?: boolean }[] = [
+    { key: "activity", label: "Activity", icon: Bell, badge: unreadAlerts },
+    { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChats },
+    { key: "assistant", label: "Saathi", icon: Sparkles },
+    { key: "tasks", label: "Tasks", icon: ListTodo, badge: openTasks, dot: true },
+    { key: "insights", label: "Insights", icon: BarChart3 },
+  ];
+  return (
+    <nav
+      aria-label="Apps"
+      className={clsx(
+        mobile
+          ? "flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+          : "hidden w-[68px] shrink-0 flex-col items-center gap-1 bg-rail py-2 lg:flex",
+      )}
+    >
+      {items.map((it) => {
+        const on = active === it.key;
+        return (
+          <button
+            key={it.key}
+            onClick={() => onSelect(it.key)}
+            aria-current={on ? "page" : undefined}
+            className={clsx(
+              "relative flex flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition",
+              mobile ? "h-14 flex-1" : "h-14 w-14 rounded-xl",
+              mobile ? (on ? "text-brand" : "text-muted") : on ? "bg-white/12 text-white" : "text-white/60 hover:bg-white/6 hover:text-white",
+            )}
+          >
+            {!mobile && on && <span className="absolute left-[-6px] top-3 bottom-3 w-[3px] rounded-r bg-saffron" aria-hidden />}
+            <span className="relative">
+              <it.icon size={20} strokeWidth={on ? 2.4 : 1.9} className={clsx(it.key === "assistant" && (mobile ? on && "text-saffron-ink" : "text-saffron"))} aria-hidden />
+              {!!it.badge && (
+                <span
+                  className={clsx(
+                    "absolute -right-2.5 -top-1.5 min-w-[17px] rounded-full px-1 text-center text-[10px] font-bold leading-[17px] text-white",
+                    it.dot ? "bg-[#5b6573]" : "bg-rust",
+                    !mobile && "ring-2 ring-rail",
+                  )}
+                >
+                  {it.badge > 99 ? "99+" : it.badge}
+                </span>
+              )}
+            </span>
+            {it.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+type Filter = "all" | "unread" | "channels" | "chats";
+
+function useCollapsed() {
+  // The workspace only renders client-side (after auth), so reading storage during the first render is safe.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("saathi.sections") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const toggle = (k: string) =>
+    setCollapsed((c) => {
+      const next = { ...c, [k]: !c[k] };
+      try {
+        localStorage.setItem("saathi.sections", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  return [collapsed, toggle] as const;
+}
+
+/** One list for chats and channels (the Teams "Chat and channels" pattern), with Favorites on top. */
+export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigate?: () => void }) {
+  const { uid, users, view, open, dialog, toast } = useWs();
+  const [filter, setFilter] = useState<Filter>("all");
+  const [collapsed, toggle] = useCollapsed();
+
   const go = (v: View) => {
     open(v);
     onNavigate?.();
   };
-  const navItem = (active: boolean) =>
-    clsx("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition", active ? "bg-paper/10 text-paper" : "text-paper/75 hover:bg-paper/5 hover:text-paper");
+
+  const { favorites, channels, chats } = useMemo(() => {
+    const keep = (c: Chat) =>
+      filter === "all" ||
+      (filter === "unread" && isUnread(c, uid)) ||
+      (filter === "channels" && c.type === "channel") ||
+      (filter === "chats" && c.type !== "channel");
+    const rows = chatList.filter(keep);
+    const fav = rows.filter((c) => c.favorite_of?.includes(uid));
+    const rest = rows.filter((c) => !c.favorite_of?.includes(uid));
+    return { favorites: fav, channels: rest.filter((c) => c.type === "channel"), chats: rest.filter((c) => c.type !== "channel") };
+  }, [chatList, filter, uid]);
+
+  async function favorite(c: Chat, on: boolean) {
+    try {
+      await api(`/api/chats/${c.id}/favorite`, { json: { favorite: on } });
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  }
+
+  const row = (c: Chat) => {
+    const title = chatTitle(c, uid, users);
+    const active = view.kind === "chat" && view.chatId === c.id;
+    const unread = !active && isUnread(c, uid);
+    const fav = !!c.favorite_of?.includes(uid);
+    const preview = c.type !== "dm" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ${c.last_text}` : c.last_text;
+    return (
+      <li key={c.id} className="group relative">
+        <button
+          onClick={() => go({ kind: "chat", chatId: c.id })}
+          aria-current={active ? "page" : undefined}
+          className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-[7px] text-left transition", active ? "bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.08)]" : "hover:bg-hover")}
+        >
+          <ChatIcon chat={c} title={title} size={32} />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline justify-between gap-2">
+              <span className={clsx("flex min-w-0 items-center gap-1 text-[13.5px]", unread ? "font-bold text-ink" : "font-medium text-ink/90")}>
+                <span className="truncate">{title}</span>
+                {c.type === "channel" && c.visibility === "private" && <Lock size={11} className="shrink-0 text-muted" aria-label="Private channel" />}
+                {c.ai_excluded && <EyeOff size={11} className="shrink-0 text-muted" aria-label="Hidden from Saathi" />}
+              </span>
+              <span className={clsx("shrink-0 text-[11px] group-hover:invisible", unread ? "font-semibold text-brand" : "text-muted")}>{timeShort(c.last_ts)}</span>
+            </span>
+            <span className={clsx("block truncate text-xs", unread ? "font-medium text-ink/85" : "text-muted")}>{preview || (c.type === "channel" ? c.description || "No messages yet" : "No messages yet")}</span>
+          </span>
+          {unread && <span className="h-2 w-2 shrink-0 rounded-full bg-brand" aria-label="Unread" />}
+        </button>
+        <button
+          onClick={() => favorite(c, !fav)}
+          className={clsx("absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-border", fav ? "text-saffron" : "text-muted opacity-0 focus:opacity-100 group-hover:opacity-100")}
+          aria-label={fav ? `Remove ${title} from favorites` : `Add ${title} to favorites`}
+          title={fav ? "Remove from favorites" : "Add to favorites"}
+        >
+          <Star size={13} fill={fav ? "currentColor" : "none"} />
+        </button>
+      </li>
+    );
+  };
+
+  const section = (key: string, label: string, list: Chat[], footer?: React.ReactNode) =>
+    (list.length > 0 || footer) && (
+      <section key={key} className="mt-2" aria-label={label}>
+        <button
+          onClick={() => toggle(key)}
+          aria-expanded={!collapsed[key]}
+          className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-muted hover:text-ink"
+        >
+          <ChevronDown size={14} className={clsx("transition", collapsed[key] && "-rotate-90")} aria-hidden />
+          {label}
+          <span className="ml-auto font-normal">{list.length || ""}</span>
+        </button>
+        {!collapsed[key] && (
+          <ul className="mt-0.5 space-y-px">
+            {list.map(row)}
+            {footer}
+          </ul>
+        )}
+      </section>
+    );
+
+  const assistantActive = view.kind === "assistant";
 
   return (
-    <aside className="flex h-full w-full flex-col bg-ink text-paper" aria-label="Workspace navigation">
-      <div className="flex items-center gap-2.5 px-4 pb-3 pt-4">
-        <LogoMark size={30} />
-        <div className="min-w-0">
-          <div className="font-display text-[22px] leading-none">Saathi</div>
-          <div className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-wider text-paper/50">Shakti Rail Components</div>
-        </div>
+    <aside className="flex h-full w-full flex-col border-r border-border bg-canvas" aria-label="Chats and channels">
+      <div className="flex items-center gap-1 px-4 pb-2 pt-3">
+        <h2 className="flex-1 text-lg font-bold tracking-tight">Chat</h2>
+        <button onClick={() => dialog("browse-channels")} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-ink" aria-label="Browse channels" title="Browse channels">
+          <Compass size={17} />
+        </button>
+        <Menu
+          label="New"
+          align="right"
+          className="flex h-8 items-center gap-1 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white transition hover:bg-brand-strong"
+          trigger={
+            <>
+              <MessageSquarePlus size={15} aria-hidden /> New
+            </>
+          }
+          items={[
+            { label: "New chat", icon: MessageSquare, onSelect: () => dialog("new-chat") },
+            { label: "Create a channel", icon: Hash, onSelect: () => dialog("new-channel") },
+            "sep",
+            { label: "Browse channels", icon: Compass, onSelect: () => dialog("browse-channels") },
+          ]}
+        />
       </div>
 
-      <button
-        onClick={onPalette}
-        className="mx-3 mb-3 flex items-center gap-2 rounded-lg border border-paper/10 bg-paper/5 px-3 py-2 text-left text-sm text-paper/60 transition hover:border-paper/25 hover:text-paper"
-      >
-        <Search size={15} aria-hidden /> <span className="flex-1">Search or ask…</span>
-        <kbd className="rounded border border-paper/15 px-1.5 font-mono text-[10px]">⌘K</kbd>
-      </button>
-
-      <nav className="space-y-1 px-3" aria-label="Main">
-        <button onClick={() => go({ kind: "assistant" })} className={navItem(view.kind === "assistant")} aria-current={view.kind === "assistant" ? "page" : undefined}>
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-saffron text-ink">
-            <Sparkles size={15} aria-hidden />
-          </span>
-          <span className="flex-1 font-medium">Ask Saathi</span>
-        </button>
-        <button onClick={() => go({ kind: "insights" })} className={navItem(view.kind === "insights")} aria-current={view.kind === "insights" ? "page" : undefined}>
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-paper/10">
-            <BarChart3 size={15} aria-hidden />
-          </span>
-          <span className="flex-1 font-medium">My insights</span>
-        </button>
-      </nav>
-
-      <div className="mt-5 flex items-center justify-between px-5 pb-1.5">
-        <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-paper/45">Chats</span>
-        <button onClick={onNewChat} className="flex h-8 w-8 items-center justify-center rounded-md text-paper/60 hover:bg-paper/10 hover:text-paper" aria-label="New chat" title="New chat">
-          <Plus size={16} />
-        </button>
+      <div className="flex gap-1.5 px-4 pb-2" role="group" aria-label="Filter">
+        {(["all", "unread", "channels", "chats"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            aria-pressed={filter === f}
+            className={clsx("h-7 rounded-full border px-2.5 text-xs font-medium capitalize transition", filter === f ? "border-brand bg-brand-soft text-brand" : "border-border bg-surface text-muted hover:text-ink")}
+          >
+            {f}
+          </button>
+        ))}
       </div>
-      <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-2" aria-label="Chats">
-        {chatList.map((c) => {
-          const title = chatTitle(c, uid, users);
-          const active = view.kind === "chat" && view.chatId === c.id;
-          return (
-            <button
-              key={c.id}
-              onClick={() => go({ kind: "chat", chatId: c.id })}
-              aria-current={active ? "page" : undefined}
-              className={clsx("relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition", active ? "bg-paper/10" : "hover:bg-paper/5")}
-            >
-              {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-saffron" aria-hidden />}
-              {c.type === "group" ? (
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-3 text-paper/80">
-                  <Users size={16} aria-hidden />
-                </span>
-              ) : (
-                <Avatar name={title} />
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-1 truncate text-sm font-medium text-paper">
-                    <span className="truncate">{title}</span>
-                    {c.ai_excluded && <EyeOff size={12} className="shrink-0 text-paper/50" aria-label="Excluded from AI" />}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-paper/40">{timeShort(c.last_ts)}</span>
-                </span>
-                <span className="block truncate text-xs text-paper/55">
-                  {c.type === "group" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ` : ""}
-                  {c.last_text}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </nav>
 
-      <div className="flex items-center gap-3 border-t border-paper/10 px-4 py-3">
-        <Avatar name={me?.name ?? "?"} size={34} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{me?.name}</div>
-          <div className="truncate text-[11px] text-paper/50">{me?.role}</div>
-        </div>
+      <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-3" aria-label="Conversations">
         <button
-          onClick={async () => {
-            await signOut(getFbAuth());
-            router.replace("/");
-          }}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-paper/50 hover:bg-paper/10 hover:text-paper"
-          title="Sign out"
-          aria-label="Sign out"
+          onClick={() => go({ kind: "assistant" })}
+          aria-current={assistantActive ? "page" : undefined}
+          className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-[7px] text-left transition", assistantActive ? "bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.08)]" : "hover:bg-hover")}
         >
-          <LogOut size={16} />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#d4691a] text-white" aria-hidden>
+            <Sparkles size={16} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] font-semibold">Saathi</span>
+            <span className="block truncate text-xs text-muted">Your AI colleague · search, catch up, remind</span>
+          </span>
         </button>
-      </div>
+
+        {section("favorites", "Favorites", favorites)}
+        {section(
+          "channels",
+          "Channels",
+          channels,
+          filter === "all" || filter === "channels" ? (
+            <li>
+              <button onClick={() => dialog("browse-channels")} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted hover:bg-hover hover:text-ink">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-dashed border-[#c5cad3]" aria-hidden>
+                  <Compass size={15} />
+                </span>
+                Browse or create channels
+              </button>
+            </li>
+          ) : undefined,
+        )}
+        {section(
+          "chats",
+          "Chats",
+          chats,
+          filter === "all" || filter === "chats" ? (
+            <li>
+              <button onClick={() => dialog("new-chat")} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted hover:bg-hover hover:text-ink">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-[#c5cad3]" aria-hidden>
+                  <UserPlus size={15} />
+                </span>
+                Start a new chat
+              </button>
+            </li>
+          ) : undefined,
+        )}
+        {filter === "unread" && !favorites.length && !channels.length && !chats.length && <p className="px-3 py-10 text-center text-sm text-muted">You&rsquo;re all caught up.</p>}
+      </nav>
     </aside>
   );
 }

@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from google.adk.agents import Agent
+from google.adk.agents.run_config import RunConfig
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -13,7 +14,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.genai import types
 
 from . import ai
-from .config import AGENT_MODEL, COMPANY, TZ
+from .config import AGENT_MODEL, AGENT_THINKING, COMPANY, TZ
 from .firebase import db
 from .search import search, user_chats
 
@@ -102,7 +103,7 @@ def catch_up(hours: int, tool_context: ToolContext) -> dict:
     out = []
     for chat in user_chats(uid).values():
         col = db.collection("chats").document(chat["id"]).collection("messages")
-        snaps = list(col.where(filter=FieldFilter("ts", ">=", since)).order_by("ts").limit(40).stream())
+        snaps = [s for s in col.where(filter=FieldFilter("ts", ">=", since)).order_by("ts").limit(40).stream() if not s.to_dict().get("system")]
         if snaps:
             out.append({"chat": chat.get("name"), "type": chat.get("type"), "messages": [_msg_row(chat, s) for s in snaps]})
     return {"since": ai.fmt_ist(since), "user": tool_context.state.get("user_name"), "chats": out}
@@ -118,9 +119,12 @@ def lookup_document(query: str, tool_context: ToolContext) -> dict:
     """
     uid = _uid(tool_context)
     toks = set(ai.keywords(query))
+    allowed = set(user_chats(uid))
     matches = []
     for snap in db.collection("files").where(filter=FieldFilter("members", "array_contains", uid)).stream():
         f = snap.to_dict()
+        if f.get("chat_id") not in allowed:
+            continue
         doc = f.get("doc") or {}
         hay = " ".join(
             str(x) for x in [f.get("name"), doc.get("title"), doc.get("drawing_no"), doc.get("job_no"), doc.get("heat_no"), doc.get("vendor"), doc.get("po_no"), doc.get("summary")] if x
@@ -223,8 +227,13 @@ agent = Agent(
     description="Personal work assistant with permission-aware access to the user's chats, files and tasks.",
     instruction=_instruction,
     tools=TOOLS,
-    generate_content_config=types.GenerateContentConfig(temperature=0.2),
+    generate_content_config=types.GenerateContentConfig(
+        temperature=0.2, thinking_config=types.ThinkingConfig(thinking_level=AGENT_THINKING) if AGENT_THINKING else None
+    ),
 )
+
+# A normal answer takes 2-5 model calls; cap runaway tool loops (ADK's default allows 500) to bound cost and latency.
+RUN_CONFIG = RunConfig(max_llm_calls=15)
 
 session_service = InMemorySessionService()
 runner = Runner(app_name=APP_NAME, agent=agent, session_service=session_service)
@@ -245,7 +254,7 @@ async def ask(user: dict, text: str, history: list[dict]) -> dict:
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
 
     reply, tool_calls = "", []
-    async for event in runner.run_async(user_id=user["uid"], session_id=session.id, new_message=content):
+    async for event in runner.run_async(user_id=user["uid"], session_id=session.id, new_message=content, run_config=RUN_CONFIG):
         for call in event.get_function_calls() or []:
             tool_calls.append({"tool": call.name, "args": dict(call.args or {})})
         if event.is_final_response() and event.content and event.content.parts:

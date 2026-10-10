@@ -39,7 +39,7 @@ export const isOverdue = (t?: Timestamp | null) => {
 
 export function chatTitle(chat: Chat | undefined, me: string, users: Record<string, UserProfile>) {
   if (!chat) return "";
-  if (chat.type === "group") return chat.name;
+  if (chat.type !== "dm") return chat.name;
   const other = chat.members.find((m) => m !== me);
   return (other && users[other]?.name) || "Direct message";
 }
@@ -69,3 +69,12 @@ export const DOC_LABEL: Record<string, string> = {
   specification: "Specification",
   other: "Document",
 };
+
+/** Unread when someone else posted after the user last opened the chat. */
+export function isUnread(chat: Chat, me: string) {
+  if (!chat.last_ts || !chat.last_text) return false;
+  const seen = chat.read_at?.[me];
+  return !seen || chat.last_ts.toMillis() > seen.toMillis() + 500;
+}
+
+export const REACTION_EMOJI: Record<string, string> = { like: "👍", heart: "❤️", laugh: "😄", check: "✅", pray: "🙏", wow: "😮" };

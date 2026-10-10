@@ -63,7 +63,8 @@ class DocExtract(BaseModel):
 
 def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str], chat: dict, extra: dict):
     vec = ai.embed([embed_text])[0]
-    db.collection("chunks").document(chunk_id).set(
+    ref = db.collection("chunks").document(chunk_id)
+    ref.set(
         {
             "text": text,
             "embedding": Vector(vec),
@@ -74,6 +75,13 @@ def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str],
             **extra,
         }
     )
+    # Membership or the name may have changed while we were embedding (join, removal, rename). Re-read after the
+    # write: a change committed before this point is fixed here, one committed after it is fixed by main.sync_members.
+    now_chat = db.collection("chats").document(chat["id"]).get().to_dict() or {}
+    if not now_chat or now_chat.get("ai_excluded"):
+        ref.delete()
+    elif now_chat.get("members") != members or now_chat.get("name", "") != chat.get("name", ""):
+        ref.update({"members": now_chat.get("members", []), "chat_name": now_chat.get("name", "")})
 
 
 def classify_signals(text: str, sender_name: str, sent_at: datetime, chat: dict) -> Signal | None:
@@ -108,7 +116,7 @@ def process_message(chat_id: str, msg_id: str) -> None:
     ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
     msg = ref.get().to_dict() or {}
     text = (msg.get("text") or "").strip()
-    if not text:
+    if not text or msg.get("system"):
         return
     sender = msg.get("sender_name", "")
     sent_at = msg.get("ts") or datetime.now(TZ)
