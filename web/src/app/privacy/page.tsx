@@ -21,7 +21,7 @@ const SECTIONS = [
   ["collect", "Information we collect"],
   ["use", "How we use information"],
   ["ai", "How Saathi's AI works with your data"],
-  ["google", "Google user data (Calendar and Gmail)"],
+  ["google", "Google user data (Calendar, Gmail, Drive)"],
   ["visibility", "Who can see what"],
   ["sharing", "Service providers and sharing"],
   ["location", "Where data is stored"],
@@ -86,7 +86,7 @@ export default async function PrivacyPage() {
               <li>We use your information only to run Saathi for you and your organisation. We do not sell it and we do not use it for advertising.</li>
               <li>You only ever see, and Saathi only ever searches, the chats, channels, files and meetings you are a member of. Workspace admins cannot read messages.</li>
               <li>AI features run on Google Cloud (Gemini on Vertex AI, Document AI). Under Google Cloud&rsquo;s terms, your content is not used to train Google&rsquo;s models.</li>
-              <li>Connecting Google Calendar or Gmail is optional and read-only. Only you can see what Saathi reads from them, and disconnecting deletes it.</li>
+              <li>Connecting Google Calendar, Gmail or Drive is optional and read-only. Only you can see what Saathi reads from them, and disconnecting deletes it.</li>
               <li>Data is stored on Google Cloud in Mumbai (asia-south1), encrypted in transit and at rest.</li>
               <li>You can hide any chat from the AI, mute notifications, disconnect apps, sign out of all devices, and ask us to access, correct or delete your data.</li>
             </ul>
@@ -108,7 +108,7 @@ export default async function PrivacyPage() {
             <ul>
               <li>Name, email address and sign-in method. If you sign in with Google we receive your name, email address and profile photo from Google.</li>
               <li>Passwords are handled by Firebase Authentication (Google). Saathi never sees or stores your password.</li>
-              <li>Profile details you choose to add: job title, department, phone, location and time zone.</li>
+              <li>Profile details you choose to add: job title, department, phone, location, time zone and a profile photo (resized to 256 px; visible to your workspace).</li>
               <li>Your workspace and role (owner, admin, member or guest), and invitations sent to your email address.</li>
             </ul>
             <h3>What you and your colleagues create</h3>
@@ -187,9 +187,9 @@ export default async function PrivacyPage() {
           </section>
 
           <section id="google">
-            <h2>Google user data (Calendar and Gmail)</h2>
+            <h2>Google user data (Calendar, Gmail, Drive)</h2>
             <p>
-              Connecting Google is optional. You choose Calendar, Gmail or both in Settings → Connected apps, and Google shows you exactly what you are granting.
+              Connecting Google is optional. You choose Calendar, Gmail and/or Drive in Settings → Connected apps, and Google shows you exactly what you are granting.
               Access is <b>read-only</b>: Saathi cannot send email, change your calendar or delete anything.
             </p>
             <ul>
@@ -203,11 +203,16 @@ export default async function PrivacyPage() {
                 use the sender, recipients, subject, date and message text to detect commitments (for example &ldquo;we will dispatch on the 15th&rdquo;) and let
                 you track them as tasks, and to answer your questions about your email.
               </li>
+              <li>
+                <b>Google Drive</b> (<code>drive.readonly</code>): a list of files you own or that were shared with you and that changed in the last 60 days
+                (name, type, owner, last editor, modified time and link). The text of Google Docs, Sheets, Slides and plain-text files is read so Saathi can
+                answer your questions about them with a link back; other files are only listed. Files that leave that window are removed from Saathi.
+              </li>
             </ul>
             <p>
-              Calendar and email data is visible and searchable <b>only by you</b>, not your colleagues and not workspace admins. Google sign-in tokens are encrypted
+              Calendar, email and Drive data is visible and searchable <b>only by you</b>, not your colleagues and not workspace admins. Google sign-in tokens are encrypted
               with Google Cloud Key Management Service before they are stored. Saathi syncs about every 10 minutes while connected. When you disconnect (or an admin
-              turns Google connections off), we revoke Saathi&rsquo;s access at Google and delete the calendar events, emails and search index we synced.
+              turns Google connections off), we revoke Saathi&rsquo;s access at Google and delete the calendar events, emails, Drive file records and search index we synced.
             </p>
             <p className="rounded-xl border border-line bg-paper-2 p-4">
               Saathi&rsquo;s use and transfer of information received from Google APIs to any other app will adhere to the{" "}
@@ -256,7 +261,7 @@ export default async function PrivacyPage() {
                 <b>Firebase (Google):</b> Authentication (sign-in) and Cloud Messaging (push notifications).
               </li>
               <li>
-                <b>Google Workspace APIs:</b> only if you connect Calendar or Gmail.
+                <b>Google Workspace APIs:</b> only if you connect Calendar, Gmail or Drive.
               </li>
             </ul>
             <p>
@@ -294,7 +299,7 @@ export default async function PrivacyPage() {
             <ul>
               <li>Workspace content is kept while the workspace is in use, until it is deleted by members or admins, or until the organisation asks us to delete it.</li>
               <li>Deleting a channel removes its messages, files and search index. Hiding a chat from AI removes it from the assistant&rsquo;s index.</li>
-              <li>Disconnecting Google deletes the synced calendar events, emails and their index straight away.</li>
+              <li>Disconnecting Google deletes the synced calendar events, emails, Drive file records and their index straight away.</li>
               <li>You can clear your assistant conversation at any time (New conversation).</li>
               <li>
                 When an account is deleted, we delete or anonymise its profile and personal settings. Messages you posted in shared conversations stay part of that
