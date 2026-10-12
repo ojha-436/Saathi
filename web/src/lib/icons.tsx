@@ -6,7 +6,7 @@ import { STREAMLINE } from "./streamline-icons";
 export type IconProps = { size?: number; strokeWidth?: number; fill?: string; className?: string; "aria-hidden"?: boolean | "true" | "false" };
 
 /** Extra line weight added around every Streamline icon (0 = as drawn). */
-export const ICON_WEIGHT = 0.4;
+export const ICON_WEIGHT = 0.2;
 
 function make(name: keyof typeof STREAMLINE, opts: { flip?: boolean; extra?: string } = {}) {
   // The free set is drawn thin. An outline stroke in the same colour makes every line bolder (viewBox units).

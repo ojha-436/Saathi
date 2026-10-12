@@ -18,7 +18,7 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
       role="img"
       aria-label={name}
     >
-      <svg width={size * 0.66} height={size * 0.66} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={0.4} strokeLinejoin="round" aria-hidden dangerouslySetInnerHTML={{ __html: USER_ICON }} />
+      <svg width={size * 0.66} height={size * 0.66} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={0.2} strokeLinejoin="round" aria-hidden dangerouslySetInnerHTML={{ __html: USER_ICON }} />
     </span>
   );
 }
