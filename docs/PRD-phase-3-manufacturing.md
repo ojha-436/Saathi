@@ -32,7 +32,13 @@ and **show measurable gains**, so Phase 3b (hackathon cut, shipped 2026-10-12) a
 **Demo history:** `seed/history.py` adds six months of closed NCR/downtime records, a vendor decision thread and vendor
 promises with outcomes, all tagged `demo_history` and removable with `--remove`. Messages go through the real extraction pipeline.
 
-**Still planned:** B7 shift handover, B9 inspection dossier, B11 expiry radar, A2 approvals, A4 voice out, A6 translation.
+**B7 shift handover shipped 2026-10-12 (Phase 3c):** per bay/line group; draft on demand or automatically 15 min before
+shift end (shift times in Admin → Workspace, default A 06:00 / B 14:00 / C 22:00), English or Hinglish, every bullet cited;
+sections machines, quality, safety, open items, what changed, watch out (with past lessons); the outgoing person edits and signs, the
+incoming crew acknowledges (Needs-you + push); unacknowledged after 30 min escalates to admins in the group; `shift_handover` agent
+tool. Demo: `uv run python -m seed.shift` stages a realistic shift in Shop Floor - Bay 2 (`--remove` undoes).
+
+**Still planned:** B9 inspection dossier, B11 expiry radar, A2 approvals, A4 voice out, A6 translation.
 
 ---
 

@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { dueLabel, timeShort } from "@/lib/format";
-import { AtSign, CheckCircle2, Clock, Gavel, Handshake, ListTodo, Sparkles } from "@/lib/icons";
+import { AtSign, CheckCircle2, Clock, Gavel, Handshake, ListTodo, RefreshCw, Sparkles } from "@/lib/icons";
 import type { Notice, Task } from "@/lib/types";
 import { Menu } from "./bits";
 import { useWs } from "./ctx";
@@ -82,6 +82,18 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
       }
     }
     for (const n of notices) {
+      if (!n.read && n.kind === "handover") {
+        out.push({
+          key: `note:${n.id}`,
+          rank: 0.5,
+          icon: RefreshCw,
+          tone: "text-blueprint bg-blueprint-soft",
+          title: n.title,
+          sub: n.body,
+          open: () => n.source_ref && openRef(n.source_ref),
+        });
+        continue;
+      }
       if (!n.read && (n.kind === "mention" || n.kind === "thread_reply")) {
         out.push({
           key: `note:${n.id}`,
@@ -136,7 +148,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
         <h2 className="flex-1 text-sm font-bold">
           Needs you {items.length > 0 && <span className="ml-1 rounded-full bg-canvas px-1.5 text-[11px] font-semibold text-muted">{items.length}</span>}
         </h2>
-        <span className="hidden text-xs text-muted sm:inline">Overdue → records → today → mentions → email promises</span>
+        <span className="hidden text-xs text-muted sm:inline">Overdue → handovers → records → today → mentions → email promises</span>
       </header>
       {items.length === 0 ? (
         <p className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-muted">

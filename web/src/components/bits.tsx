@@ -57,7 +57,9 @@ export function CiteChip({ refId }: { refId: string }) {
       </a>
     );
   }
-  if (refId.startsWith("dec:")) {
+  if (refId.startsWith("ho:")) {
+    label = `shift ${refId.split("_").pop()} handover`;
+  } else if (refId.startsWith("dec:")) {
     label = "decision";
   } else if (refId.startsWith("rec:")) {
     label = records[refId.slice(4)]?.number ?? "plant record";
@@ -74,7 +76,7 @@ export function CiteChip({ refId }: { refId: string }) {
     <button
       type="button"
       onClick={() => (isFile ? openFile(refId.slice(5)) : openRef(refId))}
-      title={isFile ? `Open ${label}` : refId.startsWith("dec:") ? "Open in the decision log" : `Jump to the message in ${label}`}
+      title={isFile ? `Open ${label}` : refId.startsWith("dec:") ? "Open in the decision log" : refId.startsWith("ho:") ? "Open the shift handover" : `Jump to the message in ${label}`}
       className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-blueprint/20 bg-blueprint-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-blueprint transition hover:border-blueprint/50"
     >
       {isFile ? <FileText size={11} aria-hidden /> : refId.startsWith("dec:") ? <Workflow size={11} aria-hidden /> : refId.startsWith("meet:") ? <CalendarDays size={11} aria-hidden /> : <MessageSquare size={11} aria-hidden />}

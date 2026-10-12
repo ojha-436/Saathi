@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, Check, Copy, Eye, EyeOff, FileText, Gavel, Handshake, Info, Bell, Reply, MessagesSquare, BellOff, AtSign, ListPlus, Loader2, LogOut, MoreHorizontal, Paperclip, ScanText, SendHorizontal, Smile, Sparkles, Star, Trash2, UserPlus, Users, Wand2, X, AlertTriangle } from "@/lib/icons";
+import { ArrowLeft, Check, Copy, Eye, EyeOff, FileText, Gavel, Handshake, Info, Bell, Reply, MessagesSquare, BellOff, AtSign, ListPlus, Loader2, LogOut, MoreHorizontal, Paperclip, ScanText, SendHorizontal, Smile, Sparkles, Star, Trash2, UserPlus, Users, Wand2, X, AlertTriangle, RefreshCw } from "@/lib/icons";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
@@ -220,6 +220,16 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                 <Users size={16} className="sm:hidden" />
                 <span className="font-medium">{chat.members.length}</span>
               </button>
+              {chat.type !== "dm" && (
+                <button
+                  onClick={() => open({ kind: "handover", chatId: chat.id })}
+                  className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink transition hover:bg-hover"
+                  title="Shift handover"
+                >
+                  <RefreshCw size={15} className="text-muted" />
+                  <span className="hidden md:inline">Handover</span>
+                </button>
+              )}
               <button
                 onClick={summarize}
                 disabled={summarizing || !!chat.ai_excluded}
@@ -412,17 +422,28 @@ function MessageRow({
   m: Message; mine: boolean; grouped: boolean; bubbles: boolean; highlight: boolean; chatId: string; chatName: string;
   onOpenThread?: (id: string) => void; domPrefix?: string;
 }) {
-  const { uid, users, showProfile } = useWs();
+  const { uid, users, showProfile, open } = useWs();
   const right = bubbles && mine;
   const body = (
     <>
       {m.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-ink">{withMentions(m.text, m.mentions, users, uid)}</p>}
       {m.file && <FileCard file={m.file} />}
+      {m.handover_id && (
+        <button
+          onClick={() => open({ kind: "handover", chatId, id: m.handover_id })}
+          className="mt-2 flex items-center gap-1.5 rounded-lg border border-blueprint/25 bg-blueprint-soft px-2.5 py-1.5 text-xs font-semibold text-blueprint hover:border-blueprint/50"
+        >
+          <RefreshCw size={13} aria-hidden /> Open the shift handover
+        </button>
+      )}
       {m.decision && (
         <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-moss/25 bg-moss-soft px-2.5 py-1.5 text-xs text-moss">
           <Gavel size={13} className="mt-px shrink-0" aria-hidden />
           <span>
-            <b>Decision logged:</b> {m.decision}
+            <b>Decision logged:</b> {m.decision}{" "}
+            <button onClick={() => open({ kind: "decisions", id: `m_${m.id}` })} className="font-semibold underline-offset-2 hover:underline">
+              Why →
+            </button>
           </span>
         </div>
       )}

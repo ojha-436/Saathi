@@ -14,6 +14,7 @@ export type View =
   | { kind: "chats" }
   | { kind: "quality"; recordId?: string }
   | { kind: "decisions"; id?: string }
+  | { kind: "handover"; chatId: string; id?: string }
   | { kind: "gmail" }
   | { kind: "calendar" }
   | { kind: "drive" }

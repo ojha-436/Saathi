@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { AtSign, Bell, MessagesSquare, CalendarClock, CheckCircle2, Circle, CircleDot, Clock, ListTodo, Loader2, Octagon, Plus, Sparkles, UserCheck, Users, X, Gavel } from "@/lib/icons";
+import { AtSign, Bell, MessagesSquare, CalendarClock, CheckCircle2, Circle, CircleDot, Clock, ListTodo, Loader2, Octagon, Plus, Sparkles, UserCheck, Users, X, Gavel, RefreshCw } from "@/lib/icons";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { dueLabel, isOverdue, timeShort } from "@/lib/format";
@@ -329,7 +329,7 @@ export function TaskRow({ t, perspective = "mine", compact }: { t: Task; perspec
   );
 }
 
-const NOTICE_ICON: Record<string, typeof Bell> = { record: Gavel, mention: AtSign, thread_reply: MessagesSquare, task_assigned: UserCheck, task_update: CheckCircle2, reminder: Clock, meeting: Users };
+const NOTICE_ICON: Record<string, typeof Bell> = { handover: RefreshCw, record: Gavel, mention: AtSign, thread_reply: MessagesSquare, task_assigned: UserCheck, task_update: CheckCircle2, reminder: Clock, meeting: Users };
 
 export function ActivityView({ notices }: { notices: Notice[] }) {
   const { openRef, open } = useWs();

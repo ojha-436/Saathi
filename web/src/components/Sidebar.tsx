@@ -12,7 +12,7 @@ import { useWs, type View } from "./ctx";
 export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "quality" | "decisions" | "insights" | "admin" | "gmail" | "calendar" | "drive";
 
 export function railKey(view: View): RailKey {
-  return view.kind === "meeting" ? "home" : view.kind === "chats" ? "chat" : view.kind;
+  return view.kind === "meeting" ? "home" : view.kind === "chats" || view.kind === "handover" ? "chat" : view.kind;
 }
 
 export function notifyLevel(chat: Chat, settings: UserSettings): NotifyLevel {
