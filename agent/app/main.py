@@ -14,7 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, impact, ingest, meetings, memory, people, push, records
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, meetings, memory, people, push, records
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
@@ -31,6 +31,7 @@ app.include_router(records.router)
 app.include_router(decisions.router)
 app.include_router(memory.router)
 app.include_router(impact.router)
+app.include_router(handover.router)
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
 )
@@ -177,7 +178,7 @@ def sync_members(chat_id: str, members: list[str]) -> None:
     """Keeps search chunks and file permissions in step with chat membership, so the assistant and
     file downloads immediately follow joins, invites and removals."""
     batch, n = db.batch(), 0
-    for col in ("chunks", "files", "decisions"):
+    for col in ("chunks", "files", "decisions", "handovers"):
         for snap in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
             batch.update(snap.reference, {"members": members})
             n += 1
@@ -364,7 +365,8 @@ def delete_chat_everything(chat_id: str) -> None:
     for col, q in (("messages", ref.collection("messages")),
                    ("chunks", db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id))),
                    ("files", db.collection("files").where(filter=FieldFilter("chat_id", "==", chat_id))),
-                   ("decisions", db.collection("decisions").where(filter=FieldFilter("chat_id", "==", chat_id)))):
+                   ("decisions", db.collection("decisions").where(filter=FieldFilter("chat_id", "==", chat_id))),
+                   ("handovers", db.collection("handovers").where(filter=FieldFilter("chat_id", "==", chat_id)))):
         for s in q.stream():
             if col == "files" and s.to_dict().get("gcs_path"):
                 try:
@@ -759,7 +761,12 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
     for u in db.collection("users").where(filter=FieldFilter("status.until", "<=", now())).stream():
         u.reference.update({"status": {"state": "available", "text": "", "until": None, "set_at": now()}})
         cleared += 1
-    return {"fired": fired, "statuses_cleared": cleared}
+    try:
+        ho = handover.tick()
+    except Exception:
+        logging.exception("handover tick failed")
+        ho = {}
+    return {"fired": fired, "statuses_cleared": cleared, **ho}
 
 
 class ExcludeIn(BaseModel):

@@ -122,6 +122,10 @@ export default async function PrivacyPage() {
               </li>
               <li>Voice dictation: audio is sent to our AI provider only to produce the text and is not stored. Voice notes attached to a plant record are stored with that record.</li>
               <li>
+                Shift handovers: the summary Saathi drafts from a bay or line group&rsquo;s messages, records and open promises at the end of a shift, your edits
+                and notes, who signed it and who acknowledged it.
+              </li>
+              <li>
                 Decisions Saathi recognises in chats and meeting summaries: what was decided, the reasons and options given in the conversation, who decided and
                 a link to the source message or meeting.
               </li>
@@ -262,6 +266,10 @@ export default async function PrivacyPage() {
                 <b>Lessons from past records.</b> So that the same problem isn&rsquo;t solved twice, members of a workspace (not guests) can see a summary of past
                 defect and downtime records when they report something similar: the number, title, part, drawing, vendor, root cause, fix and who owned it.
                 Photos, voice notes and the reporter&rsquo;s name are never part of a lesson, and safety reports are never shown this way.
+              </li>
+              <li>
+                <b>Shift handovers</b> are visible only to the members of the group they were written for. A handover only uses what those members can
+                already see; safety reports appear in it only if they were posted to that group.
               </li>
               <li>
                 <b>Decisions</b> are visible only to the members of the chat or meeting they came from, and stop being visible to someone who leaves that chat.

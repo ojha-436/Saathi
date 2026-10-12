@@ -400,6 +400,7 @@ function WorkspaceTab() {
   const [ai, setAi] = useState(account.org.settings.ai_enabled ?? true);
   const [google, setGoogle] = useState(account.org.settings.integrations_google ?? true);
   const [qrPublic, setQrPublic] = useState(account.org.settings.qr_public ?? true);
+  const [shifts, setShifts] = useState((account.org.settings.shifts ?? [{ name: "A", start: "06:00" }, { name: "B", start: "14:00" }, { name: "C", start: "22:00" }]).map((r) => `${r.name} ${r.start}`).join(", "));
   const [quality, setQuality] = useState<string[]>(account.org.settings.quality_team ?? []);
   const { users } = useWs();
   const [busy, setBusy] = useState(false);
@@ -408,7 +409,7 @@ function WorkspaceTab() {
     try {
       await api("/api/admin/org", {
         method: "PATCH",
-        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai, integrations_google: google, qr_public: qrPublic, quality_team: quality },
+        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai, integrations_google: google, qr_public: qrPublic, quality_team: quality, shifts },
       });
       toast("Workspace settings saved. Reload to see them everywhere.");
     } catch (e) {
@@ -466,6 +467,11 @@ function WorkspaceTab() {
           </div>
           <Switch on={qrPublic} onChange={setQrPublic} label="Public QR verdict" />
         </div>
+        <label className="block border-t border-border pt-3">
+          <span className="text-sm font-semibold">Shift start times</span>
+          <span className="block text-xs text-muted">Used for shift handovers: Saathi drafts each bay&rsquo;s handover 15 minutes before a shift ends. Format: A 06:00, B 14:00, C 22:00</span>
+          <input value={shifts} onChange={(e) => setShifts(e.target.value)} className="mt-1.5 h-9 w-full max-w-sm rounded-lg border border-border px-3 font-mono text-sm outline-none focus:border-brand" />
+        </label>
       </section>
       <section className="rounded-xl border border-border bg-surface p-4">
         <div className="text-sm font-semibold">Quality team</div>

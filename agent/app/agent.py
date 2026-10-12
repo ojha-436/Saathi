@@ -354,8 +354,30 @@ def plant_data(question: str, tool_context: ToolContext) -> dict:
     return out
 
 
+def shift_handover(area: str, tool_context: ToolContext) -> dict:
+    """The latest shift handover(s) for a bay, line or group the user is in: headline, machines, quality, safety, open items,
+    changes, watch-outs, who signed and who acknowledged. Use for "what happened last shift", "handover for Bay 2".
+
+    Args:
+        area: Bay, line or group name, e.g. "Bay 2". Empty for all the user's areas.
+    """
+    from .handover import _public
+
+    uid = _uid(tool_context)
+    chats = user_chats(uid)
+    toks = set(ai.keywords(area))
+    rows = []
+    for s in db.collection("handovers").where(filter=FieldFilter("members", "array_contains", uid)).stream():
+        h = s.to_dict()
+        if h["chat_id"] not in chats or (toks and not toks & set(ai.keywords(h["area"]))):
+            continue
+        rows.append(_public(s.id, h))
+    rows.sort(key=lambda r: r["shift_start"] or "", reverse=True)
+    return {"handovers": rows[:2], "note": "Cite as [ho:...] plus the refs inside bullets. Say whether it is still a draft or signed and acknowledged."}
+
+
 TOOLS = [search_workspace, get_message_context, catch_up, lookup_document, revision_status, find_decisions, similar_incidents, promise_record,
-         plant_data, propose_task, assign_task, list_tasks, who_owes, get_calendar]
+         plant_data, shift_handover, propose_task, assign_task, list_tasks, who_owes, get_calendar]
 
 
 def _instruction(ctx: ReadonlyContext) -> str:
@@ -368,7 +390,7 @@ Current time: {now} (Asia/Kolkata).
 
 How to work:
 - For ANY question about work content (files, drawings, what someone said, decisions, status, vendors, jobs), call tools first. Never answer from memory.
-- Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def], [file:xyz], [meet:xyz], [dec:xyz], [rec:xyz], [mail:xyz] or [drive:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
+- Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def], [file:xyz], [meet:xyz], [dec:xyz], [rec:xyz], [ho:xyz], [mail:xyz] or [drive:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
 - If tools return nothing relevant, say you could not find it in the chats and files the user can access. Never guess.
 - Drawing revisions: call revision_status first (the controlled register). If a superseded or draft revision comes up, say clearly that it must not be used and name the current revision. Other document fields: lookup_document. Say who approved the current revision and when.
 - Assigning work to a colleague ("Rahul ko PO bhejne ka task do Friday tak", "ask Neha to send the UT report"): call assign_task. For the user's own reminders: propose_task. Either way tell the user to confirm the card.
@@ -376,6 +398,7 @@ How to work:
 - "Why did we ...", "what did we decide": call find_decisions first; give the decision, the reason, rejected options and who decided, with citations. Mention if it was superseded.
 - A defect, breakdown or "has this happened before": call similar_incidents and give the earlier root cause, the fix that worked and who owned it.
 - Vendor or colleague reliability: call promise_record.
+- "What happened last shift", handover questions: call shift_handover.
 - Counts, trends, rankings, "how many", "which vendor/machine/drawing has the most": call plant_data. A chart is shown automatically; summarise the numbers.
 - "Should we ...", "help me decide", choosing between options: write a **decision brief**. Gather evidence first: find_decisions (past decisions on the topic), similar_incidents, promise_record for vendors involved, plant_data for the trend, search_workspace for recent discussion. Then answer with sections **Question**, **Options**, **Evidence** (bullets with citations, for and against each option), **Past decisions**, **What we don't know**, and **Suggestion** (clearly labelled as a suggestion; the decision is the user's). Never invent numbers, and never say a condition or trigger from a past decision has been met unless the evidence shows it. Cite numbers from promise_record with the refs of the promises behind them.
 - Meeting summaries are searchable with search_workspace; cite them as [meet:...]. Plant records (NCR, downtime, safety) the user can see are searchable too; cite them as [rec:...]. The user's own emails (if Gmail is connected) and Google Drive files (if Drive is connected) are searchable too; cite them as [mail:...] and [drive:...].

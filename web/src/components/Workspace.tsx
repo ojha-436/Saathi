@@ -22,6 +22,7 @@ import { LogoMark } from "./Logo";
 import { CalendarView, DriveView, GmailView } from "./Integrations";
 import { QualityView, ReportDialog } from "./Quality";
 import { DecisionsView } from "./Knowledge";
+import { HandoverView } from "./Handover";
 import { MeetingView, NewMeetingDialog } from "./Meetings";
 import { MyDayView } from "./MyDay";
 import { ProfileCard, SettingsDialog, StatusDialog, StatusIcon } from "./People";
@@ -102,6 +103,10 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       } else if (ref.startsWith("meet:")) open({ kind: "meeting", id: ref.slice(5) });
       else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
       else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
+      else if (ref.startsWith("ho:")) {
+        const id = ref.slice(3);
+        open({ kind: "handover", chatId: id.split("_").slice(0, -2).join("_"), id });
+      }
     },
     [open],
   );
@@ -296,6 +301,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
             {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
             {view.kind === "decisions" && <DecisionsView focusId={view.id} />}
+            {view.kind === "handover" && <HandoverView key={view.chatId} chatId={view.chatId} focusId={view.id} />}
             {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
             {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
             {view.kind === "calendar" && connected.includes("calendar") && <CalendarView />}

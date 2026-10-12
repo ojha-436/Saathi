@@ -32,7 +32,7 @@ export type Account = {
     id: string;
     name: string;
     domains: string[];
-    settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; quality_team?: string[]; qr_public?: boolean };
+    settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; quality_team?: string[]; qr_public?: boolean; shifts?: { name: string; start: string }[] };
   };
 };
 
@@ -112,6 +112,7 @@ export type Message = {
     ocr?: { engine: string; pages: number; confidence: number | null } | null;
   };
   decision?: string;
+  handover_id?: string;
   promise?: {
     committer: string;
     action: string;
@@ -143,7 +144,7 @@ export type Task = {
 export type Notice = {
   id: string;
   uid: string;
-  kind?: "mention" | "thread_reply" | "task_assigned" | "task_update" | "reminder" | "meeting" | "record";
+  kind?: "mention" | "thread_reply" | "task_assigned" | "task_update" | "reminder" | "meeting" | "record" | "handover";
   actor_name?: string | null;
   chat_id?: string | null;
   task_id?: string | null;
@@ -336,4 +337,33 @@ export type PlantRecord = {
   links?: RecordLinks;
   created_at?: Timestamp;
   updated_at?: Timestamp;
+};
+
+export type HandoverSection = "machines" | "quality" | "safety" | "open_items" | "changes" | "watch_out";
+export type HandoverBullet = { text: string; refs: string[] };
+export type Handover = {
+  id: string;
+  ref: string;
+  chat_id: string;
+  area: string;
+  shift_name: string;
+  shift_start: string;
+  shift_end: string;
+  next_shift?: string;
+  lang: "en" | "hinglish";
+  headline: string;
+  sections: Partial<Record<HandoverSection, HandoverBullet[]>>;
+  notes: string;
+  status: "draft" | "signed" | "acknowledged";
+  sources: Record<string, number>;
+  drafted_at?: string | null;
+  signed_by?: string | null;
+  signed_by_name?: string | null;
+  signed_at?: string | null;
+  acks: { uid: string; name: string; at: string | null }[];
+};
+export type HandoverList = {
+  current_shift: { name: string; start: string; end: string; next: string; key: string; id: string };
+  enabled: boolean;
+  handovers: Handover[];
 };
