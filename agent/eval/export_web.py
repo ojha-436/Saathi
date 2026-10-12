@@ -9,6 +9,7 @@ date = r["ran_at"][:10]
 (root / "web/src/lib/eval.ts").write_text(
     "// Generated from agent/eval/results.json by agent/eval/export_web.py, do not edit by hand.\n"
     f'export const EVAL = {{ retrieval: "{s["retrieval_accuracy"]}", leaks: "{s["permission_leaks"]}", '
-    f'latency: "{s["median_answer_latency_s"]}", date: "{date}" }};\n'
+    f'latency: "{s["median_answer_latency_s"]}", tasks: "{s["task_parsing"]}", promises: "{s["promise_precision"]:.1f}/{s["promise_recall"]:.1f}", '
+    f'date: "{date}" }};\n'
 )
 print("updated web/src/lib/eval.ts")
