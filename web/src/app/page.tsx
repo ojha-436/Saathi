@@ -268,8 +268,7 @@ export default function Landing() {
           <span className="font-mono text-xs">Gemini on Vertex AI · ADK · Document AI · Firestore · BigQuery · Cloud Run</span>
         </div>
         <p className="mx-auto max-w-7xl px-5 pb-6 text-xs text-muted lg:px-8">
-          Icons: <a className="underline" href="https://www.streamlinehq.com/icons/freehand-free">Freehand Line (free)</a> by Streamline, licensed{" "}
-          <a className="underline" href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+          Icons: <a className="underline" href="https://phosphoricons.com">Phosphor Icons</a>, MIT licence.
         </p>
       </footer>
     </div>

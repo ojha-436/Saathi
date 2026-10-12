@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
 import { STATUS_META, avatarColor, chatTitle, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
-import { USER_ICON } from "@/lib/streamline-icons";
+import { USER_ICON } from "@/lib/phosphor-icons";
 import { useWs } from "./ctx";
 
-/** One person icon (Streamline Freehand) on the same pastel circle for everyone. */
+/** One person icon (Phosphor) on the same pastel circle for everyone. */
 export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (
     <span
@@ -18,7 +18,7 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
       role="img"
       aria-label={name}
     >
-      <svg width={size * 0.66} height={size * 0.66} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={0.2} strokeLinejoin="round" aria-hidden dangerouslySetInnerHTML={{ __html: USER_ICON }} />
+      <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 256 256" fill="currentColor" aria-hidden dangerouslySetInnerHTML={{ __html: USER_ICON }} />
     </span>
   );
 }
