@@ -38,7 +38,7 @@ export default function Landing() {
 
       {/* ---------------- header ---------------- */}
       <header className="sticky top-3 z-50 px-3 sm:px-5">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 rounded-full border border-white/60 bg-paper/70 px-4 shadow-[0_8px_30px_-12px_rgba(23,19,19,0.25)] backdrop-blur-xl lg:px-5">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 rounded-2xl border border-line bg-white/90 px-4 shadow-[0_8px_30px_-18px_rgba(16,21,16,0.25)] backdrop-blur-xl lg:px-5">
           <Link href="/" aria-label="Saathi home">
             <Logo />
           </Link>
@@ -64,38 +64,34 @@ export default function Landing() {
         {/* ---------------- hero ---------------- */}
         <section className="relative overflow-hidden">
           <div className="glow pointer-events-none absolute inset-0" />
-          <div className="relative mx-auto grid max-w-7xl gap-14 px-5 pb-20 pt-20 lg:grid-cols-[1.02fr_1fr] lg:gap-10 lg:px-8 lg:pb-28 lg:pt-28">
-            <div>
-              <p className="rise inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/50 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted backdrop-blur">
-                <span className="h-1.5 w-1.5 rounded-full bg-saffron" /> Future of Work · Built on Google Cloud
-              </p>
-              <h1 className="rise mt-6 font-display text-[46px] leading-[1] text-ink sm:text-[60px] lg:text-[76px]" style={{ animationDelay: "80ms" }}>
-                Work remembers.
-                <br />
-                <span className="text-ink/45">So you don&rsquo;t have to.</span>
-              </h1>
-              <p className="rise mt-6 max-w-xl text-lg leading-relaxed text-muted" style={{ animationDelay: "160ms" }}>
-                Saathi is team chat with a personal AI colleague built in. It finds any file or message in seconds, briefs you on what you missed, and quietly
-                turns every <span className="font-medium text-ink">&ldquo;I&rsquo;ll send it by Friday&rdquo;</span> into a tracked task. No bots to install. Nothing
-                to configure.
-              </p>
-              <div className="rise mt-9 flex flex-wrap items-center gap-3" style={{ animationDelay: "240ms" }}>
-                <Link href="/login?demo=1" className="group inline-flex items-center gap-2 rounded-full bg-saffron px-7 py-4 text-[15px] font-semibold text-ink transition hover:brightness-95">
-                  Try the live workspace <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
-                </Link>
-                <a href="#how" className="inline-flex items-center gap-2 rounded-full border border-ink/25 px-7 py-4 text-[15px] font-semibold text-ink transition hover:bg-white/50">
-                  See how it works
-                </a>
-              </div>
-              <dl className="rise mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-line pt-6" style={{ animationDelay: "320ms" }}>
-                <Stat value={`${EVAL.retrieval}`} label="questions answered with the right source" />
-                <Stat value={`${EVAL.leaks}`} label="permission leaks in adversarial tests" />
-                <Stat value={`${EVAL.latency}s`} label="median answer time" />
-              </dl>
-              <p className="mt-3 font-mono text-[10.5px] uppercase tracking-wider text-muted/80">From Saathi&rsquo;s open evaluation suite · {EVAL.date}</p>
+          <div className="relative mx-auto max-w-6xl px-5 pb-20 pt-16 text-center lg:px-8 lg:pb-28 lg:pt-24">
+            <p className="rise inline-flex items-center gap-2 rounded-xl bg-saffron-soft px-3.5 py-1.5 text-[13px] font-medium text-saffron-ink">
+              <span className="h-2 w-2 rounded-sm bg-saffron" /> Future of Work · Built on Google Cloud
+            </p>
+            <h1 className="rise mx-auto mt-6 max-w-4xl font-display text-[40px] leading-[1.05] text-ink sm:text-[56px] lg:text-[68px]" style={{ animationDelay: "80ms" }}>
+              The AI workspace built so every team <span className="text-saffron-ink">remembers everything</span>
+            </h1>
+            <p className="rise mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted" style={{ animationDelay: "160ms" }}>
+              Team chat with a personal AI colleague built in. It finds any file or message in seconds, briefs you on what you missed, and turns every{" "}
+              <span className="font-medium text-ink">&ldquo;I&rsquo;ll send it by Friday&rdquo;</span> into a tracked task. No bots to install. Nothing to configure.
+            </p>
+            <div className="rise mt-9 flex flex-wrap items-center justify-center gap-3" style={{ animationDelay: "240ms" }}>
+              <Link href="/login?demo=1" className="group inline-flex items-center gap-2 rounded-full bg-saffron px-6 py-3.5 text-[15px] font-semibold text-ink">
+                Try the live workspace <ArrowRight size={17} />
+              </Link>
+              <a href="#how" className="inline-flex items-center gap-2 rounded-full border border-brand px-6 py-3.5 text-[15px] font-semibold text-brand transition hover:bg-saffron-soft">
+                See how it works
+              </a>
             </div>
 
             <HeroMock />
+
+            <dl className="rise mx-auto mt-16 grid max-w-2xl grid-cols-3 gap-6 text-left" style={{ animationDelay: "320ms" }}>
+              <Stat value={`${EVAL.retrieval}`} label="questions answered with the right source" />
+              <Stat value={`${EVAL.leaks}`} label="permission leaks in adversarial tests" />
+              <Stat value={`${EVAL.latency}s`} label="median answer time" />
+            </dl>
+            <p className="mt-3 text-xs text-muted/80">From Saathi&rsquo;s open evaluation suite · {EVAL.date}</p>
           </div>
         </section>
 
@@ -320,13 +316,27 @@ function Feature({
 /** Product composite: a chat with a detected promise, an assistant answer with citations, and a drawing title block. */
 function HeroMock() {
   return (
-    <div className="rise relative self-start lg:mt-6 lg:pl-6" style={{ animationDelay: "200ms" }} aria-label="Saathi product preview" role="img">
-      <div className="relative rounded-2xl border border-ink/10 bg-white shadow-[0_40px_80px_-30px_rgba(11,27,43,0.45)]">
+    <div className="rise relative mx-auto mt-14 w-full max-w-4xl text-left" style={{ animationDelay: "200ms" }} aria-label="Saathi product preview" role="img">
+      {/* floating category tags */}
+      {[
+        ["Search", "#a855f7", "bg-lavender", "-left-28 top-4"],
+        ["Promises", "#68e246", "bg-saffron-soft", "-right-28 top-14"],
+        ["Decisions", "#10a3ff", "bg-sky", "-left-32 top-[45%]"],
+        ["Meetings", "#fc57e5", "bg-blush", "-right-32 top-[48%]"],
+        ["Files", "#ff9d1c", "bg-cream", "-left-24 bottom-10"],
+        ["Tasks", "#68e246", "bg-saffron-soft", "-right-24 bottom-6"],
+      ].map(([t, dot, bg, pos]) => (
+        <span key={t} className={`pill-tag ${bg} absolute z-10 hidden xl:inline-flex ${pos}`} style={{ ["--dot" as string]: dot }}>
+          {t}
+        </span>
+      ))}
+      <div className="grid gap-4 md:grid-cols-[1.35fr_1fr] md:items-stretch">
+      <div className="relative rounded-3xl border border-line bg-white shadow-[0_30px_70px_-34px_rgba(16,21,16,0.35)]">
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-          <span className="h-2.5 w-2.5 rounded-full bg-rust/70" />
-          <span className="h-2.5 w-2.5 rounded-full bg-saffron/80" />
-          <span className="h-2.5 w-2.5 rounded-full bg-moss/70" />
-          <span className="ml-3 font-mono text-[11px] text-muted">saathi · Amit Sharma</span>
+          <span className="h-2.5 w-2.5 rounded-full bg-blush" />
+          <span className="h-2.5 w-2.5 rounded-full bg-cream" />
+          <span className="h-2.5 w-2.5 rounded-full bg-saffron" />
+          <span className="ml-3 text-xs text-muted">Saathi · Amit Sharma</span>
         </div>
         <div className="space-y-4 p-5">
           <div className="flex gap-3">
@@ -360,7 +370,7 @@ function HeroMock() {
       </div>
 
       {/* below the chat window: one card with the drawing title block + animation */}
-      <div className="mt-4 flex items-center gap-5 rounded-2xl border border-ink/10 bg-white/80 p-4 shadow-[0_20px_40px_-24px_rgba(23,19,19,0.35)] backdrop-blur">
+      <div className="flex flex-col justify-center gap-3 rounded-3xl border border-line bg-white p-5 shadow-[0_30px_70px_-34px_rgba(16,21,16,0.3)]">
         <div className="min-w-0 flex-1">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-saffron-ink">Reads the drawing, not just the PDF</p>
           <div className="border-2 border-ink bg-paper font-mono text-[10.5px]">
@@ -377,6 +387,7 @@ function HeroMock() {
             ))}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -396,18 +407,18 @@ function DrawingPanel() {
         </g>
         <text x="230" y="62" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="11" textAnchor="middle">2470</text>
         <text x="230" y="236" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="10" textAnchor="middle">DETAIL A · FILLET 10 mm</text>
-        <circle cx="230" cy="214" r="9" fill="none" stroke="#c8f031" strokeWidth="1.6" />
+        <circle cx="230" cy="214" r="9" fill="none" stroke="#68e246" strokeWidth="1.6" />
         <g fontFamily="var(--font-mono)" fontSize="10.5">
-          <rect x="250" y="262" width="250" height="88" fill="#171313" stroke="#9fc0ec" />
+          <rect x="250" y="262" width="250" height="88" fill="#16330f" stroke="#9fc0ec" />
           <path d="M250 284h250M250 306h250M250 328h250M340 262v88" stroke="#9fc0ec" />
           <text x="258" y="277" fill="#9fc0ec">DRG No.</text>
-          <text x="348" y="277" fill="#efeae9">SRC-BF-2041</text>
+          <text x="348" y="277" fill="#f4f6f2">SRC-BF-2041</text>
           <text x="258" y="299" fill="#9fc0ec">REV</text>
-          <text x="348" y="299" fill="#c8f031" fontWeight="700">C · supersedes B</text>
+          <text x="348" y="299" fill="#68e246" fontWeight="700">C · supersedes B</text>
           <text x="258" y="321" fill="#9fc0ec">APPROVED</text>
-          <text x="348" y="321" fill="#efeae9">N. VERMA · 06 OCT</text>
+          <text x="348" y="321" fill="#f4f6f2">N. VERMA · 06 OCT</text>
           <text x="258" y="343" fill="#9fc0ec">READ BY</text>
-          <text x="348" y="343" fill="#efeae9">Saathi · Document AI</text>
+          <text x="348" y="343" fill="#f4f6f2">Saathi · Document AI</text>
         </g>
       </svg>
     </div>

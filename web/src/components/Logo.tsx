@@ -4,7 +4,7 @@ import clsx from "clsx";
 export function LogoMark({ size = 32, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="10" fill="#c8f031" />
+      <rect width="32" height="32" rx="10" fill="#68e246" />
       <g transform="translate(4 3.5) scale(0.08)">
         <circle cx="48" cy="115" r="16" />
         <circle cx="252" cy="115" r="16" />
