@@ -48,6 +48,16 @@ items) with **enhanced notes**. Personal **knowledge hub** (PDF, text/markdown/C
 that flag contradictions between sources. **Briefing**: upcoming calendar meetings with suggested sources. Audio is never stored;
 transcripts are private to the person who ran the session.
 
+**Saathi Live v2 (2026-10-12):** streaming transcription with `gemini-3.5-transcribe-live-preview` over a WebSocket (browser
+AudioWorklet → 16 kHz PCM → API → Gemini Live), so words appear while people speak and lines are final ~0.7 s after a pause;
+custom vocabulary from people, drawing numbers and labels. Faster answers: regional embeddings (asia-south1), one embedding per
+question, per-meeting in-memory source cache with hybrid (vector + keyword) ranking, workspace search in parallel, minimal thinking
+and a hedged second call for tail latency (median ~4.5 s from the question being said to the answer on screen). Contextual
+knowledge indexing (title + section + summary per chunk, overview chunk, parallel embedding: 20 chunks in < 1 s). Recording
+notice: chime + Gemini TTS spoken notice (EN/HI, cached), attendee notification, copyable chat notice. Calendar: "Start Saathi
+Live" on every calendar event and a prompt when a synced meeting starts. Timing insight per line, per answer, per session and
+in Admin → Impact.
+
 **Still planned:** B9 inspection dossier, B11 expiry radar, A2 approvals, A4 voice out, A6 translation.
 
 ---

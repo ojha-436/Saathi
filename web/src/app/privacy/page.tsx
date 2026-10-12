@@ -122,10 +122,12 @@ export default async function PrivacyPage() {
               </li>
               <li>Voice dictation: audio is sent to our AI provider only to produce the text and is not stored. Voice notes attached to a plant record are stored with that record.</li>
               <li>
-                Saathi Live (meeting assistant): when you start it, audio from your microphone and, if you choose to share it, the meeting tab is sent in
-                short pieces to our AI provider to be transcribed. <b>Audio is not stored.</b> The transcript, the questions Saathi detected and its answers are
+                Saathi Live (meeting assistant): when you start it, audio from your microphone and, if you choose to share it, the meeting tab is
+                streamed to our AI provider to be transcribed as people speak. <b>Audio is not stored.</b> A chime and a short spoken notice play when
+                it starts listening (you can turn this off), and Saathi users invited to the calendar meeting are told it is being transcribed. The transcript, the questions Saathi detected and its answers are
                 stored for you only. When you end the meeting, the summary, decisions, action items and enhanced notes are shared with the people you pick.
-                Please tell the other participants that the meeting is being transcribed.
+                Please tell the other participants that the meeting is being transcribed. If you allow it, Saathi offers to start Live when a meeting from
+                your synced calendar begins.
               </li>
               <li>
                 Your knowledge hub: files you add (PDFs, notes, images, recordings), the text Saathi reads from them and their labels. They are private to

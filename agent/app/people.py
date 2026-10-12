@@ -87,6 +87,8 @@ class SettingsIn(BaseModel):
     quiet_hours: dict | None = None  # {"enabled": bool, "start": "20:00", "end": "08:00"}
     defaults: dict | None = None  # {"dm": "all", "group": "all", "channel": "mentions"}
     snooze: dict | None = None  # {"key": "task:abc", "until": ISO time or null to unsnooze}
+    live_prompt: bool | None = None  # offer Saathi Live when a synced calendar meeting starts
+    live_announce: bool | None = None  # play the spoken recording notice when Saathi Live starts listening
 
 
 @router.post("/settings")
@@ -115,6 +117,10 @@ def update_settings(body: SettingsIn, user=Depends(current_user)):
 
         until = ai.parse_iso(body.snooze.get("until"))
         update[f"snoozed.{key.replace('/', '|').replace('.', '_')}"] = until.isoformat() if until else firestore.DELETE_FIELD
+    if body.live_prompt is not None:
+        update["live_prompt"] = body.live_prompt
+    if body.live_announce is not None:
+        update["live_announce"] = body.live_announce
     if body.defaults is not None:
         update["defaults"] = {k: v for k, v in body.defaults.items() if k in ("dm", "group", "channel") and v in NOTIFY_LEVELS}
     if ref.get().exists:

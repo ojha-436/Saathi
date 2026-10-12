@@ -26,8 +26,9 @@ def _result(d: dict, score: float) -> dict:
     }
 
 
-def search(uid: str, query: str, k: int = 8) -> list[dict]:
-    qv = ai.embed([query], task="RETRIEVAL_QUERY")[0]
+def search(uid: str, query: str, k: int = 8, qv: list[float] | None = None) -> list[dict]:
+    """qv: the query's embedding when the caller already has it (saves one embedding call)."""
+    qv = qv or ai.embed([query], task="RETRIEVAL_QUERY")[0]
     scored: dict[str, tuple[float, dict]] = {}
 
     vq = (

@@ -141,7 +141,9 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v3
       - name: Deploy saathi-api (keeps existing env vars and secrets)
         run: |
+          # --timeout/--session-affinity: Saathi Live streams meeting audio over a WebSocket for up to an hour
           gcloud run deploy saathi-api --source agent --region "$REGION" --project "$PROJECT_ID" --quiet \
+            --timeout 3600 --session-affinity \
             --update-labels "managed-by=github-actions,commit-sha=${GITHUB_SHA::7}"
       - name: Smoke test
         run: |

@@ -15,7 +15,7 @@ export type View =
   | { kind: "quality"; recordId?: string }
   | { kind: "decisions"; id?: string }
   | { kind: "handover"; chatId: string; id?: string }
-  | { kind: "live"; sessionId?: string }
+  | { kind: "live"; sessionId?: string; eventId?: string }
   | { kind: "gmail" }
   | { kind: "calendar" }
   | { kind: "drive" }

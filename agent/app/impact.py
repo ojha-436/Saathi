@@ -54,6 +54,20 @@ def impact(days: int = 30, admin=Depends(admin_user)):
     drawings = [s.to_dict() for s in _org_q("drawings", org).stream()]
     superseded_revs = sum(1 for d in drawings for r in d.get("revisions", []) if r.get("status") == "superseded")
 
+    live_rows = [x for x in _org_q("live_sessions", org).stream() if x.get("started_at") and x.get("started_at") >= since]
+    fin, ans, heard = [], [], []
+    for x in live_rows[:50]:
+        for g in x.reference.collection("segments").limit(200).stream():
+            t = g.get("timing") or {}
+            if t.get("finalize_ms") is not None:
+                fin.append(t["finalize_ms"])
+        for c in x.reference.collection("cards").stream():
+            t = c.get("timing") or {}
+            if t.get("total_ms") is not None:
+                ans.append(t["total_ms"])
+            if t.get("heard_to_answer_ms") is not None:
+                heard.append(t["heard_to_answer_ms"])
+
     n = {
         "records": len(recent),
         "cited_answers": len(cited),
@@ -82,5 +96,9 @@ def impact(days: int = 30, admin=Depends(admin_user)):
                  "tasks_done": sum(1 for t in tasks if t.get("status") == "done" and t.get("done_at") and t["done_at"] >= since)},
         "drawing_control": {"qr_scans": len(scans), "blocked_scans": sum(1 for s in scans if s.get("verdict") == "superseded"),
                             "superseded_revisions_guarded": superseded_revs, "drawings_in_register": len(drawings)},
+        "live": {"sessions": len(live_rows), "answers": len(ans),
+                 "line_final_s": round(median(fin) / 1000, 1) if fin else None,
+                 "answer_s": round(median(ans) / 1000, 1) if ans else None,
+                 "heard_to_answer_s": round(median(heard) / 1000, 1) if heard else None},
         "time_saved": {"hours": round(saved_min / 60, 1), "assumptions_min": ASSUME, "counts": n},
     }

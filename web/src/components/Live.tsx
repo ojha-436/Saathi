@@ -9,15 +9,13 @@ import {
   AlertTriangle, ArrowLeft, CalendarDays, Check, CheckCircle2, DriveIcon, FileText, FileUp, Loader2, Mail, Plus, Radar, ScrollText, Search, Send,
   Sparkles, Trash2, Video, X,
 } from "@/lib/icons";
-import type { Briefing, KnowledgeItem, LiveCard, LiveSegment, LiveSession, LiveSessionRow, SourceSuggestion, TopicWiki } from "@/lib/types";
+import type { Briefing, KnowledgeItem, LiveCard, LiveEvent, LiveSegment, LiveSession, LiveSessionRow, SourceSuggestion, TopicWiki } from "@/lib/types";
 import { rememberKnowledge } from "@/lib/knowledgeNames";
-import { audioExt } from "@/lib/voice";
-import { CiteChip } from "./bits";
+import { CiteChip, Switch } from "./bits";
 import { useWs } from "./ctx";
 import { Modal, ModalHeader } from "./Dialogs";
 import { Markdown } from "./Markdown";
 
-const CHUNK_MS = 12_000;
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "");
 
 type Source = { ref: string; name: string; kind: "knowledge" | "drive" | "file" | "meeting" | "other"; sub?: string };
@@ -236,126 +234,204 @@ function KnowledgeHub({ items, reload }: { items: KnowledgeItem[]; reload: () =>
 // ---------------- recording ----------------
 
 type RecState = "idle" | "starting" | "recording" | "paused";
+type StreamHandlers = {
+  onInterim: (text: string) => void;
+  onFinal: (seg: LiveSegment) => void;
+  onCard: (card: LiveCard) => void;
+  onThinking: (q: string) => void;
+  onUnanswered: (q: string) => void;
+  onError: (msg: string) => void;
+  onConn: (state: "connecting" | "live" | "reconnecting" | "closed") => void;
+};
 
-/** Microphone (+ optionally the meeting tab's audio) mixed into one stream and cut into standalone chunks. */
-function useLiveRecorder(onChunk: (blob: Blob) => void, onError: (msg: string) => void) {
+/** Microphone (+ optionally the meeting tab) mixed at 16 kHz and streamed as PCM over a WebSocket to the API, which feeds
+ *  Gemini Live transcription. Words come back while people speak; finished lines, detected questions and answers follow. */
+function useStreamRecorder(sessionId: string, h: StreamHandlers) {
   const [state, setState] = useState<RecState>("idle");
   const [tab, setTab] = useState(false);
   const [level, setLevel] = useState(0);
   const ctx = useRef<AudioContext | null>(null);
-  const dest = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const mixer = useRef<GainNode | null>(null);
   const streams = useRef<MediaStream[]>([]);
-  const rec = useRef<MediaRecorder | null>(null);
+  const ws = useRef<WebSocket | null>(null);
+  const paused = useRef(false);
   const running = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const raf = useRef<number | null>(null);
-  const cb = useRef(onChunk);
+  const tries = useRef(0);
+  const hr = useRef(h);
   useEffect(() => {
-    cb.current = onChunk;
-  }, [onChunk]);
+    hr.current = h;
+  }, [h]);
 
-  // Each chunk is its own recorder run, so every upload is a complete, playable file.
-  const cycle = useRef<() => void>(() => {});
+  const connect = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
-    cycle.current = () => {
-      if (!dest.current || !running.current) return;
-      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) => MediaRecorder.isTypeSupported(m));
-      const r = new MediaRecorder(dest.current.stream, mime ? { mimeType: mime } : undefined);
-      const parts: Blob[] = [];
-      r.ondataavailable = (e) => e.data.size && parts.push(e.data);
-      r.onstop = () => {
-        if (parts.length) cb.current(new Blob(parts, { type: r.mimeType || "audio/webm" }));
-        if (running.current) cycle.current();
+    connect.current = async () => {
+      hr.current.onConn(tries.current ? "reconnecting" : "connecting");
+      const token = await getFbAuth().currentUser?.getIdToken();
+      const sock = new WebSocket(`${apiUrl().replace(/^http/, "ws")}/api/live/ws`);
+      sock.binaryType = "arraybuffer";
+      sock.onopen = () => sock.send(JSON.stringify({ token, session_id: sessionId }));
+      sock.onmessage = (ev) => {
+        const m = JSON.parse(ev.data as string);
+        if (m.type === "ready") {
+          tries.current = 0;
+          hr.current.onConn("live");
+        } else if (m.type === "interim") hr.current.onInterim(m.text);
+        else if (m.type === "final") hr.current.onFinal(m.segment);
+        else if (m.type === "card") hr.current.onCard(m.card);
+        else if (m.type === "thinking") hr.current.onThinking(m.question);
+        else if (m.type === "unanswered") hr.current.onUnanswered(m.question);
+        else if (m.type === "error") hr.current.onError(m.message);
       };
-      rec.current = r;
-      r.start();
-      timer.current = setTimeout(() => r.state === "recording" && r.stop(), CHUNK_MS);
+      sock.onclose = (ev) => {
+        if (ws.current !== sock) return;
+        if (running.current && ev.code !== 4403 && tries.current < 8) {
+          tries.current += 1;
+          setTimeout(() => running.current && connect.current(), Math.min(8000, 500 * 2 ** tries.current));
+        } else hr.current.onConn("closed");
+      };
+      ws.current = sock;
     };
-  }, []);
+  }, [sessionId]);
 
-  const attach = useCallback((s: MediaStream) => {
-    if (!ctx.current || !dest.current) return;
-    ctx.current.createMediaStreamSource(s).connect(dest.current);
-    streams.current.push(s);
+  const attach = useCallback((st: MediaStream) => {
+    if (!ctx.current || !mixer.current) return;
+    ctx.current.createMediaStreamSource(st).connect(mixer.current);
+    streams.current.push(st);
   }, []);
 
   async function start() {
     setState("starting");
     try {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-      ctx.current = new AudioContext();
-      dest.current = ctx.current.createMediaStreamDestination();
-      const analyser = ctx.current.createAnalyser();
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      const ac = new AudioContext({ sampleRate: 16000 });
+      await ac.audioWorklet.addModule("/pcm-worklet.js");
+      const node = new AudioWorkletNode(ac, "pcm-worklet");
+      const gain = ac.createGain();
+      const analyser = ac.createAnalyser();
       analyser.fftSize = 256;
-      ctx.current.createMediaStreamSource(mic).connect(analyser);
+      gain.connect(node);
+      gain.connect(analyser);
+      node.port.onmessage = (e) => {
+        if (!paused.current && ws.current?.readyState === WebSocket.OPEN) ws.current.send(e.data as ArrayBuffer);
+      };
+      ctx.current = ac;
+      mixer.current = gain;
       attach(mic);
       const buf = new Uint8Array(analyser.frequencyBinCount);
       const tick = () => {
         analyser.getByteFrequencyData(buf);
-        setLevel(Math.min(1, buf.reduce((a, b) => a + b, 0) / buf.length / 60));
+        setLevel(Math.min(1, buf.reduce((x, y) => x + y, 0) / buf.length / 60));
         raf.current = requestAnimationFrame(tick);
       };
       tick();
       running.current = true;
-      cycle.current();
+      paused.current = false;
+      await connect.current();
       setState("recording");
     } catch {
       setState("idle");
-      onError("Saathi needs microphone access to listen. Allow it in the browser's address bar.");
+      hr.current.onError("Saathi needs microphone access to listen. Allow it in the browser's address bar.");
     }
   }
 
   async function addTab() {
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      if (!s.getAudioTracks().length) {
-        s.getTracks().forEach((t) => t.stop());
-        onError("No tab audio. Share the meeting tab and tick “Also share tab audio”.");
+      const st = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      if (!st.getAudioTracks().length) {
+        st.getTracks().forEach((t) => t.stop());
+        hr.current.onError("No tab audio. Share the meeting tab and tick “Also share tab audio”.");
         return;
       }
-      attach(s);
+      attach(st);
       setTab(true);
-      s.getAudioTracks()[0].addEventListener("ended", () => setTab(false));
+      st.getAudioTracks()[0].addEventListener("ended", () => setTab(false));
     } catch {
       /* the person cancelled the picker */
     }
   }
 
   function pause() {
-    running.current = false;
-    if (timer.current) clearTimeout(timer.current);
-    if (rec.current?.state === "recording") rec.current.stop();
+    paused.current = true;
     setState("paused");
   }
 
   function resume() {
-    running.current = true;
-    cycle.current();
+    paused.current = false;
     setState("recording");
   }
 
-  const stop = useCallback(() => {
+  /** Stops capture; the socket stays open briefly so answers to the last lines still arrive. */
+  const stop = useCallback(async (waitMs = 0) => {
     running.current = false;
-    if (timer.current) clearTimeout(timer.current);
-    if (rec.current?.state === "recording") rec.current.stop();
     if (raf.current) cancelAnimationFrame(raf.current);
-    streams.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+    streams.current.forEach((st) => st.getTracks().forEach((t) => t.stop()));
     streams.current = [];
     void ctx.current?.close();
     ctx.current = null;
-    dest.current = null;
+    mixer.current = null;
     setTab(false);
     setLevel(0);
     setState("idle");
+    const sock = ws.current;
+    if (sock && sock.readyState === WebSocket.OPEN) {
+      sock.send(JSON.stringify({ type: "stop" }));
+      if (waitMs) await new Promise((r) => { sock.addEventListener("close", r); setTimeout(r, waitMs); });
+      sock.close();
+    }
+    ws.current = null;
   }, []);
 
-  useEffect(() => stop, [stop]);
+  useEffect(() => () => void stop(), [stop]);
   return { state, tab, level, start, addTab, pause, resume, stop };
+}
+
+/** A two-tone chime, then the spoken notice (Gemini TTS), so people in the room know the meeting is being transcribed. */
+function useNotice() {
+  const audio = useRef<string | null>(null);
+  const prefetch = useCallback(async (lang: "en" | "hi") => {
+    try {
+      const token = await getFbAuth().currentUser?.getIdToken();
+      const res = await fetch(`${apiUrl()}/api/live/announce`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ lang }) });
+      if (res.ok) audio.current = URL.createObjectURL(await res.blob());
+    } catch {
+      /* the chime still plays */
+    }
+  }, []);
+  const play = useCallback(async () => {
+    try {
+      const ac = new AudioContext();
+      [880, 1320].forEach((f, i) => {
+        const o = ac.createOscillator();
+        const g = ac.createGain();
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, ac.currentTime + i * 0.22);
+        g.gain.exponentialRampToValueAtTime(0.25, ac.currentTime + i * 0.22 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + i * 0.22 + 0.35);
+        o.connect(g).connect(ac.destination);
+        o.start(ac.currentTime + i * 0.22);
+        o.stop(ac.currentTime + i * 0.22 + 0.4);
+      });
+      await new Promise((r) => setTimeout(r, 650));
+      void ac.close();
+      if (audio.current) await new Audio(audio.current).play();
+    } catch {
+      /* autoplay blocked: the on-screen notice remains */
+    }
+  }, []);
+  return { prefetch, play };
+}
+
+const secs = (ms?: number | null) => (ms == null ? "–" : ms < 1000 ? `${(ms / 1000).toFixed(1)} s` : `${(ms / 1000).toFixed(1)} s`);
+
+function median(xs: (number | null | undefined)[]) {
+  const v = xs.filter((x): x is number => typeof x === "number").sort((a, b) => a - b);
+  return v.length ? v[Math.floor(v.length / 2)] : null;
 }
 
 // ---------------- HUD ----------------
 
-function Hud({ cards, onDismiss, onAsk, size, setSize, dark }: { cards: LiveCard[]; onDismiss: (id: string) => void; onAsk: (q: string) => Promise<void>; size: number; setSize: (n: number) => void; dark?: boolean }) {
+function Hud({ cards, thinking, onDismiss, onAsk, size, setSize, dark }: { cards: LiveCard[]; thinking: string[]; onDismiss: (id: string) => void; onAsk: (q: string) => Promise<void>; size: number; setSize: (n: number) => void; dark?: boolean }) {
   const [q, setQ] = useState("");
   const [asking, setAsking] = useState(false);
   const shown = cards.filter((c) => !c.dismissed).slice().reverse();
@@ -368,7 +444,12 @@ function Hud({ cards, onDismiss, onAsk, size, setSize, dark }: { cards: LiveCard
         <button onClick={() => setSize(Math.min(22, size + 1))} className="rounded px-1.5 text-xs font-bold opacity-70 hover:opacity-100" aria-label="Bigger text">A+</button>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3" style={{ fontSize: size }} aria-live="polite">
-        {shown.length === 0 && <p className={clsx("pt-6 text-center text-sm", dark ? "text-white/60" : "text-muted")}>When someone asks a question, the answer from your sources appears here.</p>}
+        {thinking.map((q) => (
+          <div key={q} className={clsx("flex items-center gap-2 rounded-xl p-3 text-sm", dark ? "bg-white/5 text-white/70" : "border border-dashed border-border text-muted")}>
+            <Loader2 size={14} className="shrink-0 animate-spin" /> <span className="min-w-0 truncate">Looking up: {q}</span>
+          </div>
+        ))}
+        {shown.length === 0 && thinking.length === 0 && <p className={clsx("pt-6 text-center text-sm", dark ? "text-white/60" : "text-muted")}>When someone asks a question, the answer from your sources appears here.</p>}
         {shown.map((c) => (
           <article key={c.id} className={clsx("ws-pop rounded-xl p-3", dark ? "bg-white/10" : "border border-border bg-surface")}>
             <div className="flex items-start gap-2">
@@ -380,6 +461,12 @@ function Hud({ cards, onDismiss, onAsk, size, setSize, dark }: { cards: LiveCard
               <Markdown text={c.answer} />
             </div>
             {c.refs.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{c.refs.map((r) => <CiteChip key={r} refId={r} />)}</div>}
+            {c.timing && (
+              <p className={clsx("mt-1.5 text-[11px] tabular-nums", dark ? "text-white/45" : "text-muted")} title="Embed the question → search your sources → write the answer">
+                ⚡ {c.timing.heard_to_answer_ms ? `${secs(c.timing.heard_to_answer_ms)} after it was said` : `${secs(c.timing.total_ms)}`} · search {secs((c.timing.embed_ms ?? 0) + (c.timing.retrieve_ms ?? 0))} · write {secs(c.timing.answer_ms)}
+                {c.timing.sources_searched ? ` · ${c.timing.sources_searched} passages` : ""}
+              </p>
+            )}
           </article>
         ))}
       </div>
@@ -437,21 +524,50 @@ function usePip() {
 
 // ---------------- live session ----------------
 
+function StatsStrip({ segments, cards }: { segments: LiveSegment[]; cards: LiveCard[] }) {
+  const fin = median(segments.map((g) => g.timing?.finalize_ms));
+  const heard = median(cards.map((c) => c.timing?.heard_to_answer_ms));
+  const total = median(cards.map((c) => c.timing?.total_ms));
+  const search = median(cards.map((c) => (c.timing ? (c.timing.embed_ms ?? 0) + (c.timing.retrieve_ms ?? 0) : null)));
+  const write = median(cards.map((c) => c.timing?.answer_ms));
+  if (!segments.length && !cards.length) return null;
+  const item = (label: string, value: string, tip: string) => (
+    <span className="flex items-baseline gap-1" title={tip}>
+      <span className="text-muted">{label}</span> <b className="tabular-nums">{value}</b>
+    </span>
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-canvas/60 px-4 py-1.5 text-[12px] lg:px-6" aria-label="Timing">
+      <span className="font-semibold">⏱ Timing</span>
+      {item("Words", "live", "Words appear while people speak (streaming transcription)")}
+      {item("Line final", secs(fin), "Median time from the speaker pausing to the line being final")}
+      {cards.length > 0 && item("Answer after question", secs(heard ?? total), "Median time from the question being said to the answer on screen")}
+      {cards.length > 0 && item("Search", secs(search), "Embedding the question and searching your sources (median)")}
+      {cards.length > 0 && item("Write", secs(write), "Gemini writing the answer (median)")}
+      <span className="text-muted">{segments.length} lines · {cards.length} answers</span>
+    </div>
+  );
+}
+
 function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
-  const { toast, open, users, uid } = useWs();
+  const { toast, open, users, uid, settings } = useWs();
   const [s, setS] = useState<LiveSession | null>(null);
   const [segments, setSegments] = useState<LiveSegment[]>([]);
+  const [interim, setInterim] = useState("");
   const [cards, setCards] = useState<LiveCard[]>([]);
+  const [thinking, setThinking] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
-  const [pending, setPending] = useState(0);
+  const [conn, setConn] = useState<"connecting" | "live" | "reconnecting" | "closed" | null>(null);
   const [size, setSize] = useState(15);
   const [ending, setEnding] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [attendees, setAttendees] = useState<string[]>([]);
   const [seconds, setSeconds] = useState(0);
-  const seq = useRef(0);
-  const queue = useRef<Promise<void>>(Promise.resolve());
+  const [noticeLang, setNoticeLang] = useState<"en" | "hi">("en");
   const transcriptEnd = useRef<HTMLDivElement>(null);
   const pip = usePip();
+  const { prefetch, play } = useNotice();
+  const announce = settings.live_announce ?? true;
 
   useEffect(() => {
     api<LiveSession>(`/api/live/sessions/${id}`)
@@ -460,37 +576,32 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
         setSegments(d.segments);
         setCards(d.cards);
         setNotes(d.notes ?? "");
-        seq.current = (d.segments.at(-1)?.seq ?? -1) + 1;
       })
       .catch((e) => toast((e as Error).message));
   }, [id, toast]);
+  useEffect(() => {
+    if (announce) void prefetch(noticeLang);
+  }, [announce, noticeLang, prefetch]);
 
-  const send = useCallback(
-    (blob: Blob) => {
-      const n = seq.current++;
-      setPending((p) => p + 1);
-      queue.current = queue.current.then(async () => {
-        try {
-          const token = await getFbAuth().currentUser?.getIdToken();
-          const form = new FormData();
-          form.append("seq", String(n));
-          form.append("audio", blob, `chunk.${audioExt(blob.type)}`);
-          const res = await fetch(`${apiUrl()}/api/live/sessions/${id}/audio`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-          if (res.ok) {
-            const d = (await res.json()) as { segment: LiveSegment | null; cards: LiveCard[] };
-            if (d.segment) setSegments((x) => [...x, d.segment!]);
-            if (d.cards.length) setCards((x) => [...x, ...d.cards]);
-          } else if (res.status === 429) toast("Slow down: too many chunks per minute.");
-        } catch {
-          /* network blip: this chunk is lost, the next one continues */
-        } finally {
-          setPending((p) => p - 1);
-        }
-      });
-    },
-    [id, toast],
+  const handlers = useMemo<StreamHandlers>(
+    () => ({
+      onInterim: setInterim,
+      onFinal: (seg) => {
+        setInterim("");
+        setSegments((x) => [...x, seg]);
+      },
+      onCard: (c) => {
+        setThinking((t) => t.filter((q) => q !== c.question));
+        setCards((x) => [...x, c]);
+      },
+      onThinking: (q) => setThinking((t) => [...t, q]),
+      onUnanswered: (q) => setThinking((t) => t.filter((x) => x !== q)),
+      onError: toast,
+      onConn: setConn,
+    }),
+    [toast],
   );
-  const rec = useLiveRecorder(send, toast);
+  const rec = useStreamRecorder(id, handlers);
 
   useEffect(() => {
     if (rec.state !== "recording") return;
@@ -499,15 +610,18 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
   }, [rec.state]);
   useEffect(() => {
     transcriptEnd.current?.scrollIntoView({ block: "end" }); // braces: newer Chrome returns a Promise here, which React would treat as a cleanup
-  }, [segments.length]);
+  }, [segments.length, interim]);
 
   const ask = useCallback(
     async (q: string) => {
+      setThinking((t) => [...t, q]);
       try {
         const c = await api<LiveCard>(`/api/live/sessions/${id}/ask`, { json: { question: q } });
         setCards((x) => [...x, c]);
       } catch (e) {
         toast((e as Error).message);
+      } finally {
+        setThinking((t) => t.filter((x) => x !== q));
       }
     },
     [id, toast],
@@ -520,13 +634,16 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
     [id],
   );
 
+  async function begin() {
+    if (announce) void play();
+    await rec.start();
+  }
+
   async function finish(save: boolean) {
-    rec.stop();
     pip.close();
-    setEnding(true);
+    setFinishing(true);
     try {
-      await new Promise((r) => setTimeout(r, 400)); // let the last chunk queue up after the recorder stops
-      await queue.current;
+      await rec.stop(6000); // the last lines' answers can still arrive
       const r = await api<{ meeting_id: string | null }>(`/api/live/sessions/${id}/end`, { json: { notes, attendee_ids: attendees, save } });
       if (r.meeting_id) {
         toast("Meeting notes ready.");
@@ -534,14 +651,15 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
       } else onExit();
     } catch (e) {
       toast((e as Error).message);
-      setEnding(false);
+      setFinishing(false);
     }
   }
 
   if (!s) return <p className="flex items-center gap-2 p-6 text-sm text-muted"><Loader2 size={15} className="animate-spin" /> Loading…</p>;
   const live = s.status === "live";
   const mm = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-  const hud = <Hud cards={cards} onDismiss={dismiss} onAsk={ask} size={size} setSize={setSize} dark={!!pip.win} />;
+  const noticeText = `This meeting is being transcribed by Saathi for ${users[uid]?.name ?? "me"}. Audio isn't stored.`;
+  const hud = <Hud cards={cards} thinking={thinking} onDismiss={dismiss} onAsk={ask} size={size} setSize={setSize} dark={!!pip.win} />;
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label="Live meeting">
@@ -553,7 +671,7 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
             {rec.state === "recording" ? (
               <>
                 <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rust opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-rust" /></span>
-                Listening · {mm}
+                {conn === "live" ? "Listening" : conn === "reconnecting" ? "Reconnecting…" : "Connecting…"} · {mm}
                 <span className="ml-1 inline-block h-1.5 w-16 overflow-hidden rounded bg-canvas"><span className="block h-full bg-moss transition-[width]" style={{ width: `${rec.level * 100}%` }} /></span>
                 {rec.tab ? " · mic + meeting tab" : " · mic only"}
               </>
@@ -562,15 +680,25 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
             ) : (
               `Ended · ${when(s.started_at)}`
             )}
-            {pending > 0 && <span> · transcribing…</span>}
           </p>
         </div>
         {live && rec.state === "idle" && (
-          <button onClick={rec.start} className="flex h-9 items-center gap-1.5 rounded-lg bg-rust px-3 text-[13px] font-semibold text-white">
-            <Radar size={15} /> Start listening
-          </button>
+          <>
+            {announce && (
+              <div className="flex rounded-lg border border-border p-0.5 text-[11px] font-semibold" role="group" aria-label="Notice language" title="Language of the spoken recording notice">
+                {(["en", "hi"] as const).map((l) => (
+                  <button key={l} onClick={() => setNoticeLang(l)} aria-pressed={noticeLang === l} className={clsx("h-7 rounded-md px-2", noticeLang === l ? "bg-ink text-white" : "text-muted")}>
+                    {l === "en" ? "EN" : "हिं"}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={begin} className="flex h-9 items-center gap-1.5 rounded-lg bg-rust px-3 text-[13px] font-semibold text-white">
+              <Radar size={15} /> Start listening
+            </button>
+          </>
         )}
-        {live && rec.state !== "idle" && (
+        {live && rec.state !== "idle" && rec.state !== "starting" && (
           <>
             {!rec.tab && rec.state === "recording" && (
               <button onClick={rec.addTab} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-semibold hover:bg-hover" title="Share the Meet / Teams / Zoom tab with its audio so Saathi hears everyone">
@@ -603,21 +731,41 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
         )}
       </header>
       {live && (
-        <p className="border-b border-border bg-saffron-soft/60 px-4 py-1.5 text-[12px] text-saffron-ink lg:px-6">
-          Let everyone know Saathi is transcribing. Audio isn&rsquo;t stored; the transcript stays private to you until you share the notes.
-        </p>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-saffron-soft/60 px-4 py-1.5 text-[12px] text-saffron-ink lg:px-6">
+          <span className="min-w-0 flex-1">
+            {announce ? "A chime and a spoken notice play when Saathi starts listening. " : ""}Let everyone know Saathi is transcribing. Audio isn&rsquo;t stored; the transcript stays private to you.
+          </span>
+          <button
+            onClick={async () => {
+              await navigator.clipboard.writeText(noticeText).catch(() => {});
+              toast("Notice copied. Paste it in the meeting chat.");
+            }}
+            className="rounded-md border border-saffron/40 px-2 py-0.5 font-semibold hover:bg-saffron-soft"
+          >
+            Copy notice for meeting chat
+          </button>
+        </div>
       )}
+      <StatsStrip segments={segments} cards={cards} />
       <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_400px]">
         <div className="flex min-h-0 flex-col border-border lg:border-r">
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Transcript</h2>
-            {segments.length === 0 ? (
-              <p className="text-sm text-muted">{live ? "Start listening. Text appears every ~12 seconds." : "No transcript."}</p>
+            {segments.length === 0 && !interim ? (
+              <p className="text-sm text-muted">{live ? "Start listening. Words appear as people speak." : "No transcript."}</p>
             ) : (
               <div className="space-y-2 text-[14.5px] leading-relaxed">
                 {segments.map((g) => (
-                  <p key={g.seq} className="whitespace-pre-wrap">{g.text}</p>
+                  <p key={g.seq} className="group whitespace-pre-wrap">
+                    {g.text}
+                    {g.timing?.finalize_ms != null && (
+                      <span className="ml-2 align-middle text-[10px] tabular-nums text-muted opacity-0 transition group-hover:opacity-100" title="Time from the speaker pausing to this line being final">
+                        final in {secs(g.timing.finalize_ms)}
+                      </span>
+                    )}
+                  </p>
                 ))}
+                {interim && <p className="whitespace-pre-wrap text-muted">{interim}<span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-muted/60 align-middle" /></p>}
               </div>
             )}
             <div ref={transcriptEnd} />
@@ -639,8 +787,8 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
       </div>
       {pip.win && createPortal(hud, pip.win.document.body)}
       {ending && (
-        <Modal title="End meeting" onClose={() => setEnding(false)}>
-          <ModalHeader title="End and write up the meeting" sub="Saathi turns the transcript and your notes into a summary, decisions, action items and enhanced notes." onClose={() => setEnding(false)} />
+        <Modal title="End meeting" onClose={() => !finishing && setEnding(false)}>
+          <ModalHeader title="End and write up the meeting" sub="Saathi turns the transcript and your notes into a summary, decisions, action items and enhanced notes." onClose={() => !finishing && setEnding(false)} />
           <div className="space-y-3 p-5">
             <div>
               <p className="text-sm font-medium">Share the notes with</p>
@@ -657,9 +805,9 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
               <p className="mt-1 text-[11px] text-muted">Only the summary, decisions, actions and enhanced notes are shared. The raw transcript stays with you.</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2 pt-2">
-              <button onClick={() => finish(false)} className="h-9 rounded-lg border border-border px-3 text-[13px] font-semibold hover:bg-hover">End without notes</button>
-              <button onClick={() => finish(true)} className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-[13px] font-semibold text-white hover:bg-brand-strong">
-                <CheckCircle2 size={15} /> End and write notes
+              <button disabled={finishing} onClick={() => finish(false)} className="h-9 rounded-lg border border-border px-3 text-[13px] font-semibold hover:bg-hover disabled:opacity-50">End without notes</button>
+              <button disabled={finishing} onClick={() => finish(true)} className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-[13px] font-semibold text-white hover:bg-brand-strong disabled:opacity-60">
+                {finishing ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {finishing ? "Writing notes…" : "End and write notes"}
               </button>
             </div>
           </div>
@@ -671,15 +819,45 @@ function SessionView({ id, onExit }: { id: string; onExit: () => void }) {
 
 // ---------------- home ----------------
 
-export function LiveView({ sessionId }: { sessionId?: string }) {
+function LivePrefs() {
+  const { settings, toast } = useWs();
+  const save = async (k: "live_prompt" | "live_announce", v: boolean) => {
+    try {
+      await api("/api/me/settings", { json: { [k]: v } });
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  return (
+    <section className="space-y-2 rounded-2xl border border-border bg-surface p-4 text-sm" aria-label="Live settings">
+      <label className="flex items-center justify-between gap-3">
+        <span>
+          <span className="font-semibold">Offer Saathi Live when a calendar meeting starts</span>
+          <span className="block text-xs text-muted">A notification at the start time of meetings from your synced Google Calendar.</span>
+        </span>
+        <Switch on={settings.live_prompt ?? true} onChange={(v) => save("live_prompt", v)} label="Offer Saathi Live at meeting start" />
+      </label>
+      <label className="flex items-center justify-between gap-3 border-t border-border pt-2">
+        <span>
+          <span className="font-semibold">Play a recording notice</span>
+          <span className="block text-xs text-muted">A chime and a short spoken notice (English or Hindi) when Saathi starts listening.</span>
+        </span>
+        <Switch on={settings.live_announce ?? true} onChange={(v) => save("live_announce", v)} label="Play a recording notice" />
+      </label>
+    </section>
+  );
+}
+
+export function LiveView({ sessionId, eventId }: { sessionId?: string; eventId?: string }) {
   const { open, toast } = useWs();
+  const [event, setEvent] = useState<LiveEvent | null>(null);
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
   const [sessions, setSessions] = useState<LiveSessionRow[]>([]);
   const [brief, setBrief] = useState<Briefing | null>(null);
   const [title, setTitle] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [suggested, setSuggested] = useState<SourceSuggestion[]>([]);
-  const [eventId, setEventId] = useState<string | null>(null);
+  const [linkedEvent, setLinkedEvent] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
@@ -698,6 +876,19 @@ export function LiveView({ sessionId }: { sessionId?: string }) {
   useEffect(() => {
     if (!sessionId) api<Briefing>("/api/live/briefing").then(setBrief).catch(() => setBrief({ connected: false, meetings: [] }));
   }, [sessionId]);
+  // Opened from the calendar (or the "meeting is starting" notification): prefill everything from the event
+  useEffect(() => {
+    if (!eventId || sessionId) return;
+    api<LiveEvent>(`/api/live/event/${eventId}`)
+      .then((e) => {
+        setEvent(e);
+        setTitle(e.title);
+        setLinkedEvent(e.id);
+        setPicked(e.sources.map((x) => x.ref));
+        setSuggested(e.sources);
+      })
+      .catch((err) => toast((err as Error).message));
+  }, [eventId, sessionId, toast]);
   // keep polling while uploads are being read
   useEffect(() => {
     if (!knowledge.some((k) => k.status === "processing")) return;
@@ -715,7 +906,7 @@ export function LiveView({ sessionId }: { sessionId?: string }) {
   async function start() {
     setStarting(true);
     try {
-      const r = await api<{ id: string }>("/api/live/sessions", { json: { title: title.trim() || "Meeting", context_refs: picked, event_id: eventId } });
+      const r = await api<{ id: string }>("/api/live/sessions", { json: { title: title.trim() || "Meeting", context_refs: picked, event_id: linkedEvent } });
       open({ kind: "live", sessionId: r.id });
     } catch (e) {
       toast((e as Error).message);
@@ -748,7 +939,7 @@ export function LiveView({ sessionId }: { sessionId?: string }) {
                       <button
                         onClick={() => {
                           setTitle(m.title);
-                          setEventId(m.id);
+                          setLinkedEvent(m.id);
                           setPicked(m.sources.map((x) => x.ref));
                           setSuggested(m.sources);
                           document.getElementById("live-title")?.focus();
@@ -769,6 +960,20 @@ export function LiveView({ sessionId }: { sessionId?: string }) {
 
           <section className="rounded-2xl border border-brand/25 bg-surface p-4" aria-label="Start">
             <h2 className="mb-2 flex items-center gap-1.5 text-sm font-bold"><Sparkles size={15} className="text-brand" /> Start a live meeting</h2>
+            {event && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-xs">
+                <CalendarDays size={14} className="text-muted" />
+                <span className="min-w-0 flex-1">
+                  From your calendar: <b>{event.title}</b> · {when(event.start)}
+                  {event.attendees.length ? ` · ${event.attendees.join(", ")}` : ""}
+                </span>
+                {event.meet_url && (
+                  <a href={event.meet_url} target="_blank" rel="noreferrer" className="flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 font-semibold hover:bg-hover">
+                    <Video size={12} /> Open meeting
+                  </a>
+                )}
+              </div>
+            )}
             <input id="live-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Meeting title, e.g. Bogie prototype weekly" aria-label="Meeting title" className="h-10 w-full rounded-lg border border-border px-3 text-sm outline-none focus:border-brand" />
             <p className="mb-1.5 mt-3 text-[13px] font-semibold">Include in meeting context</p>
             <SourcePicker sources={sources} picked={picked} onChange={setPicked} suggested={suggested} />
@@ -780,6 +985,8 @@ export function LiveView({ sessionId }: { sessionId?: string }) {
           </section>
 
           <KnowledgeHub items={knowledge} reload={reload} />
+
+          <LivePrefs />
 
           {sessions.length > 0 && (
             <section>
