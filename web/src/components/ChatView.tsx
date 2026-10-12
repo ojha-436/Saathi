@@ -818,21 +818,6 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             <button type="button" className={tb(false)} title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!ed.can().redo()} onClick={() => ed.chain().focus().redo().run()}><Redo size={17} /></button>
             <span className="mx-1 h-4 w-px bg-border" aria-hidden />
             <select
-              aria-label="Text style"
-              value={heading}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "0") ed.chain().focus().setParagraph().run();
-                else ed.chain().focus().setHeading({ level: Number(v) as 1 | 2 | 3 }).run();
-              }}
-              className="h-8 rounded-md border border-border bg-surface px-1.5 text-xs text-ink"
-            >
-              <option value="0">Normal</option>
-              <option value="1">Heading 1</option>
-              <option value="2">Heading 2</option>
-              <option value="3">Heading 3</option>
-            </select>
-            <select
               aria-label="Font size"
               value={curSize}
               onChange={(e) => (e.target.value ? ed.chain().focus().setFontSize(`${e.target.value}px`).run() : ed.chain().focus().unsetFontSize().run())}
