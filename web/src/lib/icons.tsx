@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { PHOSPHOR } from "./phosphor-icons";
 
-// Phosphor Icons, "light" weight (https://phosphoricons.com, MIT licence). Names match the icons Saathi used
+// Phosphor Icons, "regular" weight (https://phosphoricons.com, MIT licence). Names match the icons Saathi used
 // before, so call sites only change their import path. To change the weight, regenerate phosphor-icons.ts.
 export type IconProps = { size?: number; strokeWidth?: number; fill?: string; className?: string; "aria-hidden"?: boolean | "true" | "false" };
 
