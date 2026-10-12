@@ -6,11 +6,12 @@ import { api, openFile } from "@/lib/api";
 import { getFbAuth, apiUrl } from "@/lib/firebase";
 import { timeShort } from "@/lib/format";
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, FileText, Gavel, Loader2, Lock, Plus, ScanText, ShieldCheck, Sparkles, X } from "@/lib/icons";
-import type { Drawing, PlantRecord, RecordFields, RecordLinks, RecordType } from "@/lib/types";
+import type { Drawing, Lesson, PlantRecord, RecordFields, RecordLinks, RecordType } from "@/lib/types";
 import { audioExt, transcribe, useRecorder } from "@/lib/voice";
 import { UserAvatar } from "./bits";
 import { useWs } from "./ctx";
 import { Modal, ModalHeader } from "./Dialogs";
+import { LessonsPanel, SimilarIncidents } from "./Knowledge";
 
 export const TYPE_LABEL: Record<RecordType, string> = { ncr: "Defect (NCR)", downtime: "Machine downtime", safety: "Safety near-miss" };
 const FLOW: Record<RecordType, string[]> = {
@@ -77,7 +78,7 @@ function MicGlyph({ size = 17 }: { size?: number }) {
 
 /* ---------------- Report dialog (snap-to-record) ---------------- */
 
-type Draft = { draft_id: string; type: RecordType; fields: RecordFields; links: RecordLinks };
+type Draft = { draft_id: string; type: RecordType; fields: RecordFields; links: RecordLinks; lessons?: Lesson[] };
 
 export function ReportDialog({ onClose, initialType = "ncr", chatId }: { onClose: () => void; initialType?: RecordType; chatId?: string }) {
   const { uid, users, account, toast, open } = useWs();
@@ -138,7 +139,7 @@ export function ReportDialog({ onClose, initialType = "ncr", chatId }: { onClose
   const rc = draft?.links.revision_check;
   const fieldList: [keyof RecordFields, string][] =
     type === "ncr"
-      ? [["part_name", "Part"], ["drawing_no", "Drawing no."], ["revision", "Revision"], ["job_no", "Job no."], ["heat_no", "Heat no."], ["quantity", "Quantity"], ["defect_type", "Defect type"], ["location", "Location"]]
+      ? [["part_name", "Part"], ["drawing_no", "Drawing no."], ["revision", "Revision"], ["job_no", "Job no."], ["heat_no", "Heat no."], ["vendor", "Vendor"], ["quantity", "Quantity"], ["defect_type", "Defect type"], ["location", "Location"]]
       : type === "downtime"
         ? [["machine", "Machine"], ["downtime_reason", "Reason"], ["location", "Line / bay"], ["job_no", "Job no."]]
         : [["location", "Location"], ["hazard", "Hazard"], ["machine", "Machine / area"]];
@@ -216,6 +217,7 @@ export function ReportDialog({ onClose, initialType = "ncr", chatId }: { onClose
               <FileText size={15} /> Test certificate for heat {fields.heat_no}: <b className="truncate">{draft.links.mtc.name}</b>
             </button>
           )}
+          {draft.lessons && <LessonsPanel lessons={draft.lessons} compact />}
           <label className="block text-sm font-medium">
             Title
             <input value={fields.title ?? ""} onChange={set("title")} className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm outline-none focus:border-brand" />
@@ -421,7 +423,7 @@ function RecordDetail({ r, onBack }: { r: PlantRecord; onBack: () => void }) {
 
   const f = r.fields;
   const rev = f.revision?.replace(/^rev(ision)?\.?\s*/i, "");
-  const rows = [["Part", f.part_name], ["Drawing", f.drawing_no && `${f.drawing_no}${rev ? ` Rev ${rev}` : ""}`], ["Job", f.job_no], ["Heat", f.heat_no], ["Machine", f.machine], ["Location", f.location], ["Quantity", f.quantity], ["Defect", f.defect_type], ["Reason", f.downtime_reason], ["Hazard", f.hazard]].filter(([, v]) => v) as [string, string][];
+  const rows = [["Part", f.part_name], ["Drawing", f.drawing_no && `${f.drawing_no}${rev ? ` Rev ${rev}` : ""}`], ["Job", f.job_no], ["Heat", f.heat_no], ["Vendor", f.vendor], ["Machine", f.machine], ["Location", f.location], ["Quantity", f.quantity], ["Defect", f.defect_type], ["Reason", f.downtime_reason], ["Hazard", f.hazard]].filter(([, v]) => v) as [string, string][];
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label={r.number}>
@@ -493,6 +495,9 @@ function RecordDetail({ r, onBack }: { r: PlantRecord; onBack: () => void }) {
                 </div>
               )}
             </section>
+            {r.type !== "safety" && (
+              <SimilarIncidents recordId={r.id} text={[f.title, f.description].filter(Boolean).join(". ")} fields={f} />
+            )}
             {r.type === "ncr" && (
               <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
                 <h2 className="text-sm font-bold">Containment &amp; corrective action</h2>

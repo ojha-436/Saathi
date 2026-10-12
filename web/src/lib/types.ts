@@ -161,6 +161,55 @@ export type AssistantMsg = {
   ts?: Timestamp;
   pending?: boolean;
   tasks?: string[];
+  charts?: Chart[];
+};
+
+/** A small analytic answer from BigQuery, drawn under the assistant's reply. */
+export type Chart = {
+  title: string;
+  unit: string;
+  metric: string;
+  rows: { label: string; value: number | null; n: number }[];
+  scope: string;
+  source: string;
+};
+
+export type Decision = {
+  id: string;
+  ref: string;
+  title: string;
+  topic?: string | null;
+  rationale?: string | null;
+  alternatives: string[];
+  decided_by?: string | null;
+  tags: string[];
+  decided_at?: string | null;
+  source_ref?: string | null;
+  source_type?: "chat" | "meeting";
+  where: string;
+  status: "active" | "superseded" | "dismissed";
+  superseded_by?: { id: string; title: string } | null;
+};
+
+/** A past NCR/downtime record shown as a lesson: what happened, why, and what fixed it. */
+export type Lesson = {
+  id: string;
+  ref: string;
+  number: string;
+  type: "ncr" | "downtime";
+  status: string;
+  title?: string | null;
+  part_name?: string | null;
+  drawing_no?: string | null;
+  defect_type?: string | null;
+  machine?: string | null;
+  vendor?: string | null;
+  root_cause?: string | null;
+  corrective_action?: string | null;
+  owner?: string | null;
+  reported?: string | null;
+  closed?: string | null;
+  score: number;
 };
 
 export type FileDoc = {
@@ -255,6 +304,7 @@ export type RecordFields = {
   revision?: string | null;
   job_no?: string | null;
   heat_no?: string | null;
+  vendor?: string | null;
   machine?: string | null;
   location?: string | null;
   quantity?: string | null;

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Copy, Globe, Hash, History, Loader2, Lock, MailPlus, RefreshCw, Settings2, ShieldCheck, Trash2, UserX, Users } from "@/lib/icons";
+import { BarChart3, Copy, Globe, Hash, History, Loader2, Lock, MailPlus, RefreshCw, Settings2, ShieldCheck, Trash2, UserX, Users } from "@/lib/icons";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { OrgRole } from "@/lib/types";
@@ -12,7 +12,7 @@ type Member = { id: string; name: string; email: string; title: string; org_role
 type Invite = { email: string; org_role: OrgRole; status: string; invited_by: string; channels: string[]; created_at: string | null };
 type ChannelRow = { id: string; name: string; visibility: string; members: number; owners: string[]; created_by: string; last_activity: string | null; ai_excluded: boolean };
 type AuditRow = { ts: string | null; actor: string; action: string; target: string; meta: Record<string, unknown> };
-type Tab = "members" | "invites" | "channels" | "workspace" | "audit";
+type Tab = "impact" | "members" | "invites" | "channels" | "workspace" | "audit";
 
 const ago = (iso: string | null) => {
   if (!iso) return "—";
@@ -40,8 +40,9 @@ const ACTION_LABEL: Record<string, string> = {
 
 export function AdminView() {
   const { account } = useWs();
-  const [tab, setTab] = useState<Tab>("members");
+  const [tab, setTab] = useState<Tab>("impact");
   const tabs: [Tab, string, typeof Users][] = [
+    ["impact", "Impact", BarChart3],
     ["members", "Members", Users],
     ["invites", "Invites", MailPlus],
     ["channels", "Channels", Hash],
@@ -69,6 +70,7 @@ export function AdminView() {
       </div>
       <div className="scrollbar-thin flex-1 overflow-y-auto bg-canvas/50 px-4 py-5 lg:px-8">
         <div className="mx-auto max-w-5xl">
+          {tab === "impact" && <ImpactTab />}
           {tab === "members" && <MembersTab />}
           {tab === "invites" && <InvitesTab />}
           {tab === "channels" && <ChannelsTab />}
@@ -527,5 +529,90 @@ function AuditTab() {
       </ul>
       <p className="mt-2 text-xs text-muted">Assistant entries show that a question was asked and which tools ran, never the question itself.</p>
     </>
+  );
+}
+
+type Impact = {
+  window_days: number;
+  capture: { records_filed: number; median_capture_seconds: number | null; by_type: Record<string, number>; ncr_median_days_to_close: number | null; ncrs_closed_total: number; includes_imported_history: number };
+  knowledge: { questions: number; answered_with_citations: number; citation_rate: number | null; median_latency_s: number | null; lessons_lookups: number; decision_lookups: number; data_questions: number };
+  decisions: { captured_total: number; captured_in_window: number; with_rationale: number; superseded: number };
+  work: { promises_tracked: number; tasks_done: number };
+  drawing_control: { qr_scans: number; blocked_scans: number; superseded_revisions_guarded: number; drawings_in_register: number };
+  time_saved: { hours: number; assumptions_min: Record<string, number>; counts: Record<string, number> };
+};
+
+function Stat({ label, value, sub }: { label: string; value: string | number | null; sub?: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums">{value ?? "–"}</p>
+      {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
+    </div>
+  );
+}
+
+/** Measured outcomes for the workspace. Only the time-saved figure is an estimate, and its assumptions are shown. */
+function ImpactTab() {
+  const [days, setDays] = useState(30);
+  const [d, reload] = useLoad<Impact>(`/api/admin/impact?days=${days}`);
+  if (!d) return <Loading />;
+  const a = d.time_saved.assumptions_min;
+  const mins = (s: number | null) => (s === null ? null : s < 90 ? `${s} s` : `${Math.round(s / 60)} min`);
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2">
+        {[7, 30, 90].map((n) => (
+          <button key={n} onClick={() => setDays(n)} aria-pressed={days === n} className={clsx("h-7 rounded-full border px-2.5 text-xs font-medium", days === n ? "border-brand bg-brand-soft text-brand" : "border-border text-muted")}>
+            Last {n} days
+          </button>
+        ))}
+        <button onClick={reload} className="ml-auto flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:bg-hover" aria-label="Refresh">
+          <RefreshCw size={13} /> Refresh
+        </button>
+      </div>
+
+      <section className="rounded-2xl border border-brand/20 bg-brand-soft/40 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Estimated time saved · last {d.window_days} days</p>
+        <p className="mt-1 text-4xl font-bold tabular-nums">{d.time_saved.hours} h</p>
+        <p className="mt-2 text-xs text-muted">
+          Estimate from counted activity: {d.time_saved.counts.cited_answers} cited answers × {a.search_min} min searching, {d.time_saved.counts.catch_ups} catch-ups × {a.catchup_min} min, {d.time_saved.counts.briefs} decision briefs × {a.brief_min} min, and {d.time_saved.counts.records} records filed against a {a.paper_record_min}-minute paper form. These per-item minutes are assumptions; everything else on this page is measured.
+        </p>
+      </section>
+
+      <div>
+        <h2 className="mb-2 text-sm font-bold">Knowledge access</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Questions to Saathi" value={d.knowledge.questions} />
+          <Stat label="Answered with sources" value={d.knowledge.citation_rate === null ? null : `${Math.round(d.knowledge.citation_rate * 100)}%`} sub={`${d.knowledge.answered_with_citations} answers cited chats, files or records`} />
+          <Stat label="Median answer time" value={d.knowledge.median_latency_s === null ? null : `${d.knowledge.median_latency_s} s`} />
+          <Stat label="Plant memory lookups" value={d.knowledge.lessons_lookups} sub={`${d.knowledge.data_questions} data questions · ${d.knowledge.decision_lookups} decision lookups`} />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-sm font-bold">Decisions</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Decisions on record" value={d.decisions.captured_total} sub={`${d.decisions.captured_in_window} in this period`} />
+          <Stat label="With the reason recorded" value={d.decisions.with_rationale} />
+          <Stat label="Superseded and linked" value={d.decisions.superseded} />
+          <Stat label="Promises tracked" value={d.work.promises_tracked} sub={`${d.work.tasks_done} tasks completed`} />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-sm font-bold">Shop floor</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Records filed in Saathi" value={d.capture.records_filed} sub={`${d.capture.by_type.ncr ?? 0} NCR · ${d.capture.by_type.downtime ?? 0} downtime · ${d.capture.by_type.safety ?? 0} safety`} />
+          <Stat label="Median time to file" value={mins(d.capture.median_capture_seconds)} sub={`photo/voice to filed record, vs ~${a.paper_record_min} min on paper`} />
+          <Stat
+            label="NCR median days to close"
+            value={d.capture.ncr_median_days_to_close}
+            sub={`${d.capture.ncrs_closed_total} closed${d.capture.includes_imported_history ? `, ${d.capture.includes_imported_history} imported history` : ""}`}
+          />
+          <Stat label="Wrong-revision scans blocked" value={d.drawing_control.blocked_scans} sub={`${d.drawing_control.qr_scans} QR scans · ${d.drawing_control.superseded_revisions_guarded} superseded revisions guarded`} />
+        </div>
+      </div>
+    </div>
   );
 }

@@ -219,6 +219,9 @@ def cron_sync(bg: BackgroundTasks, x_cron_secret: str = Header(default="")):
     uids = [s.get("uid") for s in db.collection("connections").where(filter=FieldFilter("status", "==", "active")).stream()]
     for uid in uids:
         bg.add_task(sync_user, uid)
+    from .plantdata import refresh
+
+    bg.add_task(refresh, True)
     return {"queued": len(uids)}
 
 

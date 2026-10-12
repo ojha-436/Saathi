@@ -113,6 +113,9 @@ async def create_meeting(bg: BackgroundTasks, title: str = Form(...), held_at: s
          "action_items": items, "source": "upload" if file and file.filename else "notes", "created_at": datetime.now(TZ), "posted": False}
     db.collection("meetings").document(meeting_id).set(m)
     bg.add_task(_index, meeting_id, m)
+    from .decisions import capture_from_meeting
+
+    bg.add_task(capture_from_meeting, meeting_id, m, text)
     from .main import notify
 
     for u in participants:

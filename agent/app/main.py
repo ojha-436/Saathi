@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 from collections import Counter
@@ -13,8 +14,9 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, drawings, ingest, meetings, people, push, records
+from . import admin, ai, connectors, decisions, drawings, impact, ingest, meetings, memory, people, push, records
 from .agent import ask
+from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
 from .firebase import audit, bucket, current_user, db, get_chat_for_member, require_admin, same_org, user_profile
 
@@ -26,6 +28,9 @@ app.include_router(meetings.router)
 app.include_router(connectors.router)
 app.include_router(drawings.router)
 app.include_router(records.router)
+app.include_router(decisions.router)
+app.include_router(memory.router)
+app.include_router(impact.router)
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
 )
@@ -172,7 +177,7 @@ def sync_members(chat_id: str, members: list[str]) -> None:
     """Keeps search chunks and file permissions in step with chat membership, so the assistant and
     file downloads immediately follow joins, invites and removals."""
     batch, n = db.batch(), 0
-    for col in ("chunks", "files"):
+    for col in ("chunks", "files", "decisions"):
         for snap in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
             batch.update(snap.reference, {"members": members})
             n += 1
@@ -358,7 +363,8 @@ def delete_chat_everything(chat_id: str) -> None:
     ref = db.collection("chats").document(chat_id)
     for col, q in (("messages", ref.collection("messages")),
                    ("chunks", db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id))),
-                   ("files", db.collection("files").where(filter=FieldFilter("chat_id", "==", chat_id)))):
+                   ("files", db.collection("files").where(filter=FieldFilter("chat_id", "==", chat_id))),
+                   ("decisions", db.collection("decisions").where(filter=FieldFilter("chat_id", "==", chat_id)))):
         for s in q.stream():
             if col == "files" and s.to_dict().get("gcs_path"):
                 try:
@@ -580,14 +586,16 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
         logging.exception("assistant failed")
         pending.update({"text": "Sorry, something went wrong while I was working on that. Please try again.", "pending": False, "error": str(e)[:300]})
         raise HTTPException(500, "Assistant failed")
-    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"]})
+    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
+                    "charts": result.get("charts") or []})
     latency = int((time.monotonic() - started) * 1000)
     tools = [c["tool"] for c in result["tool_calls"]]
     db.collection("audit_log").add({"uid": user["uid"], "org_id": user["org_id"], "kind": "assistant", "query": text, "tool_calls": result["tool_calls"],
-                                    "tools": tools, "latency_ms": latency, "ts": now()})
+                                    "tools": tools, "latency_ms": latency, "ts": now(),
+                                    "cited": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"])))})
     bg.add_task(log_event_bigquery, {
         "uid": user["uid"], "query": text[:1000], "tools": json.dumps(tools), "latency_ms": latency,
-        "answer_chars": len(result["text"]), "cited_sources": len(set(re.findall(r"\[(?:msg|file):[^\]]+\]", result["text"]))),
+        "answer_chars": len(result["text"]), "cited_sources": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"]))),
         "ts": now().isoformat(),
     })
     return result
@@ -644,7 +652,9 @@ def task_action(task_id: str, action: str, user=Depends(current_user)):
         raise HTTPException(403, "Only the person who created this task can do that")
     if action != "confirm" and action != "dismiss" and user["uid"] not in (creator, assignee):
         raise HTTPException(403, "Only the assignee or the creator can update this task")
-    ref.update({"status": status, "updated_at": now(), "updated_by": user["uid"]})
+    ref.update({"status": status, "updated_at": now(), "updated_by": user["uid"], "done_at": now() if status == "done" else None})
+    if t.get("kind") == "promise":
+        threading.Thread(target=plant_refresh, daemon=True).start()
     if action == "confirm" and assignee != user["uid"]:
         notify(assignee, "task_assigned", f"{user['name']} assigned you a task", t["title"], actor=user, source_ref=t.get("source_ref"), task_id=task_id)
     elif action in ("done", "block", "start"):
@@ -769,8 +779,9 @@ def set_ai_exclude(chat_id: str, body: ExcludeIn, bg: BackgroundTasks, user=Depe
     get_chat_for_member(chat_id, user["uid"])
     db.collection("chats").document(chat_id).update({"ai_excluded": body.excluded, "ai_excluded_by": user["name"]})
     if body.excluded:
-        for c in db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
-            c.reference.delete()
+        for col in ("chunks", "decisions"):
+            for c in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
+                c.reference.delete()
     else:
         bg.add_task(_reindex_chat, chat_id)
     return {"ok": True, "excluded": body.excluded}

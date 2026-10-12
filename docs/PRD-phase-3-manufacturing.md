@@ -10,6 +10,32 @@
 
 ---
 
+## Update 2026-10-12: scope change and Phase 3b
+
+**ERP and PDM/PLM integration are dropped.** The reference company uses neither. Saathi itself becomes the lightweight
+system of record, built from conversation: §6C (connectors), goal G5, user stories 22–23 and Phases 3c–3d no longer apply.
+Revision Guard stays Saathi-extracted (B1).
+
+**Re-aligned to the official problem statement:** *"transform how individuals and organizations access knowledge,
+collaborate, make decisions, and complete everyday work"* with measurable improvement. The gaps were **make decisions**
+and **show measurable gains**, so Phase 3b (hackathon cut, shipped 2026-10-12) adds:
+
+| ID | Requirement | Acceptance criteria | Status |
+|---|---|---|---|
+| K1 | **Decision log**: when the message classifier flags a decision (chat) or a meeting summary lists one, Gemini reads the surrounding conversation and records title, topic, rationale (only if stated), rejected alternatives, decided-by, identifiers and the source. A newer decision on the same topic supersedes the older one. `find_decisions` agent tool; Decisions view with search. | ☑ Visible only to members of the source chat/meeting, following membership changes. ☑ The superseding decision is linked only if the viewer can see it. ☑ Rationale is never invented. | Shipped |
+| K2 | **Decision briefs**: "Should we…?" gathers past decisions, similar incidents, promise track record and plant data, then lays out Question / Options / Evidence (cited) / Past decisions / Unknowns / Suggestion. | ☑ Every number cited. ☑ The suggestion is labelled; the decision stays with the user. | Shipped |
+| K3 | **Plant memory ("this happened before")**: similar past NCR/downtime records with root cause, fix and owner, shown on the report draft, on each record and via the `similar_incidents` tool. | ☑ Lessons are shared workspace-wide as lessons only (no photos, voice or reporter). ☑ Safety reports excluded. ☑ Guests get none. | Shipped |
+| K4 | **Promise track record**: kept / late / overdue for a vendor or colleague (`promise_record`). | ☑ Only promises from chats the asker is in. | Shipped |
+| K5 | **Ask your plant data (BigQuery)**: records and promises mirrored to `saathi.plant_records` / `saathi.plant_promises`; questions become a validated query spec (Gemini never writes SQL); the answer shows a chart. | ☑ Always filtered to the workspace; non-admins only see records/chats they are part of. ☑ Guests blocked. | Shipped |
+| K6 | **Impact panel** (Admin → Impact): measured questions, citation rate, latency, decisions captured, records filed, median capture time, NCR days-to-close, blocked wrong-revision scans; a time-saved estimate with its assumptions printed next to it. | ☑ Everything except time saved is counted, not estimated. | Shipped |
+
+**Demo history:** `seed/history.py` adds six months of closed NCR/downtime records, a vendor decision thread and vendor
+promises with outcomes, all tagged `demo_history` and removable with `--remove`. Messages go through the real extraction pipeline.
+
+**Still planned:** B7 shift handover, B9 inspection dossier, B11 expiry radar, A2 approvals, A4 voice out, A6 translation.
+
+---
+
 ## 1. Problem statement
 
 In an Indian manufacturing plant (our reference customer is a rail rolling-stock component maker), the information that matters is spread across three places:

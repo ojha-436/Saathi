@@ -301,7 +301,61 @@ def revision_status(drawing_no: str, tool_context: ToolContext) -> dict:
             "note": "Never recommend a superseded or in-work revision for production; point to current_rev."}
 
 
-TOOLS = [search_workspace, get_message_context, catch_up, lookup_document, revision_status, propose_task, assign_task, list_tasks, who_owes, get_calendar]
+def find_decisions(topic: str, tool_context: ToolContext) -> dict:
+    """The decision log: final decisions captured from chats and meetings, with WHY (rationale), options rejected, who decided,
+    when, and whether a later decision superseded it. Use for "why did we ...", "what did we decide about ...", and before any
+    recommendation.
+
+    Args:
+        topic: What the decision was about, e.g. "side frame material", "Om Castings", "SRC-BF-2041 weld size". Empty for the latest.
+    """
+    from .decisions import for_user
+
+    rows = for_user(user_profile(_uid(tool_context)), topic, limit=8)
+    return {"decisions": rows, "note": "Cite as [dec:...] and the source [msg:...]/[meet:...]. A superseded decision is history, not current policy."}
+
+
+def similar_incidents(description: str, tool_context: ToolContext) -> dict:
+    """Plant memory: past NCRs and downtime records similar to a problem, with their root cause and the fix that worked.
+    Use when someone describes a defect, breakdown or failure, asks "has this happened before", or wants a fix.
+
+    Args:
+        description: The problem in a few words with any identifiers, e.g. "porosity in bolster pocket weld SRC-BF-2041, Om Castings".
+    """
+    from .memory import lessons_for
+
+    lessons = lessons_for(user_profile(_uid(tool_context)), description, limit=4)
+    return {"lessons": lessons, "note": "Cite as [rec:...]. Say who owned the earlier fix so the user can ask them. If empty, say nothing similar is on record."}
+
+
+def promise_record(who: str, tool_context: ToolContext) -> dict:
+    """Track record of promises made by a vendor or colleague in the user's chats: kept on time, late (average slip), overdue, open.
+
+    Args:
+        who: Vendor or person name, e.g. "Om Castings" or "Rahul".
+    """
+    from .memory import promise_history
+
+    return promise_history(user_profile(_uid(tool_context)), who)
+
+
+def plant_data(question: str, tool_context: ToolContext) -> dict:
+    """Analytics over plant records and promises in BigQuery, returned as a chart: counts, trends and rankings, e.g.
+    "NCRs by vendor this quarter", "which machine lost the most hours", "NCR trend by month", "on-time rate by committer".
+
+    Args:
+        question: The analytical question in plain English.
+    """
+    from . import plantdata
+
+    out = plantdata.ask(user_profile(_uid(tool_context)), question)
+    if out.get("chart", {}).get("rows"):
+        tool_context.state["charts"] = [*tool_context.state.get("charts", []), out["chart"]]
+    return out
+
+
+TOOLS = [search_workspace, get_message_context, catch_up, lookup_document, revision_status, find_decisions, similar_incidents, promise_record,
+         plant_data, propose_task, assign_task, list_tasks, who_owes, get_calendar]
 
 
 def _instruction(ctx: ReadonlyContext) -> str:
@@ -314,11 +368,16 @@ Current time: {now} (Asia/Kolkata).
 
 How to work:
 - For ANY question about work content (files, drawings, what someone said, decisions, status, vendors, jobs), call tools first. Never answer from memory.
-- Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def], [file:xyz], [meet:xyz], [mail:xyz] or [drive:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
+- Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def], [file:xyz], [meet:xyz], [dec:xyz], [rec:xyz], [mail:xyz] or [drive:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
 - If tools return nothing relevant, say you could not find it in the chats and files the user can access. Never guess.
 - Drawing revisions: call revision_status first (the controlled register). If a superseded or draft revision comes up, say clearly that it must not be used and name the current revision. Other document fields: lookup_document. Say who approved the current revision and when.
 - Assigning work to a colleague ("Rahul ko PO bhejne ka task do Friday tak", "ask Neha to send the UT report"): call assign_task. For the user's own reminders: propose_task. Either way tell the user to confirm the card.
 - "What does X owe me" / pending with others: call who_owes.
+- "Why did we ...", "what did we decide": call find_decisions first; give the decision, the reason, rejected options and who decided, with citations. Mention if it was superseded.
+- A defect, breakdown or "has this happened before": call similar_incidents and give the earlier root cause, the fix that worked and who owned it.
+- Vendor or colleague reliability: call promise_record.
+- Counts, trends, rankings, "how many", "which vendor/machine/drawing has the most": call plant_data. A chart is shown automatically; summarise the numbers.
+- "Should we ...", "help me decide", choosing between options: write a **decision brief**. Gather evidence first: find_decisions (past decisions on the topic), similar_incidents, promise_record for vendors involved, plant_data for the trend, search_workspace for recent discussion. Then answer with sections **Question**, **Options**, **Evidence** (bullets with citations, for and against each option), **Past decisions**, **What we don't know**, and **Suggestion** (clearly labelled as a suggestion; the decision is the user's). Never invent numbers, and never say a condition or trigger from a past decision has been met unless the evidence shows it. Cite numbers from promise_record with the refs of the promises behind them.
 - Meeting summaries are searchable with search_workspace; cite them as [meet:...]. Plant records (NCR, downtime, safety) the user can see are searchable too; cite them as [rec:...]. The user's own emails (if Gmail is connected) and Google Drive files (if Drive is connected) are searchable too; cite them as [mail:...] and [drive:...].
 - Calendar questions and "prep me for my next meeting": call get_calendar, then search_workspace for the meeting topic and attendee names, and who_owes for attendees. Brief: purpose, open items with each attendee, relevant files, decisions. Cite sources.
 - Reminders, to-dos, follow-ups: call propose_task with an ISO 8601 time in +05:30. Resolve relative times: kal = tomorrow, parso = day after tomorrow, subah/morning = 10:00, dopahar = 14:00, shaam/evening/EOD = 18:00. Then tell the user to confirm the card below. Never claim a task is saved before confirmation.
@@ -351,7 +410,7 @@ async def ask(user: dict, text: str, history: list[dict]) -> dict:
     session = await session_service.create_session(
         app_name=APP_NAME,
         user_id=user["uid"],
-        state={"uid": user["uid"], "user_name": user["name"], "role": user["role"], "proposed_tasks": [],
+        state={"uid": user["uid"], "user_name": user["name"], "role": user["role"], "proposed_tasks": [], "charts": [],
                "org_name": (db.collection("orgs").document(user.get("org_id") or "-").get().to_dict() or {}).get("name", "")},
     )
     convo = "\n".join(f"{h['role']}: {h['text'][:800]}" for h in history[-6:])
@@ -370,5 +429,6 @@ async def ask(user: dict, text: str, history: list[dict]) -> dict:
 
     final = await session_service.get_session(app_name=APP_NAME, user_id=user["uid"], session_id=session.id)
     proposed = list((final.state if final else {}).get("proposed_tasks", []))
+    charts = list((final.state if final else {}).get("charts", []))[:3]
     await session_service.delete_session(app_name=APP_NAME, user_id=user["uid"], session_id=session.id)
-    return {"text": reply.strip() or "Sorry, I couldn't produce an answer.", "tool_calls": tool_calls, "proposed_tasks": proposed}
+    return {"text": reply.strip() or "Sorry, I couldn't produce an answer.", "tool_calls": tool_calls, "proposed_tasks": proposed, "charts": charts}
