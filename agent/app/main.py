@@ -14,7 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, meetings, memory, people, push, records
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, knowledge, live, meetings, memory, people, push, records
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
@@ -32,6 +32,8 @@ app.include_router(decisions.router)
 app.include_router(memory.router)
 app.include_router(impact.router)
 app.include_router(handover.router)
+app.include_router(knowledge.router)
+app.include_router(live.router)
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
 )

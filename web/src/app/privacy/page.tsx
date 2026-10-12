@@ -122,6 +122,16 @@ export default async function PrivacyPage() {
               </li>
               <li>Voice dictation: audio is sent to our AI provider only to produce the text and is not stored. Voice notes attached to a plant record are stored with that record.</li>
               <li>
+                Saathi Live (meeting assistant): when you start it, audio from your microphone and, if you choose to share it, the meeting tab is sent in
+                short pieces to our AI provider to be transcribed. <b>Audio is not stored.</b> The transcript, the questions Saathi detected and its answers are
+                stored for you only. When you end the meeting, the summary, decisions, action items and enhanced notes are shared with the people you pick.
+                Please tell the other participants that the meeting is being transcribed.
+              </li>
+              <li>
+                Your knowledge hub: files you add (PDFs, notes, images, recordings), the text Saathi reads from them and their labels. They are private to
+                you and used only for your meetings and your Saathi answers. Removing an item deletes the file and its search index.
+              </li>
+              <li>
                 Shift handovers: the summary Saathi drafts from a bay or line group&rsquo;s messages, records and open promises at the end of a shift, your edits
                 and notes, who signed it and who acknowledged it.
               </li>

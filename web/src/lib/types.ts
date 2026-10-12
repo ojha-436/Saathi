@@ -57,6 +57,8 @@ export type Meeting = {
   decisions: string[];
   action_items: { owner: string; owner_uid?: string | null; task: string; due_at?: Timestamp | null; task_id?: string | null }[];
   posted?: boolean;
+  enhanced_notes?: string;
+  source?: string;
 };
 
 export type Chat = {
@@ -366,4 +368,42 @@ export type HandoverList = {
   current_shift: { name: string; start: string; end: string; next: string; key: string; id: string };
   enabled: boolean;
   handovers: Handover[];
+};
+
+export type KnowledgeItem = {
+  id: string;
+  ref: string;
+  name: string;
+  mime: string;
+  size?: number;
+  label?: string | null;
+  status: "processing" | "ready" | "error";
+  summary?: string | null;
+  chunks?: number | null;
+  error?: string | null;
+  created_at?: string | null;
+};
+export type LiveCard = { id: string; question: string; asked_by?: string | null; answer: string; refs: string[]; found: boolean; kind: "detected" | "asked"; ts?: string | null; dismissed?: boolean };
+export type LiveSegment = { seq: number; text: string; ts?: string | null };
+export type LiveSession = {
+  id: string;
+  title: string;
+  status: "live" | "ended";
+  started_at: string;
+  context_refs: string[];
+  meeting_id?: string | null;
+  notes?: string;
+  segments: LiveSegment[];
+  cards: LiveCard[];
+};
+export type LiveSessionRow = { id: string; title: string; status: "live" | "ended"; started_at: string; ended_at?: string | null; meeting_id?: string | null; chunks: number };
+export type SourceSuggestion = { ref: string; name: string; type?: string; snippet?: string };
+export type Briefing = { connected: boolean; meetings: { id: string; title: string; start: string; attendees: string[]; has_video_link: boolean; sources: SourceSuggestion[] }[] };
+export type TopicWiki = {
+  label: string;
+  overview: string;
+  sources: { ref: string; name: string }[];
+  key_facts: { text: string; refs: string[] }[];
+  contradictions: { topic: string; a: { claim: string; ref: string }; b: { claim: string; ref: string } }[];
+  open_questions: string[];
 };

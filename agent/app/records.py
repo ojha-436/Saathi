@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -95,7 +96,8 @@ async def transcribe(audio: UploadFile = File(...), user=Depends(current_user)):
     rate_limit(user["uid"], "transcribe", 20)
     data, mime = await _read(audio, AUDIO_TYPES, 5 * 1024 * 1024, "audio")
     try:
-        r = ai.client.models.generate_content(
+        r = await run_in_threadpool(
+            ai.client.models.generate_content,
             model=VISION_MODEL,
             contents=[types.Part.from_bytes(data=data, mime_type=mime),
                       "Transcribe this voice note verbatim for a workplace chat. Hindi words in Roman script (Hinglish, as Indian users type); "
@@ -183,8 +185,8 @@ async def draft(type: str = Form("ncr"), text: str = Form(""), hint: str = Form(
         raise HTTPException(400, "Add a photo, a voice note or a few words")
     kind = {"ncr": "non-conformance report (NCR) for a quality defect", "downtime": "machine downtime record", "safety": "safety near-miss report"}[type]
     try:
-        d = ai.generate_json(PROMPT.format(kind=kind, text=text.strip()[:2000] or "(none)", hint=hint.strip()[:100] or "(none)"), RecordDraft,
-                             model=VISION_MODEL, parts=parts or None)
+        d = await run_in_threadpool(ai.generate_json, PROMPT.format(kind=kind, text=text.strip()[:2000] or "(none)", hint=hint.strip()[:100] or "(none)"),
+                                    RecordDraft, model=VISION_MODEL, parts=parts or None)
     except Exception:
         log.exception("record draft failed")
         raise HTTPException(502, "Saathi couldn't draft that. Try again or type a few words.")
@@ -196,7 +198,7 @@ async def draft(type: str = Form("ncr"), text: str = Form(""), hint: str = Form(
         from .memory import lesson_text, lessons_for
 
         try:
-            lessons = lessons_for(user, lesson_text({"fields": fields}), fields=fields)
+            lessons = await run_in_threadpool(lessons_for, user, lesson_text({"fields": fields}), fields=fields)
         except Exception:
             log.exception("similar incidents lookup failed")
     return {"draft_id": draft_id, "type": type, "fields": fields, "links": _enrich(user, fields), "media": len(media), "lessons": lessons}

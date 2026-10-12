@@ -2,10 +2,11 @@
 
 import clsx from "clsx";
 import { signOut } from "firebase/auth";
-import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus, Workflow } from "@/lib/icons";
+import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { rememberKnowledge } from "@/lib/knowledgeNames";
 import { getFbAuth } from "@/lib/firebase";
 import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
 import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useSettings, useTasks, useUsers } from "@/lib/hooks";
@@ -23,6 +24,7 @@ import { CalendarView, DriveView, GmailView } from "./Integrations";
 import { QualityView, ReportDialog } from "./Quality";
 import { DecisionsView } from "./Knowledge";
 import { HandoverView } from "./Handover";
+import { LiveView } from "./Live";
 import { MeetingView, NewMeetingDialog } from "./Meetings";
 import { MyDayView } from "./MyDay";
 import { ProfileCard, SettingsDialog, StatusDialog, StatusIcon } from "./People";
@@ -103,6 +105,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       } else if (ref.startsWith("meet:")) open({ kind: "meeting", id: ref.slice(5) });
       else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
       else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
+      else if (ref.startsWith("kn:")) open({ kind: "live" });
       else if (ref.startsWith("ho:")) {
         const id = ref.slice(3);
         open({ kind: "handover", chatId: id.split("_").slice(0, -2).join("_"), id });
@@ -137,6 +140,11 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     navigator.serviceWorker.addEventListener("message", onMsg);
     return () => navigator.serviceWorker.removeEventListener("message", onMsg);
   }, [openRef]);
+
+  // Knowledge-hub names for [kn:...] citations in Saathi answers (the items themselves are fetched by the Live screen).
+  useEffect(() => {
+    api<{ id: string; name: string }[]>("/api/knowledge").then(rememberKnowledge).catch(() => {});
+  }, []);
 
   // Presence heartbeat while the app is open and visible.
   useEffect(() => {
@@ -263,6 +271,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                 { label: "My insights", icon: BarChart3, onSelect: () => open({ kind: "insights" }) },
                 ...(!guest ? [{ label: "Quality & plant records", icon: Gavel, onSelect: () => open({ kind: "quality" }) }] : []),
                 { label: "Decisions", icon: Workflow, onSelect: () => open({ kind: "decisions" }) },
+                ...(!guest ? [{ label: "Saathi Live (meetings)", icon: Radar, onSelect: () => open({ kind: "live" }) }] : []),
                 // Phones: connected apps live here (the bottom bar has five slots)
                 ...(connected.includes("gmail") ? [{ label: "Gmail", icon: Mail, onSelect: () => open({ kind: "gmail" }) }] : []),
                 ...(connected.includes("calendar") ? [{ label: "Calendar", icon: CalendarDays, onSelect: () => open({ kind: "calendar" }) }] : []),
@@ -301,6 +310,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
             {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
             {view.kind === "decisions" && <DecisionsView focusId={view.id} />}
+            {view.kind === "live" && !guest && <LiveView sessionId={view.sessionId} />}
             {view.kind === "handover" && <HandoverView key={view.chatId} chatId={view.chatId} focusId={view.id} />}
             {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
             {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
