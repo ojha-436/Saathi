@@ -52,18 +52,48 @@ def split_text(text: str, size: int = PIECE, overlap: int = 150, limit: int = 60
     return [p for p in out if p]
 
 
-def index_text(uid: str, org_id: str, ref: str, name: str, text: str, source_type: str, chunk_prefix: str, ts: datetime) -> int:
-    """Embeds text in batches into the shared index, private to `uid`."""
-    pieces = split_text(text)
-    for start in range(0, len(pieces), 20):
-        batch_pieces = pieces[start:start + 20]
-        vecs = ai.embed([f"{name}\n{p}" for p in batch_pieces])
+_HEADING = re.compile(r"^(#{1,4})\s+(.+)$|^([A-Z][A-Z0-9 /&,.-]{3,60})$", re.M)
+
+
+def sections(text: str) -> list[tuple[str, str]]:
+    """Splits text at markdown/ALL-CAPS headings so every chunk knows which section it came from."""
+    marks = [(m.start(), (m.group(2) or m.group(3) or "").strip()) for m in _HEADING.finditer(text)]
+    if not marks:
+        return [("", text)]
+    out = []
+    if marks[0][0] > 0:
+        out.append(("", text[:marks[0][0]]))
+    for j, (pos, head) in enumerate(marks):
+        end = marks[j + 1][0] if j + 1 < len(marks) else len(text)
+        body = text[pos:end].split("\n", 1)[1] if "\n" in text[pos:end] else ""
+        if body.strip():
+            out.append((head, body))
+    return out or [("", text)]
+
+
+def index_text(uid: str, org_id: str, ref: str, name: str, text: str, source_type: str, chunk_prefix: str, ts: datetime,
+               summary: str = "") -> int:
+    """Contextual chunking for retrieval: each piece is embedded with its document title, section heading and a one-line
+    document summary (so a chunk that says "approved at Rs 21.0 lakh" is still found for "side frame castings budget"),
+    plus one overview chunk for broad questions. Embeddings run in parallel on the regional endpoint."""
+    pieces: list[tuple[str, str]] = []
+    if summary:
+        pieces.append(("Overview", summary))
+    for head, body in sections(text):
+        for p in split_text(body, limit=80):
+            pieces.append((head, p))
+    pieces = pieces[:120]
+    ctx_line = summary.split(". ")[0][:200] if summary else ""
+    embed_texts = [f"{name}{' > ' + h if h else ''}\n{ctx_line}\n{p}" for h, p in pieces]
+    vecs = ai.embed(embed_texts, title=name)
+    for start in range(0, len(pieces), 200):
         wb = db.batch()
-        for j, (p, v) in enumerate(zip(batch_pieces, vecs)):
-            wb.set(db.collection("chunks").document(f"{chunk_prefix}_{start + j}"), {
-                "text": p, "embedding": Vector(v), "members": [uid], "chat_id": f"knowledge_{uid}", "chat_name": "My knowledge",
-                "keywords": ai.keywords(f"{name} {p}"), "org_id": org_id, "source_type": source_type, "file_name": name,
-                "sender_name": "", "ts": ts, "ref": ref})
+        for j in range(start, min(start + 200, len(pieces))):
+            h, p = pieces[j]
+            wb.set(db.collection("chunks").document(f"{chunk_prefix}_{j}"), {
+                "text": p, "section": h or None, "position": j, "embedding": Vector(vecs[j]), "members": [uid], "chat_id": f"knowledge_{uid}",
+                "chat_name": "My knowledge", "keywords": ai.keywords(f"{name} {h} {p}"), "org_id": org_id, "source_type": source_type,
+                "file_name": name, "sender_name": "", "ts": ts, "ref": ref})
         wb.commit()
     return len(pieces)
 
@@ -94,7 +124,9 @@ def _process(kid: str) -> None:
         text, summary = extract_text(data, k["mime"], k["name"])
         if not text:
             raise ValueError("No readable content")
-        n = index_text(k["uid"], k["org_id"], f"kn:{kid}", k["name"], text, "knowledge", f"kn_{kid}", k["created_at"])
+        for c in db.collection("chunks").where(filter=FieldFilter("ref", "==", f"kn:{kid}")).stream():
+            c.reference.delete()  # re-indexing replaces the old pieces
+        n = index_text(k["uid"], k["org_id"], f"kn:{kid}", k["name"], text, "knowledge", f"kn_{kid}", k["created_at"], summary=summary)
         ref.update({"status": "ready", "summary": summary, "chars": len(text), "chunks": n})
     except Exception as e:
         log.exception("knowledge processing failed for %s", kid)
@@ -148,6 +180,14 @@ def _own(kid: str, user: dict):
     if not snap.exists or snap.get("uid") != user["uid"]:
         raise HTTPException(404, "Not found")
     return ref, snap.to_dict()
+
+
+@router.post("/api/knowledge/{kid}/reindex")
+def reindex(kid: str, bg: BackgroundTasks, user=Depends(current_user)):
+    ref, _ = _own(kid, user)
+    ref.update({"status": "processing"})
+    bg.add_task(_process, kid)
+    return {"ok": True}
 
 
 @router.patch("/api/knowledge/{kid}")
@@ -225,7 +265,7 @@ def wiki(body: WikiIn, user=Depends(current_user)):
     per = max(4000, budget // len(items))
     for kid, k in items:
         text = "\n".join(c.get("text") for c in sorted(db.collection("chunks").where(filter=FieldFilter("ref", "==", f"kn:{kid}")).stream(),
-                                                         key=lambda c: int(c.id.rsplit("_", 1)[-1])))
+                                                         key=lambda c: c.get("position") if c.get("position") is not None else int(c.id.rsplit("_", 1)[-1])))
         parts.append(f"[kn:{kid}] {k['name']}\n{text[:per]}")
     w = ai.generate_json(WIKI_PROMPT.format(label=label, sources="\n\n---\n\n".join(parts)), Wiki, model=VISION_MODEL)
     valid = {f"kn:{kid}" for kid, _ in items}

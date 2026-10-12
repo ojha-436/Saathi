@@ -148,8 +148,13 @@ def _join(decoded: dict) -> None:
 async def current_user(authorization: str = Header(default="")) -> dict:
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing bearer token")
+    return user_from_token(authorization[7:])
+
+
+def user_from_token(token: str) -> dict:
+    """Verifies a Firebase ID token and returns the caller's profile (also used by WebSockets, which can't send headers)."""
     try:
-        decoded = auth.verify_id_token(authorization[7:])
+        decoded = auth.verify_id_token(token)
     except Exception:
         raise HTTPException(401, "Invalid token")
     profile = user_profile(decoded["uid"])

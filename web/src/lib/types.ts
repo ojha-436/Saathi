@@ -43,6 +43,8 @@ export type UserSettings = {
   quiet_hours?: { enabled: boolean; start: string; end: string };
   connected?: ("calendar" | "gmail" | "drive")[];
   snoozed?: Record<string, string>; // Needs-you item key -> ISO time
+  live_prompt?: boolean; // offer Saathi Live when a calendar meeting starts
+  live_announce?: boolean; // play the spoken recording notice
 };
 
 export type Meeting = {
@@ -383,8 +385,11 @@ export type KnowledgeItem = {
   error?: string | null;
   created_at?: string | null;
 };
-export type LiveCard = { id: string; question: string; asked_by?: string | null; answer: string; refs: string[]; found: boolean; kind: "detected" | "asked"; ts?: string | null; dismissed?: boolean };
-export type LiveSegment = { seq: number; text: string; ts?: string | null };
+export type CardTiming = { embed_ms?: number; retrieve_ms?: number; answer_ms?: number; total_ms?: number; detect_ms?: number; heard_to_answer_ms?: number; sources_searched?: number };
+export type LiveCard = { id: string; question: string; asked_by?: string | null; answer: string; refs: string[]; found: boolean; kind: "detected" | "asked"; ts?: string | null; dismissed?: boolean; timing?: CardTiming | null };
+export type LiveSegment = { seq: number; text: string; ts?: string | null; timing?: { finalize_ms?: number | null; spoken_ms?: number | null; updates?: number } | null };
+export type LiveStats = { lines: number; answers: number; finalize_ms?: number | null; answer_total_ms?: number | null; embed_ms?: number | null; retrieve_ms?: number | null; answer_ms?: number | null; detect_ms?: number | null; heard_to_answer_ms?: number | null };
+export type LiveEvent = { id: string; title: string; start?: string | null; end?: string | null; attendees: string[]; attendee_uids: string[]; meet_url?: string | null; sources: SourceSuggestion[] };
 export type LiveSession = {
   id: string;
   title: string;
@@ -393,8 +398,10 @@ export type LiveSession = {
   context_refs: string[];
   meeting_id?: string | null;
   notes?: string;
+  event_id?: string | null;
   segments: LiveSegment[];
   cards: LiveCard[];
+  stats?: LiveStats;
 };
 export type LiveSessionRow = { id: string; title: string; status: "live" | "ended"; started_at: string; ended_at?: string | null; meeting_id?: string | null; chunks: number };
 export type SourceSuggestion = { ref: string; name: string; type?: string; snippet?: string };

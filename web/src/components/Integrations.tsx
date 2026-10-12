@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { dueLabel, timeShort, toDate } from "@/lib/format";
-import { CalendarDays, Check, DriveIcon, FileText, Handshake, Mail, NotebookPen, RefreshCw, Search, Sparkles, Video, X } from "@/lib/icons";
+import { CalendarDays, Check, DriveIcon, FileText, Handshake, Mail, NotebookPen, RefreshCw, Search, Sparkles, Video, X, Radar } from "@/lib/icons";
 import type { CalendarEvent, DriveFile, EmailItem } from "@/lib/types";
 import { useWs } from "./ctx";
 
@@ -229,6 +229,15 @@ export function CalendarView() {
                               <a href={e.meet_url} target="_blank" rel="noreferrer" className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover">
                                 <Video size={12} /> Join
                               </a>
+                            )}
+                            {!done && (
+                              <button
+                                onClick={() => open({ kind: "live", eventId: e.id })}
+                                className="flex h-7 items-center gap-1 rounded-md border border-rust/30 bg-rust-soft px-2 text-[11px] font-semibold text-rust hover:border-rust/60"
+                                title="Live transcript and instant answers from your sources during this meeting"
+                              >
+                                <Radar size={12} /> Start Saathi Live
+                              </button>
                             )}
                             <button onClick={() => newMeeting({ title: e.title, when: e.start?.toDate(), attendees: e.attendee_uids })} className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover">
                               <NotebookPen size={12} /> {done ? "Add notes" : "Notes"}

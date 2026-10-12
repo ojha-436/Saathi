@@ -544,6 +544,7 @@ type Impact = {
   knowledge: { questions: number; answered_with_citations: number; citation_rate: number | null; median_latency_s: number | null; lessons_lookups: number; decision_lookups: number; data_questions: number };
   decisions: { captured_total: number; captured_in_window: number; with_rationale: number; superseded: number };
   work: { promises_tracked: number; tasks_done: number };
+  live?: { sessions: number; answers: number; line_final_s: number | null; answer_s: number | null; heard_to_answer_s: number | null };
   drawing_control: { qr_scans: number; blocked_scans: number; superseded_revisions_guarded: number; drawings_in_register: number };
   time_saved: { hours: number; assumptions_min: Record<string, number>; counts: Record<string, number> };
 };
@@ -595,6 +596,18 @@ function ImpactTab() {
           <Stat label="Plant memory lookups" value={d.knowledge.lessons_lookups} sub={`${d.knowledge.data_questions} data questions · ${d.knowledge.decision_lookups} decision lookups`} />
         </div>
       </div>
+
+      {d.live && d.live.sessions > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-bold">Saathi Live (meetings)</h2>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat label="Live meetings" value={d.live.sessions} sub={`${d.live.answers} answers surfaced`} />
+            <Stat label="Transcript" value="Live" sub={`words appear while people speak · lines final in ${d.live.line_final_s ?? "–"} s`} />
+            <Stat label="Question to answer" value={d.live.heard_to_answer_s === null ? null : `${d.live.heard_to_answer_s} s`} sub="median, from the question being said" />
+            <Stat label="Search + write" value={d.live.answer_s === null ? null : `${d.live.answer_s} s`} sub="median: find in your sources, then answer" />
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-2 text-sm font-bold">Decisions</h2>

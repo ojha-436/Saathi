@@ -768,6 +768,10 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
     except Exception:
         logging.exception("handover tick failed")
         ho = {}
+    try:
+        ho["live_prompts"] = live.prompt_starting_meetings()
+    except Exception:
+        logging.exception("live prompt failed")
     return {"fired": fired, "statuses_cleared": cleared, **ho}
 
 

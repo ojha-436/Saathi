@@ -6,9 +6,13 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 
-from .config import EMBED_DIM, EMBED_MODEL, FAST_MODEL, GENAI_LOCATION, PROJECT, TZ
+from concurrent.futures import ThreadPoolExecutor
+
+from .config import EMBED_DIM, EMBED_LOCATION, EMBED_MODEL, FAST_MODEL, GENAI_LOCATION, PROJECT, TZ
 
 client = genai.Client(vertexai=True, project=PROJECT, location=GENAI_LOCATION)
+embed_client = genai.Client(vertexai=True, project=PROJECT, location=EMBED_LOCATION)
+_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="embed")
 
 
 def _retry(fn, attempts: int = 6):
@@ -22,28 +26,46 @@ def _retry(fn, attempts: int = 6):
             time.sleep(min(30, 2 ** i) + random.random())
 
 
-def embed(texts: list[str], task: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
-    # gemini-embedding-001 on Vertex accepts one input per request
-    out = []
-    for t in texts:
-        r = _retry(lambda: client.models.embed_content(
-            model=EMBED_MODEL,
-            contents=t[:6000] or " ",
-            config=types.EmbedContentConfig(task_type=task, output_dimensionality=EMBED_DIM),
-        ))
-        out.append(list(r.embeddings[0].values))
-    return out
+def _embed_one(text: str, task: str, title: str | None) -> list[float]:
+    cfg = types.EmbedContentConfig(task_type=task, output_dimensionality=EMBED_DIM, title=title if task == "RETRIEVAL_DOCUMENT" and title else None)
+    r = _retry(lambda: embed_client.models.embed_content(model=EMBED_MODEL, contents=text[:6000] or " ", config=cfg))
+    return list(r.embeddings[0].values)
 
 
-def generate_json(prompt: str, schema, model: str = FAST_MODEL, parts: list | None = None):
+def embed(texts: list[str], task: str = "RETRIEVAL_DOCUMENT", title: str | None = None) -> list[list[float]]:
+    """gemini-embedding-001 on Vertex takes one input per request, so batches fan out in parallel (order kept)."""
+    if len(texts) == 1:
+        return [_embed_one(texts[0], task, title)]
+    return list(_pool.map(lambda t: _embed_one(t, task, title), texts))
+
+
+def generate_json(prompt: str, schema, model: str = FAST_MODEL, parts: list | None = None, quick: bool = False):
+    """quick=True turns thinking down to minimal: ~30% faster for short extraction and live answers."""
     r = _retry(lambda: client.models.generate_content(
         model=model,
         contents=[*(parts or []), prompt],
         config=types.GenerateContentConfig(
-            response_mime_type="application/json", response_schema=schema, temperature=0.1
+            response_mime_type="application/json", response_schema=schema, temperature=0.1,
+            thinking_config=types.ThinkingConfig(thinking_level="minimal") if quick else None,
         ),
     ))
     return r.parsed
+
+
+def generate_json_hedged(prompt: str, schema, model: str = FAST_MODEL, hedge_after: float = 3.5, limit: float = 20.0):
+    """Tail-latency guard for live answers: if the first call hasn't returned after `hedge_after` seconds, send an identical
+    second call and use whichever finishes first."""
+    from concurrent.futures import FIRST_COMPLETED, wait
+
+    first = _pool.submit(generate_json, prompt, schema, model, None, True)
+    done, _ = wait([first], timeout=hedge_after)
+    if done:
+        return first.result()
+    second = _pool.submit(generate_json, prompt, schema, model, None, True)
+    done, _ = wait([first, second], timeout=limit, return_when=FIRST_COMPLETED)
+    if not done:
+        raise TimeoutError("answer took too long")
+    return next(iter(done)).result()
 
 
 def generate_text(prompt: str, model: str = FAST_MODEL) -> str:

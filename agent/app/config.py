@@ -13,6 +13,11 @@ AGENT_THINKING = os.getenv("AGENT_THINKING", "low")
 # Changing the embedding model needs a full re-index of `chunks` (vectors from different models are not comparable)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gemini-embedding-001")
 EMBED_DIM = 768
+# Embeddings run on the regional endpoint next to Cloud Run (asia-south1): ~0.4 s per call vs ~1-2 s on global
+EMBED_LOCATION = os.getenv("EMBED_LOCATION", "asia-south1")
+# Streaming speech-to-text for Saathi Live and the voice for its recording notice
+LIVE_STT_MODEL = os.getenv("LIVE_STT_MODEL", "gemini-3.5-transcribe-live-preview")
+TTS_MODEL = os.getenv("TTS_MODEL", "gemini-2.5-flash-tts")
 
 FILES_BUCKET = os.getenv("FILES_BUCKET", "aibuildergc-saathi-files")
 CRON_SECRET = os.getenv("CRON_SECRET", "dev-cron-secret")

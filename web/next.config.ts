@@ -11,7 +11,7 @@ const csp = [
   "media-src 'self' blob:",
   "font-src 'self' data:",
   // CSP_CONNECT_EXTRA (build time, local testing only) e.g. "http://localhost:8081"
-  `connect-src 'self' https://*.googleapis.com https://*.run.app https://*.firebaseio.com wss://*.firebaseio.com${dev ? " http://localhost:* ws://localhost:*" : ""}${process.env.CSP_CONNECT_EXTRA ? ` ${process.env.CSP_CONNECT_EXTRA}` : ""}`,
+  `connect-src 'self' https://*.googleapis.com https://*.run.app wss://*.run.app https://*.firebaseio.com wss://*.firebaseio.com${dev ? " http://localhost:* ws://localhost:*" : ""}${process.env.CSP_CONNECT_EXTRA ? ` ${process.env.CSP_CONNECT_EXTRA}` : ""}`,
   "frame-src https://*.firebaseapp.com https://accounts.google.com",
   "object-src 'none'",
   "base-uri 'self'",

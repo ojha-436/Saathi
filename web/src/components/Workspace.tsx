@@ -106,6 +106,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
       else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
       else if (ref.startsWith("kn:")) open({ kind: "live" });
+      else if (ref.startsWith("ev:")) open({ kind: "live", eventId: ref.slice(3) });
       else if (ref.startsWith("ho:")) {
         const id = ref.slice(3);
         open({ kind: "handover", chatId: id.split("_").slice(0, -2).join("_"), id });
@@ -310,7 +311,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
             {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
             {view.kind === "decisions" && <DecisionsView focusId={view.id} />}
-            {view.kind === "live" && !guest && <LiveView sessionId={view.sessionId} />}
+            {view.kind === "live" && !guest && <LiveView key={view.eventId ?? view.sessionId ?? "home"} sessionId={view.sessionId} eventId={view.eventId} />}
             {view.kind === "handover" && <HandoverView key={view.chatId} chatId={view.chatId} focusId={view.id} />}
             {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
             {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
