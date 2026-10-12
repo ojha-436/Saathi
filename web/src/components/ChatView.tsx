@@ -28,7 +28,14 @@ import {
   UserPlus,
   Users,
   Wand2,
+  CodeBlock,
   CodeSimple,
+  FontColor,
+  Highlighter,
+  Indent,
+  Outdent,
+  Redo,
+  Undo,
   LinkSimple,
   ListBullets,
   ListNumbers,
@@ -40,12 +47,20 @@ import {
   TextUnderline,
   X,
 } from "@/lib/icons";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
 import { DOC_LABEL, REACTION_EMOJI, chatTitle, reactionEmoji, reactionKey, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
 import type { Chat, Message, Reaction, UserProfile } from "@/lib/types";
 import { ChatText } from "./ChatText";
+import { docToText, needsDoc, type DocNode } from "@/lib/richtext";
+import { RichDoc } from "./RichDoc";
+import { useEditor, EditorContent } from "@tiptap/react";
+import type { Editor } from "@tiptap/core";
+import StarterKit from "@tiptap/starter-kit";
+import Highlight from "@tiptap/extension-highlight";
+import Placeholder from "@tiptap/extension-placeholder";
+import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { EmojiPopover } from "./EmojiPopover";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
 import { useWs } from "./ctx";
@@ -432,7 +447,7 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
   const right = bubbles && mine;
   const body = (
     <>
-      {m.text && <ChatText text={m.text} plain={(t) => withMentions(t, m.mentions, users, uid)} />}
+      {m.text && (m.doc ? <RichDoc doc={m.doc} plain={(t) => withMentions(t, m.mentions, users, uid)} /> : <ChatText text={m.text} plain={(t) => withMentions(t, m.mentions, users, uid)} />)}
       {m.file && <FileCard file={m.file} />}
       {m.decision && (
         <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-moss/25 bg-moss-soft px-2.5 py-1.5 text-xs text-moss">
@@ -581,14 +596,29 @@ function Reactions({ m, chatId }: { m: Message; chatId: string }) {
   );
 }
 
+const TEXT_COLORS = ["#202124", "#d93025", "#e37400", "#1e8e3e", "#1a73e8", "#8430ce", "#5f6368"];
+const HIGHLIGHTS = ["#fff3a3", "#ceead6", "#d2e3fc", "#fad2cf", "#fde7c3", "#f3e8fd"];
+const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28];
+
 function Composer({ chat, title }: { chat: Chat; title: string }) {
   const { toast, users, uid, account } = useWs();
   const chatId = chat.id;
   const isChannel = chat.type === "channel";
-  const [text, setText] = useState("");
+  const [text, setText] = useState(""); // plain-text copy of the editor, used for the send button and the upload caption
   const [mentioned, setMentioned] = useState<Record<string, string>>({}); // uid -> inserted "@Name"
   const [query, setQuery] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [emoji, setEmoji] = useState(false);
+  const [fmt, setFmt] = useState(false);
+  const [palette, setPalette] = useState<null | "color" | "highlight">(null);
+  const [linkUrl, setLinkUrl] = useState<string | null>(null); // address being typed in the link bar (null = bar closed)
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const keyRef = useRef<(e: KeyboardEvent) => boolean>(() => false);
+  const placeholder = isChannel ? `Post in ${title} · type @ to mention` : `Type a message to ${title}`;
+
   const canChannel = isChannel && (chat.owners?.includes(uid) || account.org_role === "owner" || account.org_role === "admin");
   const candidates = query === null ? [] : [
     ...(canChannel && "channel".startsWith(query.toLowerCase()) ? [{ id: "channel", name: "channel", role: "Notify everyone in this channel" }] : []),
@@ -598,142 +628,89 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
       .filter((u) => u.name.toLowerCase().includes(query.toLowerCase())),
   ].slice(0, 6);
 
-  function onChange(v: string, caret: number) {
-    setText(v);
-    const m = /(^|\s)@([\w.]*)$/.exec(v.slice(0, caret));
-    setQuery(m ? m[2] : null);
+  // The editor must be created once: giving useEditor fresh options on every render (the chat list polls)
+  // would reconfigure it and wipe what is being typed. Handlers reach the latest state through `live`.
+  const live = useRef({ detectMention: () => {}, redraw: () => {}, setText: (_t: string) => {}, placeholder, title });
+  live.current = { detectMention, redraw, setText, placeholder, title };
+  const editorOptions = useMemo(
+    () => ({
+      immediatelyRender: false, // the page is server-rendered; the editor mounts in the browser
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [1, 2, 3] as ( 1 | 2 | 3)[] },
+          horizontalRule: false as const,
+          link: { openOnClick: false, autolink: true, defaultProtocol: "https", isAllowedUri: (url: string) => /^(https?:\/\/|mailto:)/i.test(url) },
+        }),
+        TextStyle,
+        Color,
+        FontSize,
+        Highlight.configure({ multicolor: true }),
+        Placeholder.configure({ placeholder: () => live.current.placeholder }),
+      ],
+      editorProps: {
+        attributes: { id: "composer", role: "textbox", "aria-multiline": "true", "aria-label": "Message", spellcheck: "true" },
+        handleKeyDown: (_v: unknown, e: KeyboardEvent) => keyRef.current(e),
+        // pasted images/files are not supported here; plain and rich text paste normally
+        handlePaste: (_v: unknown, e: ClipboardEvent) => (e.clipboardData?.files?.length ?? 0) > 0,
+      },
+      onUpdate: ({ editor: ed }: { editor: Editor }) => {
+        live.current.setText(docToText(ed.getJSON() as DocNode));
+        live.current.detectMention();
+      },
+      onSelectionUpdate: () => live.current.detectMention(),
+      onTransaction: () => live.current.redraw(),
+    }),
+    [],
+  );
+  const editor = useEditor(editorOptions);
+
+  /** Is an "@name" being typed right before the cursor? */
+  function mentionBefore(): { q: string; len: number } | null {
+    if (!editor) return null;
+    const { from, empty } = editor.state.selection;
+    if (!empty) return null;
+    const before = editor.state.doc.textBetween(Math.max(0, from - 40), from, "\n", "\n");
+    const m = /(^|\s)@([\w.]*)$/.exec(before);
+    return m ? { q: m[2], len: m[2].length + 1 } : null;
+  }
+  function detectMention() {
+    const m = mentionBefore();
+    setQuery(m ? m.q : null);
     setSel(0);
   }
 
   function pick(c: { id: string; name: string }) {
-    const el = inputRef.current;
-    const caret = el?.selectionStart ?? text.length;
-    const before = text.slice(0, caret).replace(/@([\w.]*)$/, `@${c.name} `);
-    const next = before + text.slice(caret);
-    setText(next);
-    setMentioned((m) => ({ ...m, [c.id]: `@${c.name}` }));
+    const m = mentionBefore();
+    if (!editor || !m) return;
+    const to = editor.state.selection.from;
+    editor.chain().focus().deleteRange({ from: to - m.len, to }).insertContent(`@${c.name} `).run();
+    setMentioned((x) => ({ ...x, [c.id]: `@${c.name}` }));
     setQuery(null);
-    caretRef.current = before.length; // placed synchronously after React writes the new value (see layout effect)
   }
 
-  const emojiBtnRef = useRef<HTMLButtonElement>(null);
-  function insertEmoji(e: string) {
-    const el = inputRef.current;
-    const start = el?.selectionStart ?? text.length;
-    const end = el?.selectionEnd ?? start;
-    setText(text.slice(0, start) + e + text.slice(end));
-    setQuery(null);
-    caretRef.current = start + e.length;
+  function clear() {
+    editor?.chain().clearContent(true).unsetAllMarks().run();
+    setText("");
+    setMentioned({});
   }
-
-  const [fmt, setFmt] = useState(false);
-  const selRef = useRef<[number, number] | null>(null);
-  function edit(next: string, a: number, b = a) {
-    setText(next);
-    setQuery(null);
-    selRef.current = [a, b];
-  }
-  /** **bold**, *italic*… around the selection (or an empty pair at the cursor); pressing again removes it. */
-  function wrap(open: string, close = open, hint = "") {
-    const el = inputRef.current;
-    const a = el?.selectionStart ?? text.length;
-    const b = el?.selectionEnd ?? a;
-    const sel = text.slice(a, b);
-    if (text.slice(a - open.length, a) === open && text.slice(b, b + close.length) === close && open !== "") {
-      edit(text.slice(0, a - open.length) + sel + text.slice(b + close.length), a - open.length, b - open.length);
-      return;
-    }
-    const inner = sel || hint;
-    edit(text.slice(0, a) + open + inner + close + text.slice(b), a + open.length, a + open.length + inner.length);
-  }
-  /** Prefix every selected line ("- ", "1. ", "> "); pressing again removes the prefix. */
-  function prefix(kind: "ul" | "ol" | "quote") {
-    const el = inputRef.current;
-    const a = el?.selectionStart ?? text.length;
-    const b = el?.selectionEnd ?? a;
-    const NL = String.fromCharCode(10);
-    const start = text.lastIndexOf(NL, a - 1) + 1;
-    let end = text.indexOf(NL, b);
-    if (end < 0) end = text.length;
-    const re = kind === "ul" ? /^- / : kind === "ol" ? /^\d+\. / : /^> /;
-    const lines = text.slice(start, end).split(NL);
-    const on = lines.every((l) => re.test(l));
-    const out = lines.map((l, i) => (on ? l.replace(re, "") : (kind === "ul" ? "- " : kind === "ol" ? `${i + 1}. ` : "> ") + l.replace(re, ""))).join(NL);
-    edit(text.slice(0, start) + out + text.slice(end), start, start + out.length);
-  }
-  function code() {
-    const el = inputRef.current;
-    const a = el?.selectionStart ?? text.length;
-    const b = el?.selectionEnd ?? a;
-    const NL = String.fromCharCode(10);
-    if (text.slice(a, b).includes(NL)) wrap("```" + NL, NL + "```");
-    else wrap("`");
-  }
-  function link() {
-    const el = inputRef.current;
-    const a = el?.selectionStart ?? text.length;
-    const b = el?.selectionEnd ?? a;
-    const label = text.slice(a, b) || "link text";
-    const url = "https://";
-    const head = text.slice(0, a) + `[${label}](`;
-    edit(head + url + ")" + text.slice(b), head.length, head.length + url.length);
-  }
-  function onShortcut(e: React.KeyboardEvent) {
-    if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
-    const k = e.key.toLowerCase();
-    if (k === "b") wrap("**");
-    else if (k === "i") wrap("*");
-    else if (k === "u") wrap("__");
-    else if (k === "k") link();
-    else if (k === "x" && e.shiftKey) setFmt((v) => !v);
-    else if (k === "x" && e.shiftKey === false) return false;
-    else return false;
-    e.preventDefault();
-    return true;
-  }
-
-  const caretRef = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    const el = inputRef.current;
-    if (el && selRef.current) {
-      el.focus();
-      el.setSelectionRange(selRef.current[0], selRef.current[1]);
-      selRef.current = null;
-    }
-    if (el && caretRef.current !== null) {
-      el.focus();
-      el.setSelectionRange(caretRef.current, caretRef.current);
-      caretRef.current = null;
-    }
-  }, [text]);
-  const [sending, setSending] = useState(false);
-  const [emoji, setEmoji] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [text]);
 
   async function send() {
-    const body = text.trim();
-    if (!body || sending) return;
+    if (!editor || sending) return;
+    const doc = editor.getJSON() as DocNode;
+    const body = docToText(doc).trim();
+    if (!body) return;
     setSending(true);
     try {
       const mentions = Object.entries(mentioned)
         .filter(([, tag]) => body.includes(tag))
         .map(([id]) => id);
-      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions } });
-      setText("");
-      setMentioned({});
+      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, ...(needsDoc(doc) ? { doc } : {}) } });
+      clear();
     } catch (e) {
       toast(`Message not sent: ${(e as Error).message}. Try again.`);
     } finally {
       setSending(false);
-      inputRef.current?.focus();
+      editor.commands.focus();
     }
   }
 
@@ -745,7 +722,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     setSending(true);
     try {
       await api(`/api/chats/${chatId}/files`, { form });
-      setText("");
+      clear();
       toast("File shared. Saathi is reading it…");
     } catch (e) {
       toast(`Upload failed: ${(e as Error).message}`);
@@ -755,83 +732,198 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     }
   }
 
+  function setLink() {
+    if (!editor) return;
+    setLinkUrl((editor.getAttributes("link").href as string | undefined) ?? "https://");
+  }
+  function applyLink(raw: string) {
+    if (!editor) return;
+    const href = raw.trim();
+    setLinkUrl(null);
+    if (!href) {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    if (!/^(https?:\/\/|mailto:)[^\s<>"']+$/i.test(href)) {
+      editor.commands.focus();
+      return toast("Links must start with http://, https:// or mailto:");
+    }
+    if (editor.state.selection.empty && !editor.isActive("link")) {
+      editor.chain().focus().insertContent({ type: "text", text: href, marks: [{ type: "link", attrs: { href } }] }).run();
+    } else {
+      editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+    }
+  }
+
+  // Latest-state key handler (the editor keeps the first closure it was given).
+  keyRef.current = (e) => {
+    if (!editor) return false;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.altKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      setFmt(true);
+      setLink();
+      return true;
+    }
+    if (mod && e.shiftKey && e.key.toLowerCase() === "x") {
+      e.preventDefault();
+      setFmt((v) => !v);
+      return true;
+    }
+    if (candidates.length) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSel((i) => (i + (e.key === "ArrowDown" ? 1 : candidates.length - 1)) % candidates.length);
+        return true;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pick(candidates[sel]);
+        return true;
+      }
+      if (e.key === "Escape") {
+        setQuery(null);
+        return true;
+      }
+    }
+    if (e.key === "Enter" && !e.isComposing) {
+      // inside a list, quote or code block Enter adds the next line; Ctrl+Enter always sends
+      const inBlock = editor.isActive("listItem") || editor.isActive("blockquote") || editor.isActive("codeBlock");
+      if (mod || (!e.shiftKey && !inBlock)) {
+        e.preventDefault();
+        send();
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const tb = (on: boolean, off = false) =>
+    clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-hover hover:text-ink disabled:opacity-35 disabled:hover:bg-transparent", on ? "bg-brand-soft text-brand" : "text-muted", off && "pointer-events-none");
+  const ed = editor;
+  const run = (fn: () => void) => () => {
+    fn();
+    setPalette(null);
+  };
+  const heading = !ed ? "0" : ed.isActive("heading", { level: 1 }) ? "1" : ed.isActive("heading", { level: 2 }) ? "2" : ed.isActive("heading", { level: 3 }) ? "3" : "0";
+  const curSize = ((ed?.getAttributes("textStyle").fontSize as string | undefined) ?? "").replace("px", "");
+  const curColor = (ed?.getAttributes("textStyle").color as string | undefined) ?? "";
+  const curHl = (ed?.getAttributes("highlight").color as string | undefined) ?? "";
+  const inList = !!ed && ed.isActive("listItem");
+
   return (
     <div className="shrink-0 px-3 pb-3 pt-1 lg:px-5">
       <div className="relative rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.05)] transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
-        <label htmlFor="composer" className="sr-only">
-          Message {title}
-        </label>
-        {fmt && (
-          <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-1.5 py-1" role="toolbar" aria-label="Text formatting">
-            {([
-              [TextBold, "Bold (Ctrl+B)", () => wrap("**")],
-              [TextItalic, "Italic (Ctrl+I)", () => wrap("*")],
-              [TextUnderline, "Underline (Ctrl+U)", () => wrap("__")],
-              [TextStrike, "Strikethrough", () => wrap("~~")],
-              null,
-              [ListBullets, "Bulleted list", () => prefix("ul")],
-              [ListNumbers, "Numbered list", () => prefix("ol")],
-              null,
-              [MessageSquareQuote, "Quote", () => prefix("quote")],
-              [LinkSimple, "Link (Ctrl+K)", link],
-              [CodeSimple, "Code", code],
-            ] as const).map((it, i) =>
-              it ? (
-                (() => {
-                  const Ico = it[0];
-                  return (
+        {fmt && ed && (
+          <div className="relative flex flex-wrap items-center gap-0.5 border-b border-border px-1.5 py-1" role="toolbar" aria-label="Text formatting" onMouseDown={(e) => { if (!(e.target instanceof HTMLSelectElement)) e.preventDefault(); }}>
+            <button type="button" className={tb(false)} title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!ed.can().undo()} onClick={() => ed.chain().focus().undo().run()}><Undo size={17} /></button>
+            <button type="button" className={tb(false)} title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!ed.can().redo()} onClick={() => ed.chain().focus().redo().run()}><Redo size={17} /></button>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <select
+              aria-label="Text style"
+              value={heading}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "0") ed.chain().focus().setParagraph().run();
+                else ed.chain().focus().setHeading({ level: Number(v) as 1 | 2 | 3 }).run();
+              }}
+              className="h-8 rounded-md border border-border bg-surface px-1.5 text-xs text-ink"
+            >
+              <option value="0">Normal</option>
+              <option value="1">Heading 1</option>
+              <option value="2">Heading 2</option>
+              <option value="3">Heading 3</option>
+            </select>
+            <select
+              aria-label="Font size"
+              value={curSize}
+              onChange={(e) => (e.target.value ? ed.chain().focus().setFontSize(`${e.target.value}px`).run() : ed.chain().focus().unsetFontSize().run())}
+              className="h-8 rounded-md border border-border bg-surface px-1.5 text-xs text-ink"
+            >
+              <option value="">Size</option>
+              {FONT_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <button type="button" className={tb(ed.isActive("bold"))} title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={ed.isActive("bold")} onClick={run(() => ed.chain().focus().toggleBold().run())}><TextBold size={17} /></button>
+            <button type="button" className={tb(ed.isActive("italic"))} title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={ed.isActive("italic")} onClick={run(() => ed.chain().focus().toggleItalic().run())}><TextItalic size={17} /></button>
+            <button type="button" className={tb(ed.isActive("underline"))} title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={ed.isActive("underline")} onClick={run(() => ed.chain().focus().toggleUnderline().run())}><TextUnderline size={17} /></button>
+            <button type="button" className={tb(ed.isActive("strike"))} title="Strikethrough" aria-label="Strikethrough" aria-pressed={ed.isActive("strike")} onClick={run(() => ed.chain().focus().toggleStrike().run())}><TextStrike size={17} /></button>
+            <button type="button" className={tb(palette === "color" || !!curColor)} title="Text colour" aria-label="Text colour" aria-expanded={palette === "color"} onClick={() => setPalette((p) => (p === "color" ? null : "color"))}>
+              <span className="relative flex flex-col items-center"><FontColor size={17} /><span className="absolute -bottom-0.5 h-[3px] w-4 rounded-full" style={{ background: curColor || "#202124" }} /></span>
+            </button>
+            <button type="button" className={tb(palette === "highlight" || !!curHl)} title="Highlight" aria-label="Highlight" aria-expanded={palette === "highlight"} onClick={() => setPalette((p) => (p === "highlight" ? null : "highlight"))}>
+              <span className="relative flex flex-col items-center"><Highlighter size={17} /><span className="absolute -bottom-0.5 h-[3px] w-4 rounded-full" style={{ background: curHl || "#fff3a3" }} /></span>
+            </button>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <button type="button" className={tb(ed.isActive("bulletList"))} title="Bulleted list" aria-label="Bulleted list" aria-pressed={ed.isActive("bulletList")} onClick={run(() => ed.chain().focus().toggleBulletList().run())}><ListBullets size={17} /></button>
+            <button type="button" className={tb(ed.isActive("orderedList"))} title="Numbered list" aria-label="Numbered list" aria-pressed={ed.isActive("orderedList")} onClick={run(() => ed.chain().focus().toggleOrderedList().run())}><ListNumbers size={17} /></button>
+            <button type="button" className={tb(false)} title="Decrease indent (Shift+Tab)" aria-label="Decrease indent" disabled={!inList || !ed.can().liftListItem("listItem")} onClick={() => ed.chain().focus().liftListItem("listItem").run()}><Outdent size={17} /></button>
+            <button type="button" className={tb(false)} title="Increase indent (Tab)" aria-label="Increase indent" disabled={!inList || !ed.can().sinkListItem("listItem")} onClick={() => ed.chain().focus().sinkListItem("listItem").run()}><Indent size={17} /></button>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <button type="button" className={tb(ed.isActive("blockquote"))} title="Quote" aria-label="Quote" aria-pressed={ed.isActive("blockquote")} onClick={run(() => ed.chain().focus().toggleBlockquote().run())}><MessageSquareQuote size={17} /></button>
+            <button type="button" className={tb(ed.isActive("link"))} title="Link (Ctrl+K)" aria-label="Link" aria-pressed={ed.isActive("link")} onClick={run(setLink)}><LinkSimple size={17} /></button>
+            <button type="button" className={tb(ed.isActive("code"))} title="Inline code" aria-label="Inline code" aria-pressed={ed.isActive("code")} onClick={run(() => ed.chain().focus().toggleCode().run())}><CodeSimple size={17} /></button>
+            <button type="button" className={tb(ed.isActive("codeBlock"))} title="Code block" aria-label="Code block" aria-pressed={ed.isActive("codeBlock")} onClick={run(() => ed.chain().focus().toggleCodeBlock().run())}><CodeBlock size={17} /></button>
+            {palette && (
+              <div className="ws-pop absolute left-2 top-full z-30 mt-1 flex items-center gap-1 rounded-xl border border-border bg-surface p-2 shadow-xl" role="group" aria-label={palette === "color" ? "Text colours" : "Highlight colours"}>
+                {(palette === "color" ? TEXT_COLORS : HIGHLIGHTS).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={c}
+                    title={c}
+                    onClick={() => {
+                      if (palette === "color") ed.chain().focus().setColor(c).run();
+                      else ed.chain().focus().setHighlight({ color: c }).run();
+                      setPalette(null);
+                    }}
+                    className="h-6 w-6 rounded-full border border-border transition hover:scale-110"
+                    style={{ background: c }}
+                  />
+                ))}
                 <button
-                  key={i}
                   type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={it[2]}
-                  title={it[1]}
-                  aria-label={it[1]}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink"
+                  onClick={() => {
+                    if (palette === "color") ed.chain().focus().unsetColor().run();
+                    else ed.chain().focus().unsetHighlight().run();
+                    setPalette(null);
+                  }}
+                  className="ml-1 rounded-md px-2 py-1 text-xs text-muted hover:bg-hover hover:text-ink"
                 >
-                  <Ico size={17} />
+                  None
                 </button>
-                  );
-                })()
-              ) : (
-                <span key={i} className="mx-1 h-4 w-px bg-border" aria-hidden />
-              ),
+              </div>
             )}
           </div>
         )}
-        <textarea
-          id="composer"
-          ref={inputRef}
-          value={text}
-          onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
-          onKeyDown={(e) => {
-            if (onShortcut(e)) return;
-            if (candidates.length) {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                setSel((i) => (i + (e.key === "ArrowDown" ? 1 : candidates.length - 1)) % candidates.length);
-                return;
-              }
-              if (e.key === "Enter" || e.key === "Tab") {
-                e.preventDefault();
-                pick(candidates[sel]);
-                return;
-              }
-              if (e.key === "Escape") {
-                setQuery(null);
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        {fmt && linkUrl !== null && (
+          <form
+            className="flex items-center gap-2 border-b border-border px-2 py-1.5"
+            onSubmit={(e) => {
               e.preventDefault();
-              send();
-            }
-          }}
-          rows={1}
-          placeholder={isChannel ? `Post in ${title} · type @ to mention` : `Type a message to ${title}`}
-          className="block max-h-40 min-h-11 w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[14.5px] outline-none"
-          aria-autocomplete="list"
-        />
+              applyLink(linkUrl);
+            }}
+          >
+            <LinkSimple size={16} className="text-muted" />
+            <input
+              autoFocus
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setLinkUrl(null);
+                  editor?.commands.focus();
+                }
+              }}
+              placeholder="https://example.com"
+              aria-label="Link address"
+              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-surface px-2 text-sm outline-none focus:border-brand"
+            />
+            <button type="submit" className="h-8 rounded-md bg-brand px-3 text-xs font-medium text-white hover:bg-brand-strong">Apply</button>
+            <button type="button" onClick={() => { setLinkUrl(null); editor?.commands.focus(); }} className="h-8 rounded-md px-2 text-xs text-muted hover:bg-hover">Cancel</button>
+          </form>
+        )}
+        <EditorContent editor={editor} />
         {candidates.length > 0 && (
           <ul role="listbox" aria-label="Mention someone" className="ws-pop absolute bottom-full left-2 z-30 mb-2 w-72 rounded-xl border border-border bg-surface p-1 shadow-xl">
             {candidates.map((c, i) => (
@@ -866,8 +958,9 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             <Paperclip size={17} />
           </button>
           <button
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => setFmt((v) => !v)}
-            className={clsx("flex h-8 w-8 items-center justify-center rounded-md hover:bg-hover hover:text-ink", fmt ? "bg-brand-soft text-brand" : "text-muted")}
+            className={tb(fmt)}
             title={fmt ? "Hide formatting options (Ctrl+Shift+X)" : "Formatting options (Ctrl+Shift+X)"}
             aria-label="Formatting options"
             aria-pressed={fmt}
@@ -875,10 +968,18 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             <TextAa size={17} />
           </button>
           <div className="relative">
-            <button ref={emojiBtnRef} onClick={() => setEmoji((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Emoji" aria-label="Insert emoji" aria-expanded={emoji}>
+            <button
+              ref={emojiBtnRef}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setEmoji((v) => !v)}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink"
+              title="Emoji"
+              aria-label="Insert emoji"
+              aria-expanded={emoji}
+            >
               <Smile size={17} />
             </button>
-            {emoji && <EmojiPopover anchor={emojiBtnRef.current} onPick={insertEmoji} onClose={() => setEmoji(false)} />}
+            {emoji && <EmojiPopover anchor={emojiBtnRef.current} onPick={(e) => editor?.chain().focus().insertContent(e).run()} onClose={() => setEmoji(false)} />}
           </div>
           <span className="ml-2 hidden min-w-0 flex-1 truncate text-[11px] text-muted md:block">
             <Sparkles size={11} className="mr-1 inline text-saffron-ink" aria-hidden />

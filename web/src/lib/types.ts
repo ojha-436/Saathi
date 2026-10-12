@@ -91,6 +91,7 @@ export type Message = {
   ts?: Timestamp;
   system?: boolean;
   mentions?: string[];
+  doc?: import("./richtext").DocNode; // formatted version of `text` (Tiptap JSON)
   reactions?: Partial<Record<Reaction, string[]>>;
   file?: {
     id: string;

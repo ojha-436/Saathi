@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, ingest, meetings, people
+from . import admin, ai, connectors, ingest, meetings, people, richdoc
 from .agent import ask
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, TZ
 from .firebase import auth, audit, bucket, current_user, db, FieldFilter, firestore, get_chat_for_member, require_admin, same_org, user_profile
@@ -221,7 +221,7 @@ def notify(uid: str, kind: str, title: str, body: str, actor: dict | None = None
 
 # ---------------- chats ----------------
 
-def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None) -> str:
+def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None, doc: dict | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
     ts = now()
     body = {"sender": user["uid"], "sender_name": user["name"], "text": text, "ts": ts}
@@ -229,6 +229,8 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
         body["file"] = file
     if mentions:
         body["mentions"] = mentions
+    if doc:
+        body["doc"] = doc  # formatted version (Tiptap JSON); `text` stays the plain text used for search and AI
     db.collection("chats").document(chat["id"]).collection("messages").document(msg_id).set(body)
     preview = text or (f"📎 {file['name']}" if file else "")
     db.collection("chats").document(chat["id"]).update(
@@ -482,6 +484,7 @@ def react(chat_id: str, msg_id: str, body: ReactIn, user=Depends(current_user)):
 class MessageIn(BaseModel):
     text: str
     mentions: list[str] = []  # member uids, or "channel" to notify everyone in a channel
+    doc: dict | None = None  # formatted message (Tiptap JSON); validated by richdoc.clean_doc
 
 
 @app.post("/api/chats/{chat_id}/messages")
@@ -494,7 +497,11 @@ def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depend
     mentioned = [m for m in dict.fromkeys(body.mentions) if m in chat["members"] and m != user["uid"]]
     everyone = "channel" in body.mentions and chat.get("type") == "channel" and (
         user["uid"] in (chat.get("owners") or []) or user.get("org_role") in ("owner", "admin"))
-    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []))
+    try:
+        doc = richdoc.clean_doc(body.doc) if body.doc else None
+    except richdoc.DocError as e:
+        raise HTTPException(400, str(e))
+    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []), doc=doc if doc and len(text) <= 4000 else None)
     where = chat.get("name") or "a direct message"
     for m in (set(chat["members"]) - {user["uid"]} if everyone else mentioned):
         notify(m, "mention", f"{user['name']} mentioned you in {where}", text, actor=user, source_ref=f"msg:{chat_id}/{msg_id}", chat_id=chat_id)
