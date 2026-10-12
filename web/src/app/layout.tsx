@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import { serverConfig } from "@/lib/config";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/figtree";
+import "@fontsource-variable/geist-mono";
 import "./globals.css";
 
 
@@ -19,10 +22,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full antialiased">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Inter:wght@300..800&family=Geist+Mono:wght@100..900&display=swap" />
         <script dangerouslySetInnerHTML={{ __html: `window.__SAATHI__=${config};` }} />
       </head>
       <body className="h-full">{children}</body>

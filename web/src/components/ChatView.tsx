@@ -616,7 +616,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
   const keyRef = useRef<(e: KeyboardEvent) => boolean>(() => false);
-  const placeholder = isChannel ? `Post in ${title} · type @ to mention` : `Type a message to ${title}`;
+  const placeholder = isChannel ? `Post in ${title}` : `Message ${title}`;
 
   const canChannel = isChannel && (chat.owners?.includes(uid) || account.org_role === "owner" || account.org_role === "admin");
   const candidates = query === null ? [] : [
@@ -840,7 +840,8 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     <div className="shrink-0 px-3 pb-3 pt-1 lg:px-5">
       <div className="relative rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.05)] transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
         {fmt && ed && (
-          <div className="relative flex flex-wrap items-center gap-0.5 border-b border-border px-1.5 py-1" role="toolbar" aria-label="Text formatting" onMouseDown={(e) => { if (!(e.target instanceof HTMLSelectElement)) e.preventDefault(); }}>
+          <div className="relative border-b border-border">
+          <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto px-1.5 py-1 sm:flex-wrap sm:overflow-visible" role="toolbar" aria-label="Text formatting" onMouseDown={(e) => { if (!(e.target instanceof HTMLSelectElement)) e.preventDefault(); }}>
             <button type="button" className={tb(false)} title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!ed.can().undo()} onClick={() => ed.chain().focus().undo().run()}><Undo size={17} /></button>
             <button type="button" className={tb(false)} title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!ed.can().redo()} onClick={() => ed.chain().focus().redo().run()}><Redo size={17} /></button>
             <span className="mx-1 h-4 w-px bg-border" aria-hidden />
@@ -848,7 +849,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
               aria-label="Font size"
               value={curSize}
               onChange={(e) => (e.target.value ? ed.chain().focus().setFontSize(`${e.target.value}px`).run() : ed.chain().focus().unsetFontSize().run())}
-              className="h-8 rounded-md border border-border bg-surface px-1.5 text-xs text-ink"
+              className="h-8 shrink-0 rounded-md border border-border bg-surface px-1.5 text-xs text-ink"
             >
               <option value="">Size</option>
               {FONT_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -872,6 +873,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             <span className="mx-1 h-4 w-px bg-border" aria-hidden />
             <button type="button" className={tb(false)} title="Quotation marks" aria-label="Quote" onClick={run(quoteMarks)}><MessageSquareQuote size={17} /></button>
             <button type="button" className={tb(ed.isActive("link"))} title="Link (Ctrl+K)" aria-label="Link" aria-pressed={ed.isActive("link")} onClick={run(setLink)}><LinkSimple size={17} /></button>
+          </div>
             {palette && (
               <div className="ws-pop absolute left-2 top-full z-30 mt-1 flex items-center gap-1 rounded-xl border border-border bg-surface p-2 shadow-xl" role="group" aria-label={palette === "color" ? "Text colours" : "Highlight colours"}>
                 {(palette === "color" ? TEXT_COLORS : HIGHLIGHTS).map((c) => (

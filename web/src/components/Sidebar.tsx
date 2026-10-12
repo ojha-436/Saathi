@@ -12,6 +12,11 @@ import { LogoMark } from "./Logo";
 
 export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "insights" | "admin";
 
+/** One-line chat preview: drop the list and quote markers formatted messages carry in their plain text. */
+function stripMarkers(t?: string): string {
+  return (t ?? "").split(String.fromCharCode(10)).map((l) => l.replace(/^(> |- |[0-9]+\. )/, "")).join(" ").trim();
+}
+
 export function railKey(view: View): RailKey {
   return view.kind === "meeting" ? "home" : view.kind;
 }
@@ -150,7 +155,8 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
     const level = notifyLevel(c, settings);
     const unread = !active && isUnread(c, uid) && level !== "off";
     const fav = !!c.favorite_of?.includes(uid);
-    const preview = c.type !== "dm" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ${c.last_text}` : c.last_text;
+    const lastText = stripMarkers(c.last_text);
+    const preview = c.type !== "dm" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ${lastText}` : lastText;
     return (
       <li key={c.id} className="group relative">
         <button

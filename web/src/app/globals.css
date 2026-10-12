@@ -3,9 +3,9 @@
 /* Saathi design system — "industrial blueprint editorial"
    ink + warm paper, saffron accent, blueprint blue for links/citations. */
 @theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Figtree", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Figtree Variable", "Figtree", "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
 
   --radius-md: 0.5rem;
   --radius-lg: 0.6875rem;
@@ -56,7 +56,7 @@ html,
 body {
   background: var(--color-paper);
   color: var(--color-ink);
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 ::selection {
