@@ -65,7 +65,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-surface" aria-label="Ask Saathi">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#d4691a] text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#1a73e8] text-white">
           <Sparkles size={18} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
@@ -141,7 +141,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
               </div>
             ) : (
               <div key={m.id} className="flex gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#d4691a] text-white">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#1a73e8] text-white">
                   <Sparkles size={14} aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-border bg-surface px-5 py-4 text-[15px]">

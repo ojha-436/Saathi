@@ -5,13 +5,23 @@ import { STREAMLINE } from "./streamline-icons";
 // Names match the lucide-react icons Saathi used before, so call sites only changed their import path.
 export type IconProps = { size?: number; strokeWidth?: number; fill?: string; className?: string; "aria-hidden"?: boolean | "true" | "false" };
 
+/** Extra line weight added around every Streamline icon (0 = as drawn). */
+export const ICON_WEIGHT = 0.4;
+
 function make(name: keyof typeof STREAMLINE, opts: { flip?: boolean; extra?: string } = {}) {
-  return function Icon({ size = 24, className, ...rest }: IconProps) {
+  // The free set is drawn thin. An outline stroke in the same colour makes every line bolder (viewBox units).
+  return function Icon({ size = 24, className, strokeWidth, ...rest }: IconProps) {
+    // thinner extra weight on small icons so fine details do not fill in
+    const weight = strokeWidth ?? (size <= 16 ? ICON_WEIGHT * 0.4 : size <= 22 ? ICON_WEIGHT * 0.65 : ICON_WEIGHT);
     return (
       <svg
         width={size}
         height={size}
         viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={weight}
+        strokeLinejoin="round"
+        strokeLinecap="round"
         data-icon={name}
         className={clsx("shrink-0", className)}
         style={opts.flip ? { transform: "scaleX(-1)" } : undefined}
