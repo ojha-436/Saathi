@@ -104,6 +104,9 @@ class FavoriteIn(BaseModel):
 
 
 REACTIONS = {"like", "heart", "laugh", "check", "pray", "wow"}
+# Any emoji is allowed: the browser sends "e_<hex codepoints>" (e.g. e_1f44d), a safe Firestore field name.
+EMOJI_REACTION = re.compile(r"^e_[0-9a-f]{2,6}(_[0-9a-f]{2,6}){0,9}$")
+MAX_REACTION_KINDS = 20
 
 
 # ---------------- local mode: sign-in and read API (replaces Firebase Auth + Firestore listeners) ----------------
@@ -462,13 +465,16 @@ def set_favorite(chat_id: str, body: FavoriteIn, user=Depends(current_user)):
 @app.post("/api/chats/{chat_id}/messages/{msg_id}/react")
 def react(chat_id: str, msg_id: str, body: ReactIn, user=Depends(current_user)):
     get_chat_for_member(chat_id, user["uid"])
-    if body.reaction not in REACTIONS:
+    if body.reaction not in REACTIONS and not EMOJI_REACTION.match(body.reaction):
         raise HTTPException(400, "Unknown reaction")
     ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
     snap = ref.get()
     if not snap.exists:
         raise HTTPException(404, "Message not found")
-    on = user["uid"] in ((snap.to_dict().get("reactions") or {}).get(body.reaction) or [])
+    existing = snap.to_dict().get("reactions") or {}
+    if body.reaction not in existing and sum(1 for v in existing.values() if v) >= MAX_REACTION_KINDS:
+        raise HTTPException(400, "This message already has the maximum number of different reactions")
+    on = user["uid"] in (existing.get(body.reaction) or [])
     ref.update({f"reactions.{body.reaction}": (firestore.ArrayRemove if on else firestore.ArrayUnion)([user["uid"]])})
     return {"ok": True, "on": not on}
 

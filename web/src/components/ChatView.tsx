@@ -33,8 +33,9 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
-import { DOC_LABEL, REACTION_EMOJI, chatTitle, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
+import { DOC_LABEL, REACTION_EMOJI, chatTitle, reactionEmoji, reactionKey, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
 import type { Chat, Message, Reaction, UserProfile } from "@/lib/types";
+import { EmojiPopover } from "./EmojiPopover";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
@@ -63,7 +64,6 @@ function withMentions(text: string, mentions: string[] | undefined, users: Recor
 type Tab = "messages" | "decisions" | "files";
 type Panel = null | "about" | "members";
 
-const COMPOSER_EMOJI = ["👍", "🙏", "✅", "👌", "🎉", "😄", "🙂", "🤔", "👀", "🔥", "⚠️", "📌", "📎", "🚚", "🏭", "🔧", "📐", "🧪", "⏰", "❤️"];
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: string }) {
@@ -474,6 +474,8 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
 
 function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: string; chatName: string; align: "left" | "right" }) {
   const { open, toast, newTask, uid } = useWs();
+  const [picking, setPicking] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
   async function react(r: Reaction) {
     try {
       await api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: r } });
@@ -496,10 +498,14 @@ function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: st
       aria-label="Message actions"
     >
       {(Object.keys(REACTION_EMOJI) as Reaction[]).slice(0, 5).map((r) => (
-        <button key={r} onClick={() => react(r)} className={clsx(btn, "text-base")} aria-label={`React ${REACTION_EMOJI[r]}`} title={`React ${REACTION_EMOJI[r]}`}>
+        <button key={r} onClick={() => react(reactionKey(REACTION_EMOJI[r]))} className={clsx(btn, "text-base")} aria-label={`React ${REACTION_EMOJI[r]}`} title={`React ${REACTION_EMOJI[r]}`}>
           {REACTION_EMOJI[r]}
         </button>
       ))}
+      <button ref={moreRef} onClick={() => setPicking((v) => !v)} className={btn} aria-label="Add another reaction" aria-expanded={picking} title="More reactions">
+        <Smile size={15} />
+      </button>
+      {picking && <EmojiPopover anchor={moreRef.current} onPick={(e) => react(reactionKey(e))} onClose={() => setPicking(false)} />}
       <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
       <button onClick={addTask} className={btn} aria-label="Create task from message" title="Create task…">
         <ListPlus size={15} />
@@ -530,22 +536,32 @@ function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: st
 
 function Reactions({ m, chatId }: { m: Message; chatId: string }) {
   const { uid, users, toast } = useWs();
-  const entries = Object.entries(m.reactions ?? {}).filter(([, who]) => who && who.length) as [Reaction, string[]][];
-  if (!entries.length) return null;
+  // group by the emoji shown, so an old "like" and a picked 👍 count together
+  const groups = new Map<string, { who: Set<string>; keys: string[] }>();
+  for (const [key, who] of Object.entries(m.reactions ?? {})) {
+    if (!who || !who.length) continue;
+    const e = reactionEmoji(key);
+    const g = groups.get(e) ?? { who: new Set<string>(), keys: [] };
+    who.forEach((w) => g.who.add(w));
+    g.keys.push(key);
+    groups.set(e, g);
+  }
+  if (!groups.size) return null;
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {entries.map(([r, who]) => {
-        const mineOn = who.includes(uid);
+      {[...groups.entries()].map(([emoji, g]) => {
+        const mineKey = g.keys.find((k) => m.reactions?.[k]?.includes(uid));
+        const mineOn = !!mineKey;
         return (
           <button
-            key={r}
-            onClick={() => api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: r } }).catch((e) => toast((e as Error).message))}
-            title={who.map((w) => users[w]?.name ?? "Someone").join(", ")}
+            key={emoji}
+            onClick={() => api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: mineKey ?? g.keys[0] } }).catch((e) => toast((e as Error).message))}
+            title={[...g.who].map((w) => users[w]?.name ?? "Someone").join(", ")}
             aria-pressed={mineOn}
-            className={clsx("flex h-6 items-center gap-1 rounded-full border px-2 text-xs transition", mineOn ? "border-brand/40 bg-brand-soft text-brand" : "border-border bg-surface text-muted hover:border-[#c5cad3]")}
+            className={clsx("flex h-6 items-center gap-1 rounded-full border px-2 text-xs transition", mineOn ? "border-brand/40 bg-brand-soft text-brand" : "border-border bg-surface text-muted hover:border-brand/40")}
           >
-            <span>{REACTION_EMOJI[r]}</span>
-            <span className="font-semibold">{who.length}</span>
+            <span>{emoji}</span>
+            <span className="font-semibold">{g.who.size}</span>
           </button>
         );
       })}
@@ -587,6 +603,16 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     setMentioned((m) => ({ ...m, [c.id]: `@${c.name}` }));
     setQuery(null);
     caretRef.current = before.length; // placed synchronously after React writes the new value (see layout effect)
+  }
+
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  function insertEmoji(e: string) {
+    const el = inputRef.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? start;
+    setText(text.slice(0, start) + e + text.slice(end));
+    setQuery(null);
+    caretRef.current = start + e.length;
   }
 
   const caretRef = useRef<number | null>(null);
@@ -719,26 +745,10 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             <Paperclip size={17} />
           </button>
           <div className="relative">
-            <button onClick={() => setEmoji((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Emoji" aria-label="Insert emoji" aria-expanded={emoji}>
+            <button ref={emojiBtnRef} onClick={() => setEmoji((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Emoji" aria-label="Insert emoji" aria-expanded={emoji}>
               <Smile size={17} />
             </button>
-            {emoji && (
-              <div className="ws-pop absolute bottom-full left-0 z-30 mb-2 grid w-64 grid-cols-8 gap-0.5 rounded-xl border border-border bg-surface p-2 shadow-xl" role="dialog" aria-label="Emoji">
-                {COMPOSER_EMOJI.map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => {
-                      setText((t) => t + e);
-                      setEmoji(false);
-                      inputRef.current?.focus();
-                    }}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-lg hover:bg-hover"
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            )}
+            {emoji && <EmojiPopover anchor={emojiBtnRef.current} onPick={insertEmoji} onClose={() => setEmoji(false)} />}
           </div>
           <span className="ml-2 hidden min-w-0 flex-1 truncate text-[11px] text-muted md:block">
             <Sparkles size={11} className="mr-1 inline text-saffron-ink" aria-hidden />
