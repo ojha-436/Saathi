@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowUp, FileSearch, Handshake, Loader2, Radar, RotateCcw, Sparkles, Timer } from "@/lib/icons";
+import { LogoMark } from "./Logo";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAssistant } from "@/lib/hooks";
@@ -65,9 +66,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-surface" aria-label="Ask Saathi">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#1a73e8] text-white">
-          <Sparkles size={18} aria-hidden />
-        </span>
+        <LogoMark size={32} />
         <div className="min-w-0 flex-1">
           <h1 className="text-[15px] font-bold leading-tight">Ask Saathi</h1>
           <p className="hidden truncate text-xs text-muted sm:block">Searches only the chats and files you can access · every answer cites its source</p>
@@ -141,9 +140,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
               </div>
             ) : (
               <div key={m.id} className="flex gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#1a73e8] text-white">
-                  <Sparkles size={14} aria-hidden />
-                </span>
+                <LogoMark size={32} className="shrink-0" />
                 <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-border bg-surface px-5 py-4 text-[15px]">
                   {m.pending ? (
                     <div className="space-y-2" role="status" aria-label="Saathi is searching">

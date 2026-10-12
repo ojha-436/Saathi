@@ -8,6 +8,7 @@ import { chatTitle, isUnread, timeShort } from "@/lib/format";
 import type { Chat, NotifyLevel, UserSettings } from "@/lib/types";
 import { ChatIcon, Menu } from "./bits";
 import { useWs, type View } from "./ctx";
+import { LogoMark } from "./Logo";
 
 export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "insights" | "admin";
 
@@ -64,7 +65,11 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
           >
             {!mobile && on && <span className="absolute left-[-6px] top-3 bottom-3 w-[3px] rounded-r bg-saffron" aria-hidden />}
             <span className="relative">
-              <it.icon size={20} strokeWidth={on ? 2.4 : 1.9} className={clsx(it.key === "assistant" && (mobile ? on && "text-saffron-ink" : "text-saffron"))} aria-hidden />
+              {it.key === "assistant" ? (
+                <LogoMark size={26} className="rounded-[8px] ring-1 ring-brand/25" />
+              ) : (
+                <it.icon size={20} aria-hidden />
+              )}
               {!!it.badge && (
                 <span
                   className={clsx(
@@ -255,9 +260,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
           aria-current={assistantActive ? "page" : undefined}
           className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-[7px] text-left transition", assistantActive ? "bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.08)]" : "hover:bg-hover")}
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#1a73e8] text-white" aria-hidden>
-            <Sparkles size={16} />
-          </span>
+          <LogoMark size={32} className="shrink-0" />
           <span className="min-w-0 flex-1">
             <span className="block text-[13.5px] font-semibold">Saathi</span>
             <span className="block truncate text-xs text-muted">Your AI colleague · search, catch up, remind</span>
