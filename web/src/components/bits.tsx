@@ -14,7 +14,7 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded-full text-ink ring-2 ring-white"
-      style={{ width: size, height: size, background: "#cfd8ff" }}
+      style={{ width: size, height: size, background: "#d2e3fc" }}
       role="img"
       aria-label={name}
     >

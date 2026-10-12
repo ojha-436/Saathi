@@ -13,41 +13,43 @@
   --radius-2xl: 1.5rem;
   --radius-3xl: 2rem;
 
-  /* Green and white: forest green primary, mint accent, soft pastel tints */
-  --color-ink: #101510;
-  --color-ink-2: #1a221a;
-  --color-ink-3: #2a352a;
+  /* Given palette: medium blue #4285F4, light blue #D2E3FC, light grey #F1F3F4.
+     Derived shades (not in the brief): #174EA6 deep blue for the rail and dark panels, #3367D6 button hover,
+     #8AB4F8 light blue for text on dark panels, #202124 text, #5F6368 muted, #DADCE0 lines. */
+  --color-ink: #202124;
+  --color-ink-2: #2d2f33;
+  --color-ink-3: #3c4043;
   --color-paper: #ffffff;
-  --color-paper-2: #f4f6f2;
-  --color-paper-3: #e8ece5;
-  --color-line: #e3e7df;
-  --color-muted: #5b665a;
-  --color-saffron: #68e246;
-  --color-saffron-ink: #224b17;
-  --color-saffron-soft: #e5fae0;
-  --color-mint: #9aeb83;
-  --color-cream: #fff3db;
-  --color-sky: #d7efff;
-  --color-lavender: #f3e7ff;
-  --color-blush: #fee3fa;
-  --color-blueprint: #0b7bd1;
-  --color-blueprint-soft: #d7efff;
-  --color-moss: #1f7a3d;
-  --color-moss-soft: #e5fae0;
-  --color-rust: #b3402a;
-  --color-rust-soft: #ffe6df;
-  --color-plum: #7a3fd1;
-  --color-plum-soft: #f3e7ff;
+  --color-paper-2: #f1f3f4;
+  --color-paper-3: #e8eaed;
+  --color-line: #dadce0;
+  --color-muted: #5f6368;
+  --color-saffron: #4285f4;
+  --color-saffron-ink: #174ea6;
+  --color-saffron-soft: #d2e3fc;
+  --color-mint: #8ab4f8;
+  --color-cream: #f1f3f4;
+  --color-sky: #e8f0fe;
+  --color-lavender: #d2e3fc;
+  --color-blush: #f1f3f4;
+  --color-blueprint: #1a73e8;
+  --color-blueprint-soft: #d2e3fc;
+  --color-moss: #1e8e3e;
+  --color-moss-soft: #e6f4ea;
+  --color-rust: #d93025;
+  --color-rust-soft: #fce8e6;
+  --color-plum: #1a73e8;
+  --color-plum-soft: #d2e3fc;
 
-  /* Workspace surfaces use the same palette so the app matches the landing page */
-  --color-canvas: #f6f8f5;
+  /* Workspace surfaces use the same palette */
+  --color-canvas: #f1f3f4;
   --color-surface: #ffffff;
-  --color-hover: #eef2ea;
-  --color-border: #e3e7df;
-  --color-brand: #224b17;
-  --color-brand-strong: #17360f;
-  --color-brand-soft: #e5fae0;
-  --color-rail: #16330f;
+  --color-hover: #e8eaed;
+  --color-border: #dadce0;
+  --color-brand: #4285f4;
+  --color-brand-strong: #3367d6;
+  --color-brand-soft: #d2e3fc;
+  --color-rail: #174ea6;
 }
 
 html,
@@ -101,22 +103,22 @@ h2 em {
 /* Soft pastel glows behind hero / login */
 .glow {
   background:
-    radial-gradient(36rem 26rem at 6% 0%, rgba(154, 235, 131, 0.28), transparent 62%),
-    radial-gradient(34rem 28rem at 100% 8%, rgba(215, 239, 255, 0.6), transparent 62%),
-    radial-gradient(30rem 24rem at 60% 100%, rgba(243, 231, 255, 0.5), transparent 62%);
+    radial-gradient(36rem 26rem at 6% 0%, rgba(210, 227, 252, 0.85), transparent 62%),
+    radial-gradient(34rem 28rem at 100% 8%, rgba(241, 243, 244, 0.9), transparent 62%),
+    radial-gradient(30rem 24rem at 60% 100%, rgba(232, 240, 254, 0.8), transparent 62%);
 }
 
 /* Blueprint grid backgrounds */
 .blueprint-grid {
-  background-color: #16330f;
+  background-color: #174ea6;
   background-image:
-    radial-gradient(36rem 26rem at 0% 0%, rgba(154, 235, 131, 0.22), transparent 60%),
-    radial-gradient(34rem 26rem at 100% 100%, rgba(104, 226, 70, 0.18), transparent 60%);
+    radial-gradient(36rem 26rem at 0% 0%, rgba(138, 180, 248, 0.32), transparent 60%),
+    radial-gradient(34rem 26rem at 100% 100%, rgba(66, 133, 244, 0.4), transparent 60%);
 }
 .bg-graph {
   background-image:
-    linear-gradient(rgba(16, 21, 16, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(16, 21, 16, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(32, 33, 36, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(32, 33, 36, 0.05) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 .grain::after {
@@ -241,7 +243,7 @@ html {
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(16, 21, 16, 0.2) transparent;
+  scrollbar-color: rgba(32, 33, 36, 0.2) transparent;
 }
 
 /* ---------- Micro-interactions (all switched off by prefers-reduced-motion) ---------- */
@@ -289,10 +291,10 @@ html {
 }
 @keyframes ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(104, 226, 70, 0.7);
+    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.6);
   }
   100% {
-    box-shadow: 0 0 0 14px rgba(104, 226, 70, 0);
+    box-shadow: 0 0 0 14px rgba(66, 133, 244, 0);
   }
 }
 
@@ -350,7 +352,7 @@ a.rounded-full:active {
 button.bg-saffron:not(:disabled):hover,
 a.bg-saffron:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 22px -10px rgba(34, 75, 23, 0.55);
+  box-shadow: 0 10px 22px -10px rgba(66, 133, 244, 0.45);
 }
 button.bg-saffron:not(:disabled):active,
 a.bg-saffron:active {
@@ -376,7 +378,7 @@ button:hover [data-icon="ArrowRight"] {
 }
 .lift:hover {
   transform: translateY(-3px);
-  box-shadow: 0 18px 36px -22px rgba(16, 21, 16, 0.18);
+  box-shadow: 0 18px 36px -22px rgba(32, 33, 36, 0.16);
 }
 .nav-link {
   background: linear-gradient(currentColor, currentColor) 0 100% / 0 2px no-repeat;
@@ -433,13 +435,13 @@ button:hover [data-icon="ArrowRight"] {
 /* ---------- Primary buttons: deep forest green with mint text (links and buttons that use the accent fill) ---------- */
 a.bg-saffron,
 button.bg-saffron {
-  background-color: #224b17;
-  color: #9aeb83;
+  background-color: #4285f4;
+  color: #ffffff;
   border-radius: 0.6875rem;
 }
 a.bg-saffron:hover,
 button.bg-saffron:not(:disabled):hover {
-  background-color: #17360f;
+  background-color: #3367d6;
   filter: none;
 }
 /* Quiet outline buttons share the same corner radius */
@@ -458,12 +460,19 @@ button.rounded-full.border {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--color-ink);
-  box-shadow: 0 8px 24px -14px rgba(16, 21, 16, 0.35);
+  box-shadow: 0 8px 24px -14px rgba(32, 33, 36, 0.28);
 }
 .pill-tag::before {
   content: "";
   width: 0.9rem;
   height: 0.9rem;
   border-radius: 0.3rem;
-  background: var(--dot, #68e246);
+  background: var(--dot, #4285f4);
+}
+
+/* Accent text on the dark blue panels uses a lighter blue so it stays readable */
+.blueprint-grid .text-saffron,
+.bg-rail .text-saffron,
+aside.blueprint-grid .text-saffron {
+  color: #8ab4f8;
 }

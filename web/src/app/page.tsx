@@ -319,12 +319,12 @@ function HeroMock() {
     <div className="rise relative mx-auto mt-14 w-full max-w-4xl text-left" style={{ animationDelay: "200ms" }} aria-label="Saathi product preview" role="img">
       {/* floating category tags */}
       {[
-        ["Search", "#a855f7", "bg-lavender", "-left-28 top-4"],
-        ["Promises", "#68e246", "bg-saffron-soft", "-right-28 top-14"],
-        ["Decisions", "#10a3ff", "bg-sky", "-left-32 top-[45%]"],
-        ["Meetings", "#fc57e5", "bg-blush", "-right-32 top-[48%]"],
-        ["Files", "#ff9d1c", "bg-cream", "-left-24 bottom-10"],
-        ["Tasks", "#68e246", "bg-saffron-soft", "-right-24 bottom-6"],
+        ["Search", "#4285f4", "bg-lavender", "-left-28 top-4"],
+        ["Promises", "#34a853", "bg-saffron-soft", "-right-28 top-14"],
+        ["Decisions", "#fbbc04", "bg-sky", "-left-32 top-[45%]"],
+        ["Meetings", "#ea4335", "bg-blush", "-right-32 top-[48%]"],
+        ["Files", "#4285f4", "bg-cream", "-left-24 bottom-10"],
+        ["Tasks", "#34a853", "bg-saffron-soft", "-right-24 bottom-6"],
       ].map(([t, dot, bg, pos]) => (
         <span key={t} className={`pill-tag ${bg} absolute z-10 hidden xl:inline-flex ${pos}`} style={{ ["--dot" as string]: dot }}>
           {t}
@@ -407,18 +407,18 @@ function DrawingPanel() {
         </g>
         <text x="230" y="62" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="11" textAnchor="middle">2470</text>
         <text x="230" y="236" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="10" textAnchor="middle">DETAIL A · FILLET 10 mm</text>
-        <circle cx="230" cy="214" r="9" fill="none" stroke="#68e246" strokeWidth="1.6" />
+        <circle cx="230" cy="214" r="9" fill="none" stroke="#4285f4" strokeWidth="1.6" />
         <g fontFamily="var(--font-mono)" fontSize="10.5">
-          <rect x="250" y="262" width="250" height="88" fill="#16330f" stroke="#9fc0ec" />
+          <rect x="250" y="262" width="250" height="88" fill="#174ea6" stroke="#9fc0ec" />
           <path d="M250 284h250M250 306h250M250 328h250M340 262v88" stroke="#9fc0ec" />
           <text x="258" y="277" fill="#9fc0ec">DRG No.</text>
-          <text x="348" y="277" fill="#f4f6f2">SRC-BF-2041</text>
+          <text x="348" y="277" fill="#f1f3f4">SRC-BF-2041</text>
           <text x="258" y="299" fill="#9fc0ec">REV</text>
-          <text x="348" y="299" fill="#68e246" fontWeight="700">C · supersedes B</text>
+          <text x="348" y="299" fill="#4285f4" fontWeight="700">C · supersedes B</text>
           <text x="258" y="321" fill="#9fc0ec">APPROVED</text>
-          <text x="348" y="321" fill="#f4f6f2">N. VERMA · 06 OCT</text>
+          <text x="348" y="321" fill="#f1f3f4">N. VERMA · 06 OCT</text>
           <text x="258" y="343" fill="#9fc0ec">READ BY</text>
-          <text x="348" y="343" fill="#f4f6f2">Saathi · Document AI</text>
+          <text x="348" y="343" fill="#f1f3f4">Saathi · Document AI</text>
         </g>
       </svg>
     </div>
