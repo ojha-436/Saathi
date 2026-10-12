@@ -13,6 +13,7 @@ const Picker = dynamic(() => import("emoji-picker-react"), {
 
 const W = 320;
 const H = 380;
+const MIN_H = 240;
 
 /**
  * Full emoji picker (emoji-picker-react: all categories, search, skin tones, recently used) in a popover.
@@ -31,15 +32,20 @@ export function EmojiPopover({
   closeOnPick?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; h: number; w: number } | null>(null);
 
   useLayoutEffect(() => {
     if (!anchor) return;
     const r = anchor.getBoundingClientRect();
-    const below = window.innerHeight - r.bottom;
-    const top = below >= H + 12 ? r.bottom + 8 : Math.max(8, r.top - H - 8);
-    const left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - W - 8));
-    setPos({ top, left });
+    const w = Math.min(W, window.innerWidth - 16);
+    const below = window.innerHeight - r.bottom - 16;
+    const above = r.top - 16;
+    // open on the side with more room and shrink the picker to fit it
+    const goBelow = below >= H || below >= above;
+    const h = Math.max(MIN_H, Math.min(H, goBelow ? below : above));
+    const top = goBelow ? r.bottom + 8 : Math.max(8, r.top - h - 8);
+    const left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8));
+    setPos({ top, left, h, w });
   }, [anchor]);
 
   useEffect(() => {
@@ -74,8 +80,8 @@ export function EmojiPopover({
         }}
         emojiStyle={"native" as unknown as EmojiStyle}
         theme={"light" as unknown as Theme}
-        width={W}
-        height={H}
+        width={pos.w}
+        height={pos.h}
         lazyLoadEmojis
         autoFocusSearch
         previewConfig={{ showPreview: false }}
