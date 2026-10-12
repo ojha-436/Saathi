@@ -38,6 +38,16 @@ sections machines, quality, safety, open items, what changed, watch out (with pa
 incoming crew acknowledges (Needs-you + push); unacknowledged after 30 min escalates to admins in the group; `shift_handover` agent
 tool. Demo: `uv run python -m seed.shift` stages a realistic shift in Shop Floor - Bay 2 (`--remove` undoes).
 
+**Saathi Live shipped 2026-10-12 (after Google AI Edge Foresight, on Gemini in the cloud instead of on-device Gemma):**
+in-meeting copilot that records the microphone (+ the Meet/Teams/Zoom tab's audio when shared) in 12-second chunks; Gemini
+transcribes each chunk and detects questions; each question is answered in seconds from the sources picked as meeting context
+(knowledge hub uploads, Drive files, workspace files, past meetings) plus everything else the person can access, with citations.
+HUD with A−/A+ and dismiss, typed questions, and a Picture-in-Picture pop-out that floats over the meeting (Chrome/Edge).
+"End meeting" turns notes + transcript + answers into a Saathi meeting (summary, decisions captured to the decision log, action
+items) with **enhanced notes**. Personal **knowledge hub** (PDF, text/markdown/CSV, images, audio; labels) and **topic wikis**
+that flag contradictions between sources. **Briefing**: upcoming calendar meetings with suggested sources. Audio is never stored;
+transcripts are private to the person who ran the session.
+
 **Still planned:** B9 inspection dossier, B11 expiry radar, A2 approvals, A4 voice out, A6 translation.
 
 ---

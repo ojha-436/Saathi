@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users, DriveIcon, Workflow } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
+import { knowledgeNames } from "@/lib/knowledgeNames";
 import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
 import { useWs } from "./ctx";
@@ -57,7 +58,9 @@ export function CiteChip({ refId }: { refId: string }) {
       </a>
     );
   }
-  if (refId.startsWith("ho:")) {
+  if (refId.startsWith("kn:")) {
+    label = knowledgeNames[refId.slice(3)] ?? "my knowledge";
+  } else if (refId.startsWith("ho:")) {
     label = `shift ${refId.split("_").pop()} handover`;
   } else if (refId.startsWith("dec:")) {
     label = "decision";

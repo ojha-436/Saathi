@@ -176,6 +176,17 @@ export function MeetingView({ id, tasks }: { id: string; tasks: Task[] }) {
                 <Markdown text={m.summary} />
               </div>
             </section>
+            {m.enhanced_notes && (
+              <section className="rounded-2xl border border-border bg-surface p-5">
+                <h2 className="flex items-center gap-2 text-sm font-bold">
+                  <Sparkles size={15} className="text-brand" /> Enhanced notes
+                  <span className="font-normal text-muted">· your notes, completed from the transcript</span>
+                </h2>
+                <div className="mt-2 text-sm">
+                  <Markdown text={m.enhanced_notes} />
+                </div>
+              </section>
+            )}
             <section className="rounded-2xl border border-border bg-surface p-5">
               <h2 className="flex items-center gap-2 text-sm font-bold">
                 <Gavel size={15} className="text-moss" /> Decisions
