@@ -6,7 +6,7 @@ import { api } from "./api";
 import { getToken, isLocal } from "./auth";
 import { apiUrl, getDb } from "./firebase";
 import { reviveTs } from "./localts";
-import type { AssistantMsg, CalendarEvent, Chat, EmailItem, FileDoc, Meeting, Message, Notice, Task, UserProfile, UserSettings } from "./types";
+import type { AssistantMsg, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, Task, UserProfile, UserSettings } from "./types";
 
 type Spec = { path: string; where?: [string, string, unknown][]; orderBy?: [string, "asc" | "desc"]; limit?: number };
 
@@ -133,3 +133,22 @@ export const useEvents = (uid?: string) =>
 
 export const useEmailItems = (uid?: string) =>
   useLive<EmailItem>(uid ? { path: "external_items", where: [["uid", "==", uid]], limit: 200 } : null, `emails:${uid}`);
+
+export const useRecords = (uid?: string) =>
+  useLive<PlantRecord>(uid ? { path: "records", where: [["participants", "array-contains", uid]], limit: 300 } : null, `records:${uid}`);
+
+/** Drawing register (API-filtered: drafts only for people who can open them). Refreshes when files change. */
+export function useRegister(enabled: boolean, version: number): Drawing[] {
+  const [rows, setRows] = useState<Drawing[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    let stop = false;
+    api<Drawing[]>("/api/drawings")
+      .then((r) => !stop && setRows(r))
+      .catch(() => {});
+    return () => {
+      stop = true;
+    };
+  }, [enabled, version]);
+  return rows;
+}

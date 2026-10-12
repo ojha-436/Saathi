@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from google.genai import types
 from pydantic import BaseModel
 
@@ -114,23 +115,37 @@ async def create_meeting(bg: BackgroundTasks, title: str = Form(...), held_at: s
         raise HTTPException(400, "Paste the meeting notes or upload a transcript")
     people = {u: user_profile(u)["name"] for u in participants}
     try:
-        s = _summarise(title, when, people, text, pdf)
+        s = await run_in_threadpool(_summarise, title, when, people, text, pdf)
     except Exception:
         log.exception("meeting summary failed")
         raise HTTPException(502, "Saathi couldn't summarise that meeting. Try again.")
+    return {"id": save_meeting(user, title, when, participants, s, text, people, source="upload" if file and file.filename else "notes",
+                               chat_id=chat_id or None, bg=bg)}
+
+
+def save_meeting(user: dict, title: str, when: datetime, participants: list[str], s: MeetingSummary, text: str, people: dict[str, str], *,
+                 source: str, chat_id: str | None = None, bg: BackgroundTasks | None = None, extra: dict | None = None) -> str:
+    """Stores a summarised meeting, indexes it, captures its decisions and tells the participants."""
     meeting_id = uuid.uuid4().hex[:20]
     items = [{"owner": a.owner, "owner_uid": _match(a.owner, people), "task": a.task.strip()[:200], "due_at": ai.parse_iso(a.due_at), "task_id": None}
              for a in s.action_items if a.task.strip()]
     m = {"org_id": user["org_id"], "title": title, "held_at": when, "participants": participants, "created_by": user["uid"],
-         "created_by_name": user["name"], "chat_id": chat_id or None, "summary": s.summary.strip(), "decisions": [d for d in s.decisions if d.strip()],
-         "action_items": items, "source": "upload" if file and file.filename else "notes", "created_at": datetime.now(TZ), "posted": False}
+         "created_by_name": user["name"], "chat_id": chat_id, "summary": s.summary.strip(), "decisions": [d for d in s.decisions if d.strip()],
+         "action_items": items, "source": source, "created_at": datetime.now(TZ), "posted": False, **(extra or {})}
     db.collection("meetings").document(meeting_id).set(m)
-    bg.add_task(_index, meeting_id, m)
+    from .decisions import capture_from_meeting
+
+    if bg:
+        bg.add_task(_index, meeting_id, m)
+        bg.add_task(capture_from_meeting, meeting_id, m, text)
+    else:
+        _index(meeting_id, m)
+        capture_from_meeting(meeting_id, m, text)
     from .main import notify
 
     for u in participants:
         notify(u, "meeting", f"Summary ready: {title}", s.summary.split("\n")[0].lstrip("- ")[:200], actor=user, source_ref=f"meet:{meeting_id}")
-    return {"id": meeting_id}
+    return meeting_id
 
 
 def _meeting_for(meeting_id: str, user: dict) -> tuple:

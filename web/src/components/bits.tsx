@@ -1,10 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users } from "@/lib/icons";
+import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users, DriveIcon, Workflow } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
-import { STATUS_META, avatarColor, chatTitle, presence } from "@/lib/format";
+import { knowledgeNames } from "@/lib/knowledgeNames";
+import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
 import { USER_ICON } from "@/lib/phosphor-icons";
 import { useWs } from "./ctx";
@@ -25,9 +26,24 @@ export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
 
 /** A clickable source chip for refs like msg:CHAT/MSG or file:ID produced by the assistant. */
 export function CiteChip({ refId }: { refId: string }) {
-  const { chats, files, users, uid, openRef, meetings, emails } = useWs();
+  const { chats, files, users, uid, openRef, meetings, emails, driveFiles, records } = useWs();
   let label = "source";
   let isFile = false;
+  if (refId.startsWith("drive:")) {
+    const f = driveFiles[refId.slice(6)];
+    return (
+      <a
+        href={f?.url ?? "https://drive.google.com"}
+        target="_blank"
+        rel="noreferrer"
+        title={f ? `Open “${f.name}” in Google Drive` : "Open in Google Drive"}
+        className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-moss/25 bg-moss-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-moss transition hover:border-moss/50"
+      >
+        <DriveIcon size={11} aria-hidden />
+        <span className="truncate">{f?.name ?? "Drive file"}</span>
+      </a>
+    );
+  }
   if (refId.startsWith("mail:")) {
     const e = emails[refId.slice(5)];
     return (
@@ -43,7 +59,15 @@ export function CiteChip({ refId }: { refId: string }) {
       </a>
     );
   }
-  if (refId.startsWith("meet:")) {
+  if (refId.startsWith("kn:")) {
+    label = knowledgeNames[refId.slice(3)] ?? "my knowledge";
+  } else if (refId.startsWith("ho:")) {
+    label = `shift ${refId.split("_").pop()} handover`;
+  } else if (refId.startsWith("dec:")) {
+    label = "decision";
+  } else if (refId.startsWith("rec:")) {
+    label = records[refId.slice(4)]?.number ?? "plant record";
+  } else if (refId.startsWith("meet:")) {
     label = meetings[refId.slice(5)]?.title ?? "meeting";
   } else if (refId.startsWith("file:")) {
     isFile = true;
@@ -56,10 +80,10 @@ export function CiteChip({ refId }: { refId: string }) {
     <button
       type="button"
       onClick={() => (isFile ? openFile(refId.slice(5)) : openRef(refId))}
-      title={isFile ? `Open ${label}` : `Jump to the message in ${label}`}
+      title={isFile ? `Open ${label}` : refId.startsWith("dec:") ? "Open in the decision log" : refId.startsWith("ho:") ? "Open the shift handover" : `Jump to the message in ${label}`}
       className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-blueprint/20 bg-blueprint-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-blueprint transition hover:border-blueprint/50"
     >
-      {isFile ? <FileText size={11} aria-hidden /> : refId.startsWith("meet:") ? <CalendarDays size={11} aria-hidden /> : <MessageSquare size={11} aria-hidden />}
+      {isFile ? <FileText size={11} aria-hidden /> : refId.startsWith("dec:") ? <Workflow size={11} aria-hidden /> : refId.startsWith("meet:") ? <CalendarDays size={11} aria-hidden /> : <MessageSquare size={11} aria-hidden />}
       <span className="truncate">{label}</span>
     </button>
   );
@@ -85,7 +109,7 @@ export function ChatIcon({ chat, title, size = 36 }: { chat: Chat; title: string
   const Icon = chat.type === "group" ? Users : chat.visibility === "private" ? Lock : Hash;
   return (
     <span
-      className={clsx("inline-flex shrink-0 items-center justify-center rounded-lg text-white", chat.type === "group" ? "bg-[#3d4f8f]" : avatarColor(chat.name))}
+      className={clsx("inline-flex shrink-0 items-center justify-center rounded-lg text-ink", avatarColor(chat.name || chat.id))}
       style={{ width: size, height: size }}
       aria-hidden
     >

@@ -143,6 +143,25 @@ def _workspace_name(email: str, name: str) -> str:
     return re.sub(r"[-_]+", " ", domain.split(".")[0]).title()
 
 
+def ensure_general(org_id: str, uid: str, name: str) -> None:
+    """Every workspace has a public #General that all members (not guests) belong to, so nobody starts with an empty chat list."""
+    cid = f"ch_general_{org_id}"[:60]
+    ref = db.collection("chats").document(cid)
+    snap = ref.get()
+    t = firestore.SERVER_TIMESTAMP
+    if not snap.exists:
+        ref.set({"type": "channel", "name": "General", "name_key": "general", "description": "Company-wide announcements and conversation",
+                 "visibility": "public", "members": [uid], "owners": [uid], "created_by": uid, "created_at": t, "last_ts": t,
+                 "last_text": f"{name} created the workspace", "last_sender": "", "ai_excluded": False, "org_id": org_id, "default": True})
+        ref.collection("messages").document().set({"sender": "system", "sender_name": "", "text": f"{name} created the workspace", "ts": t, "system": True})
+    elif uid not in (snap.get("members") or []):
+        ref.update({"members": firestore.ArrayUnion([uid]), "last_ts": t, "last_text": f"{name} joined the workspace", "last_sender": ""})
+        ref.collection("messages").document().set({"sender": "system", "sender_name": "", "text": f"{name} joined the workspace", "ts": t, "system": True})
+        for col in ("chunks", "files"):  # history becomes searchable/downloadable for the new member
+            for c in db.collection(col).where("chat_id", "==", cid).stream():
+                c.reference.update({"members": firestore.ArrayUnion([uid])})
+
+
 def _join(decoded: dict) -> None:
     """First sign-in. Order: a pending invite, then a workspace that claimed this verified domain, else a new workspace."""
     uid = decoded["uid"]
@@ -187,14 +206,21 @@ def _join(decoded: dict) -> None:
             snap = ref.get()
             if snap.exists and snap.get("org_id") == org_id:
                 ref.update({"members": firestore.ArrayUnion([uid])})
+    if org_role != "guest":
+        ensure_general(org_id, uid, name)
     audit({"uid": uid, "name": name, "org_id": org_id}, "user.joined", org_id, org_role=org_role, via="invite" if channels or org_role != "owner" else "signup")
 
 
 async def current_user(authorization: str = Header(default="")) -> dict:
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing bearer token")
+    return user_from_token(authorization[7:])
+
+
+def user_from_token(token: str) -> dict:
+    """Verifies a Firebase ID token and returns the caller's profile (also used by WebSockets, which can't send headers)."""
     try:
-        decoded = auth.verify_id_token(authorization[7:])
+        decoded = auth.verify_id_token(token)
     except Exception:
         raise HTTPException(401, "Invalid token")
     profile = user_profile(decoded["uid"])

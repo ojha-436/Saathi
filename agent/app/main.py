@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 from collections import Counter
@@ -11,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, ingest, meetings, people, richdoc
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, knowledge, live, meetings, memory, people, push, records, richdoc
 from .agent import ask
+from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, TZ
 from .firebase import auth, audit, bucket, current_user, db, FieldFilter, firestore, get_chat_for_member, require_admin, same_org, user_profile
 
@@ -22,6 +24,14 @@ app.include_router(people.router)
 app.include_router(admin.router)
 app.include_router(meetings.router)
 app.include_router(connectors.router)
+app.include_router(drawings.router)
+app.include_router(records.router)
+app.include_router(decisions.router)
+app.include_router(memory.router)
+app.include_router(impact.router)
+app.include_router(handover.router)
+app.include_router(knowledge.router)
+app.include_router(live.router)
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?" if LOCAL_MODE else None,
@@ -217,11 +227,13 @@ def notify(uid: str, kind: str, title: str, body: str, actor: dict | None = None
          "actor": actor["uid"] if actor else None, "actor_name": actor["name"] if actor else None,
          "org_id": (actor or user_profile(uid))["org_id"], "ts": now(), "read": False}
     )
+    push.push(uid, title, body, ref=source_ref, tag=f"{kind}-{task_id or source_ref or ''}")
 
 
 # ---------------- chats ----------------
 
-def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None, doc: dict | None = None) -> str:
+def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None,
+                 parent_id: str | None = None, doc: dict | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
     ts = now()
     body = {"sender": user["uid"], "sender_name": user["name"], "text": text, "ts": ts}
@@ -231,8 +243,15 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
         body["mentions"] = mentions
     if doc:
         body["doc"] = doc  # formatted version (Tiptap JSON); `text` stays the plain text used for search and AI
-    db.collection("chats").document(chat["id"]).collection("messages").document(msg_id).set(body)
-    preview = text or (f"📎 {file['name']}" if file else "")
+    col = db.collection("chats").document(chat["id"]).collection("messages")
+    if parent_id:
+        body["parent_id"] = parent_id
+        col.document(parent_id).update({
+            "reply_count": firestore.Increment(1), "last_reply_ts": ts, "reply_users": firestore.ArrayUnion([user["uid"]]),
+            "thread_followers": firestore.ArrayUnion([user["uid"]]),
+        })
+    col.document(msg_id).set(body)
+    preview = ("↪ " if parent_id else "") + (text or (f"📎 {file['name']}" if file else ""))
     db.collection("chats").document(chat["id"]).update(
         {"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"], f"read_at.{user['uid']}": ts}
     )
@@ -252,7 +271,7 @@ def sync_members(chat_id: str, members: list[str]) -> None:
     """Keeps search chunks and file permissions in step with chat membership, so the assistant and
     file downloads immediately follow joins, invites and removals."""
     batch, n = db.batch(), 0
-    for col in ("chunks", "files"):
+    for col in ("chunks", "files", "decisions", "handovers"):
         for snap in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
             batch.update(snap.reference, {"members": members})
             n += 1
@@ -438,7 +457,9 @@ def delete_chat_everything(chat_id: str) -> None:
     ref = db.collection("chats").document(chat_id)
     for col, q in (("messages", ref.collection("messages")),
                    ("chunks", db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id))),
-                   ("files", db.collection("files").where(filter=FieldFilter("chat_id", "==", chat_id)))):
+                   ("files", db.collection("files").where(filter=FieldFilter("chat_id", "==", chat_id))),
+                   ("decisions", db.collection("decisions").where(filter=FieldFilter("chat_id", "==", chat_id))),
+                   ("handovers", db.collection("handovers").where(filter=FieldFilter("chat_id", "==", chat_id)))):
         for s in q.stream():
             if col == "files" and s.to_dict().get("gcs_path"):
                 try:
@@ -485,6 +506,32 @@ class MessageIn(BaseModel):
     text: str
     mentions: list[str] = []  # member uids, or "channel" to notify everyone in a channel
     doc: dict | None = None  # formatted message (Tiptap JSON); validated by richdoc.clean_doc
+    parent_id: str | None = None  # reply in a thread (one level deep)
+
+
+def thread_root(chat_id: str, parent_id: str | None) -> dict | None:
+    """Validates a thread parent: it must exist in this chat and be a top-level message."""
+    if not parent_id:
+        return None
+    snap = db.collection("chats").document(chat_id).collection("messages").document(parent_id).get()
+    if not snap.exists or snap.to_dict().get("parent_id") or snap.to_dict().get("system"):
+        raise HTTPException(400, "You can only reply to a message in this conversation")
+    return {"id": parent_id, **snap.to_dict()}
+
+
+def after_post(chat: dict, user: dict, text: str, msg_id: str, mentioned: list[str], everyone: bool, root: dict | None) -> None:
+    """Notifications for a new message: mentions, thread followers, then plain pushes for everyone else."""
+    where = chat.get("name") or "a direct message"
+    ref = f"msg:{chat['id']}/{msg_id}"
+    notified = set(chat["members"]) - {user["uid"]} if everyone else set(mentioned)
+    for m in notified:
+        notify(m, "mention", f"{user['name']} mentioned you in {where}", text, actor=user, source_ref=ref, chat_id=chat["id"])
+    if root:
+        followers = (set(root.get("thread_followers") or []) | {root.get("sender")} | set(root.get("mentions") or [])) & set(chat["members"])
+        for f in followers - notified - {user["uid"]}:
+            notify(f, "thread_reply", f"{user['name']} replied to a thread in {where}", text, actor=user, source_ref=ref, chat_id=chat["id"])
+            notified.add(f)
+    push.push_message(chat, user, text, msg_id, skip=notified)
 
 
 @app.post("/api/chats/{chat_id}/messages")
@@ -494,6 +541,7 @@ def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depend
     if not text:
         raise HTTPException(400, "Empty message")
     rate_limit(user["uid"], "message", 60)
+    root = thread_root(chat_id, body.parent_id)
     mentioned = [m for m in dict.fromkeys(body.mentions) if m in chat["members"] and m != user["uid"]]
     everyone = "channel" in body.mentions and chat.get("type") == "channel" and (
         user["uid"] in (chat.get("owners") or []) or user.get("org_role") in ("owner", "admin"))
@@ -501,17 +549,18 @@ def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depend
         doc = richdoc.clean_doc(body.doc) if body.doc else None
     except richdoc.DocError as e:
         raise HTTPException(400, str(e))
-    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []), doc=doc if doc and len(text) <= 4000 else None)
-    where = chat.get("name") or "a direct message"
-    for m in (set(chat["members"]) - {user["uid"]} if everyone else mentioned):
-        notify(m, "mention", f"{user['name']} mentioned you in {where}", text, actor=user, source_ref=f"msg:{chat_id}/{msg_id}", chat_id=chat_id)
+    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []), parent_id=body.parent_id if root else None,
+                          doc=doc if doc and len(text) <= 4000 else None)
+    after_post(chat, user, text, msg_id, mentioned, everyone, root)
     bg.add_task(ingest.process_message, chat_id, msg_id)
     return {"id": msg_id}
 
 
 @app.post("/api/chats/{chat_id}/files")
-async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File(...), text: str = Form(""), user=Depends(current_user)):
+async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File(...), text: str = Form(""), parent_id: str = Form(""),
+                      user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
+    root = thread_root(chat_id, parent_id or None)
     rate_limit(user["uid"], "upload", 10)
     ext = ("." + (file.filename or "").rsplit(".", 1)[-1].lower()) if "." in (file.filename or "") else ""
     if ext not in UPLOAD_TYPES:
@@ -532,7 +581,8 @@ async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File
         }
     )
     meta = {"id": file_id, "name": file.filename, "mime": UPLOAD_TYPES[ext], "size": len(data), "status": "processing"}
-    msg_id = post_message(chat, user, text.strip(), file=meta)
+    msg_id = post_message(chat, user, text.strip(), file=meta, parent_id=parent_id if root else None)
+    after_post(chat, user, text.strip() or f"📎 {file.filename}", msg_id, [], False, root)
     if text.strip():  # quick: promise/decision chips appear before the slower document extraction
         bg.add_task(ingest.process_message, chat_id, msg_id)
     bg.add_task(ingest.process_file, chat_id, msg_id, file_id)
@@ -643,14 +693,16 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
         logging.exception("assistant failed")
         pending.update({"text": "Sorry, something went wrong while I was working on that. Please try again.", "pending": False, "error": str(e)[:300]})
         raise HTTPException(500, "Assistant failed")
-    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"]})
+    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
+                    "charts": result.get("charts") or []})
     latency = int((time.monotonic() - started) * 1000)
     tools = [c["tool"] for c in result["tool_calls"]]
     db.collection("audit_log").add({"uid": user["uid"], "org_id": user["org_id"], "kind": "assistant", "query": text, "tool_calls": result["tool_calls"],
-                                    "tools": tools, "latency_ms": latency, "ts": now()})
+                                    "tools": tools, "latency_ms": latency, "ts": now(),
+                                    "cited": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"])))})
     bg.add_task(log_event_bigquery, {
         "uid": user["uid"], "query": text[:1000], "tools": json.dumps(tools), "latency_ms": latency,
-        "answer_chars": len(result["text"]), "cited_sources": len(set(re.findall(r"\[(?:msg|file):[^\]]+\]", result["text"]))),
+        "answer_chars": len(result["text"]), "cited_sources": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"]))),
         "ts": now().isoformat(),
     })
     return result
@@ -707,7 +759,9 @@ def task_action(task_id: str, action: str, user=Depends(current_user)):
         raise HTTPException(403, "Only the person who created this task can do that")
     if action != "confirm" and action != "dismiss" and user["uid"] not in (creator, assignee):
         raise HTTPException(403, "Only the assignee or the creator can update this task")
-    ref.update({"status": status, "updated_at": now(), "updated_by": user["uid"]})
+    ref.update({"status": status, "updated_at": now(), "updated_by": user["uid"], "done_at": now() if status == "done" else None})
+    if t.get("kind") == "promise":
+        threading.Thread(target=plant_refresh, daemon=True).start()
     if action == "confirm" and assignee != user["uid"]:
         notify(assignee, "task_assigned", f"{user['name']} assigned you a task", t["title"], actor=user, source_ref=t.get("source_ref"), task_id=task_id)
     elif action in ("done", "block", "start"):
@@ -804,6 +858,7 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
             {"uid": t["owner"], "kind": "reminder", "title": title, "body": t.get("title"), "task_id": s.id, "source_ref": t.get("source_ref"),
              "org_id": t.get("org_id", ""), "ts": now(), "read": False}
         )
+        push.push(t["owner"], title, t.get("title") or "", ref=t.get("source_ref"), tag=f"reminder-{s.id}")
         s.reference.update({"notified": True})
         fired += 1
     # statuses with an expiry ("Busy until 4 pm") go back to Available
@@ -811,7 +866,16 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
     for u in db.collection("users").where(filter=FieldFilter("status.until", "<=", now())).stream():
         u.reference.update({"status": {"state": "available", "text": "", "until": None, "set_at": now()}})
         cleared += 1
-    return {"fired": fired, "statuses_cleared": cleared}
+    try:
+        ho = handover.tick()
+    except Exception:
+        logging.exception("handover tick failed")
+        ho = {}
+    try:
+        ho["live_prompts"] = live.prompt_starting_meetings()
+    except Exception:
+        logging.exception("live prompt failed")
+    return {"fired": fired, "statuses_cleared": cleared, **ho}
 
 
 class ExcludeIn(BaseModel):
@@ -831,8 +895,9 @@ def set_ai_exclude(chat_id: str, body: ExcludeIn, bg: BackgroundTasks, user=Depe
     get_chat_for_member(chat_id, user["uid"])
     db.collection("chats").document(chat_id).update({"ai_excluded": body.excluded, "ai_excluded_by": user["name"]})
     if body.excluded:
-        for c in db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
-            c.reference.delete()
+        for col in ("chunks", "decisions"):
+            for c in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
+                c.reference.delete()
     else:
         bg.add_task(_reindex_chat, chat_id)
     return {"ok": True, "excluded": body.excluded}

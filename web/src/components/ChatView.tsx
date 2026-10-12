@@ -44,6 +44,10 @@ import {
   TextStrike,
   TextUnderline,
   X,
+  AlertTriangle,
+  MessagesSquare,
+  RefreshCw,
+  Reply,
 } from "@/lib/icons";
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
@@ -64,6 +68,7 @@ import { EmojiPopover } from "./EmojiPopover";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
+import { MicButton } from "./Quality";
 import { notifyLevel } from "./Sidebar";
 
 /** Highlights @Name tokens for people actually mentioned on the message (and @channel). */
@@ -101,6 +106,17 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
   const [summarizing, setSummarizing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState<string | undefined>(focusMsg);
+  // Thread panel: an explicit choice, or (when opened from a link to a reply) the reply's parent. "" = closed by the user.
+  const [threadSel, setThread] = useState<string | null>(null);
+  const focusParent = messages.find((m) => m.id === focusMsg)?.parent_id ?? null;
+  const threadId = threadSel === "" ? null : (threadSel ?? focusParent);
+  const mainMessages = useMemo(() => messages.filter((m) => !m.parent_id), [messages]);
+  const threadRoot = threadId ? messages.find((m) => m.id === threadId) : undefined;
+  const threadReplies = useMemo(() => (threadId ? messages.filter((m) => m.parent_id === threadId) : []), [messages, threadId]);
+  const openThread = (id: string) => {
+    setPanel(null);
+    setThread(id);
+  };
 
   const decisions = useMemo(() => messages.filter((m) => m.decision), [messages]);
   const files = useMemo(() => messages.filter((m) => m.file), [messages]);
@@ -115,14 +131,14 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
   useEffect(() => {
     if (tab !== "messages") return;
     if (flash) {
-      const el = document.getElementById(`m-${flash}`);
+      const el = document.getElementById(`m-${flash}`) ?? document.getElementById(`t-${flash}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         const t = setTimeout(() => setFlash(undefined), 2600);
         return () => clearTimeout(t);
       }
     } else bottomRef.current?.scrollIntoView();
-  }, [flash, messages.length, tab]);
+  }, [flash, messages.length, tab, threadId]);
 
   // Mark the conversation read while it is open.
   const lastTs = chat?.last_ts?.toMillis();
@@ -261,6 +277,16 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                 <Users size={16} className="sm:hidden" />
                 <span className="font-medium">{chat.members.length}</span>
               </button>
+              {chat.type !== "dm" && (
+                <button
+                  onClick={() => open({ kind: "handover", chatId: chat.id })}
+                  className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink transition hover:bg-hover"
+                  title="Shift handover"
+                >
+                  <RefreshCw size={15} className="text-muted" />
+                  <span className="hidden md:inline">Handover</span>
+                </button>
+              )}
               <button
                 onClick={summarize}
                 disabled={summarizing || !!chat.ai_excluded}
@@ -312,7 +338,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
         {tab === "messages" && (
           <div className="scrollbar-thin flex-1 overflow-y-auto px-2 py-4 lg:px-5">
             <Welcome chat={chat} title={title} onAddPeople={() => setPanel("members")} empty={!messages.some((m) => !m.system)} />
-            <MessageList messages={messages} chat={chat} title={title} flash={flash} />
+            <MessageList messages={mainMessages} chat={chat} title={title} flash={flash} onOpenThread={openThread} />
             <div ref={bottomRef} />
           </div>
         )}
@@ -368,7 +394,13 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
         <Composer chat={chat} title={title} />
       </section>
 
-      {panel && (
+      {threadRoot && (
+        <>
+          <button className="fixed inset-0 z-40 bg-ink/40 xl:hidden" onClick={() => setThread("")} aria-label="Close thread" />
+          <ThreadPanel chat={chat} title={title} root={threadRoot} replies={threadReplies} flash={flash} onClose={() => setThread("")} />
+        </>
+      )}
+      {panel && !threadRoot && (
         <>
           <button className="fixed inset-0 z-40 bg-ink/40 xl:hidden" onClick={() => setPanel(null)} aria-label="Close details" />
           <DetailsPanel chat={chat} title={title} tab={panel} setTab={setPanel} isOwner={isOwner} onToggleAi={toggleAi} onLeave={leave} />
@@ -406,7 +438,7 @@ function Welcome({ chat, title, empty, onAddPeople }: { chat: Chat; title: strin
   );
 }
 
-function MessageList({ messages, chat, title, flash }: { messages: Message[]; chat: Chat; title: string; flash?: string }) {
+function MessageList({ messages, chat, title, flash, onOpenThread }: { messages: Message[]; chat: Chat; title: string; flash?: string; onOpenThread: (id: string) => void }) {
   const { uid } = useWs();
   let lastDay = "";
   return (
@@ -432,7 +464,7 @@ function MessageList({ messages, chat, title, flash }: { messages: Message[]; ch
                 {m.text} · {clock(m.ts)}
               </p>
             ) : (
-              <MessageRow m={m} mine={m.sender === uid} grouped={grouped} bubbles={chat.type !== "channel"} highlight={flash === m.id} chatId={chat.id} chatName={title} />
+              <MessageRow m={m} mine={m.sender === uid} grouped={grouped && !prev?.reply_count} bubbles={chat.type !== "channel"} highlight={flash === m.id} chatId={chat.id} chatName={title} onOpenThread={onOpenThread} />
             )}
           </div>
         );
@@ -441,18 +473,34 @@ function MessageList({ messages, chat, title, flash }: { messages: Message[]; ch
   );
 }
 
-function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: { m: Message; mine: boolean; grouped: boolean; bubbles: boolean; highlight: boolean; chatId: string; chatName: string }) {
-  const { uid, users, showProfile } = useWs();
+function MessageRow({
+  m, mine, grouped, bubbles, highlight, chatId, chatName, onOpenThread, domPrefix = "m",
+}: {
+  m: Message; mine: boolean; grouped: boolean; bubbles: boolean; highlight: boolean; chatId: string; chatName: string;
+  onOpenThread?: (id: string) => void; domPrefix?: string;
+}) {
+  const { uid, users, showProfile, open } = useWs();
   const right = bubbles && mine;
   const body = (
     <>
       {m.text && (m.doc ? <RichDoc doc={m.doc} plain={(t) => withMentions(t, m.mentions, users, uid)} /> : <ChatText text={m.text} plain={(t) => withMentions(t, m.mentions, users, uid)} />)}
       {m.file && <FileCard file={m.file} />}
+      {m.handover_id && (
+        <button
+          onClick={() => open({ kind: "handover", chatId, id: m.handover_id })}
+          className="mt-2 flex items-center gap-1.5 rounded-lg border border-blueprint/25 bg-blueprint-soft px-2.5 py-1.5 text-xs font-semibold text-blueprint hover:border-blueprint/50"
+        >
+          <RefreshCw size={13} aria-hidden /> Open the shift handover
+        </button>
+      )}
       {m.decision && (
         <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-moss/25 bg-moss-soft px-2.5 py-1.5 text-xs text-moss">
           <Gavel size={13} className="mt-px shrink-0" aria-hidden />
           <span>
-            <b>Decision logged:</b> {m.decision}
+            <b>Decision logged:</b> {m.decision}{" "}
+            <button onClick={() => open({ kind: "decisions", id: `m_${m.id}` })} className="font-semibold underline-offset-2 hover:underline">
+              Why →
+            </button>
           </span>
         </div>
       )}
@@ -462,7 +510,7 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
 
   return (
     <div
-      id={`m-${m.id}`}
+      id={`${domPrefix}-${m.id}`}
       className={clsx(
         "group relative flex gap-2.5 rounded-xl px-2 transition-colors duration-500",
         grouped ? "py-0.5" : "pt-2.5 pb-0.5",
@@ -491,13 +539,14 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
           <div className="w-full max-w-3xl">{body}</div>
         )}
         <Reactions m={m} chatId={chatId} />
+        {onOpenThread && !!m.reply_count && <ThreadSummary m={m} onOpen={() => onOpenThread(m.id)} />}
       </div>
-      <MessageActions m={m} chatId={chatId} chatName={chatName} align={right ? "left" : "right"} />
+      <MessageActions m={m} chatId={chatId} chatName={chatName} align={right ? "left" : "right"} onReply={onOpenThread && (() => onOpenThread(m.id))} />
     </div>
   );
 }
 
-function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: string; chatName: string; align: "left" | "right" }) {
+function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; chatId: string; chatName: string; align: "left" | "right"; onReply?: () => void }) {
   const { open, toast, newTask, uid } = useWs();
   const [picking, setPicking] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -532,6 +581,11 @@ function MessageActions({ m, chatId, chatName, align }: { m: Message; chatId: st
       </button>
       {picking && <EmojiPopover anchor={moreRef.current} onPick={(e) => react(reactionKey(e))} onClose={() => setPicking(false)} />}
       <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+      {onReply && (
+        <button onClick={onReply} className={btn} aria-label="Reply in thread" title="Reply in thread">
+          <Reply size={15} />
+        </button>
+      )}
       <button onClick={addTask} className={btn} aria-label="Create task from message" title="Create task…">
         <ListPlus size={15} />
       </button>
@@ -599,7 +653,7 @@ const TEXT_COLORS = ["#202124", "#d93025", "#e37400", "#1e8e3e", "#1a73e8", "#84
 const HIGHLIGHTS = ["#fff3a3", "#ceead6", "#d2e3fc", "#fad2cf", "#fde7c3", "#f3e8fd"];
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28];
 
-function Composer({ chat, title }: { chat: Chat; title: string }) {
+function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat; title: string; parentId?: string; inputId?: string }) {
   const { toast, users, uid, account } = useWs();
   const chatId = chat.id;
   const isChannel = chat.type === "channel";
@@ -616,7 +670,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
   const keyRef = useRef<(e: KeyboardEvent) => boolean>(() => false);
-  const placeholder = isChannel ? `Post in ${title}` : `Message ${title}`;
+  const placeholder = parentId ? "Reply in thread" : isChannel ? `Post in ${title}` : `Message ${title}`;
 
   const canChannel = isChannel && (chat.owners?.includes(uid) || account.org_role === "owner" || account.org_role === "admin");
   const candidates = query === null ? [] : [
@@ -647,7 +701,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
         Placeholder.configure({ placeholder: () => live.current.placeholder }),
       ],
       editorProps: {
-        attributes: { id: "composer", role: "textbox", "aria-multiline": "true", "aria-label": "Message", spellcheck: "true" },
+        attributes: { id: inputId, role: "textbox", "aria-multiline": "true", "aria-label": parentId ? "Reply in thread" : "Message", spellcheck: "true" },
         handleKeyDown: (_v: unknown, e: KeyboardEvent) => keyRef.current(e),
         // pasted images/files are not supported here; plain and rich text paste normally
         handlePaste: (_v: unknown, e: ClipboardEvent) => (e.clipboardData?.files?.length ?? 0) > 0,
@@ -703,7 +757,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
       const mentions = Object.entries(mentioned)
         .filter(([, tag]) => body.includes(tag))
         .map(([id]) => id);
-      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, ...(needsDoc(doc) ? { doc } : {}) } });
+      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, parent_id: parentId ?? null, ...(needsDoc(doc) ? { doc } : {}) } });
       clear();
     } catch (e) {
       toast(`Message not sent: ${(e as Error).message}. Try again.`);
@@ -718,6 +772,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     const form = new FormData();
     form.append("file", file);
     form.append("text", text.trim());
+    if (parentId) form.append("parent_id", parentId);
     setSending(true);
     try {
       await api(`/api/chats/${chatId}/files`, { form });
@@ -977,6 +1032,12 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
           >
             <TextAa size={17} />
           </button>
+          <MicButton
+            onText={(t) => {
+              if (!editor) return;
+              editor.chain().focus("end").insertContent((editor.isEmpty ? "" : " ") + t).run();
+            }}
+          />
           <div className="relative">
             <button
               ref={emojiBtnRef}
@@ -1238,6 +1299,32 @@ function Empty({ icon: Icon, text }: { icon: typeof Gavel; text: string }) {
   );
 }
 
+/** Revision Guard: compares a drawing file's revision with the controlled register. */
+function RevisionGuard({ drawingNo, revision }: { drawingNo: string; revision: string }) {
+  const { register } = useWs();
+  const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const rev = revision.replace(/\(.*?\)/g, "").replace(/rev(ision)?\.?\s*/i, "").trim().toUpperCase().split(/[\s/,;]+/)[0];
+  const d = register.find((x) => norm(x.drawing_no) === norm(drawingNo));
+  const r = d?.revisions.find((x) => x.rev === rev);
+  if (!d || !r) return null;
+  const cur = d.revisions.find((x) => x.rev === d.current_rev);
+  if (r.status === "superseded")
+    return (
+      <span role="alert" className="mt-2 flex items-start gap-1.5 rounded-lg border border-rust/30 bg-rust-soft px-2 py-1.5 text-xs font-medium text-rust">
+        <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden /> Superseded. Do not use for production. Current is Rev {d.current_rev}
+        {cur?.approved_by ? `, approved by ${cur.approved_by}` : ""}
+        {cur?.date ? ` on ${cur.date}` : ""}.
+      </span>
+    );
+  if (r.status === "in_work")
+    return (
+      <span className="mt-2 flex items-start gap-1.5 rounded-lg border border-saffron/40 bg-saffron-soft px-2 py-1.5 text-xs font-medium text-saffron-ink">
+        <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden /> Draft, not released for production{d.current_rev ? ` (released: Rev ${d.current_rev})` : ""}.
+      </span>
+    );
+  return <span className="mt-1.5 block text-[11px] font-semibold text-moss">✓ Current released revision</span>;
+}
+
 function FileCard({ file }: { file: NonNullable<Message["file"]> }) {
   const doc = file.doc;
   const processing = file.status === "processing";
@@ -1270,6 +1357,7 @@ function FileCard({ file }: { file: NonNullable<Message["file"]> }) {
               )}
             </span>
             {doc.summary && <span className="mt-1.5 line-clamp-2 block text-xs leading-relaxed text-muted">{doc.summary}</span>}
+            {doc.doc_type === "engineering_drawing" && doc.drawing_no && doc.revision && <RevisionGuard drawingNo={doc.drawing_no} revision={doc.revision} />}
           </>
         ) : null}
       </span>
@@ -1327,3 +1415,61 @@ function PromiseChip({ m, chatId }: { m: Message; chatId: string }) {
   );
 }
 
+
+function ThreadSummary({ m, onOpen }: { m: Message; onOpen: () => void }) {
+  const { users } = useWs();
+  const who = (m.reply_users ?? []).slice(-3);
+  return (
+    <button onClick={onOpen} className="mt-1 flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-hover">
+      <span className="flex -space-x-1.5">
+        {who.map((u) => (
+          <span key={u} className="rounded-full ring-2 ring-surface">
+            <Avatar name={users[u]?.name ?? "?"} size={18} />
+          </span>
+        ))}
+      </span>
+      <span className="font-semibold text-brand">
+        {m.reply_count} {m.reply_count === 1 ? "reply" : "replies"}
+      </span>
+      {m.last_reply_ts && <span className="text-muted">Last reply {timeShort(m.last_reply_ts)}</span>}
+    </button>
+  );
+}
+
+function ThreadPanel({ chat, title, root, replies, flash, onClose }: { chat: Chat; title: string; root: Message; replies: Message[]; flash?: string; onClose: () => void }) {
+  const { uid } = useWs();
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!flash) endRef.current?.scrollIntoView();
+  }, [replies.length, flash]);
+  return (
+    <aside className="ws-pop fixed inset-y-0 right-0 z-50 flex w-[26rem] max-w-[94vw] flex-col border-l border-border bg-surface shadow-2xl xl:static xl:z-auto xl:shadow-none" aria-label="Thread">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+        <MessagesSquare size={17} className="text-muted" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-bold">Thread</h2>
+          <p className="truncate text-[11px] text-muted">{title}</p>
+        </div>
+        <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-hover" aria-label="Close thread">
+          <X size={17} />
+        </button>
+      </div>
+      <div className="scrollbar-thin flex-1 overflow-y-auto px-1 py-3">
+        <MessageRow m={root} mine={root.sender === uid} grouped={false} bubbles={false} highlight={flash === root.id} chatId={chat.id} chatName={title} domPrefix="t" />
+        <div className="my-2 flex items-center gap-3 px-3 text-xs text-muted" role="separator">
+          <span>
+            {replies.length} {replies.length === 1 ? "reply" : "replies"}
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        {replies.map((r, i) => {
+          const prev = replies[i - 1];
+          const grouped = !!prev && prev.sender === r.sender && (r.ts?.toMillis() ?? 0) - (prev.ts?.toMillis() ?? 0) < GROUP_GAP_MS;
+          return <MessageRow key={r.id} m={r} mine={r.sender === uid} grouped={grouped} bubbles={false} highlight={flash === r.id} chatId={chat.id} chatName={title} domPrefix="t" />;
+        })}
+        <div ref={endRef} />
+      </div>
+      <Composer chat={chat} title={title} parentId={root.id} inputId="thread-composer" />
+    </aside>
+  );
+}

@@ -177,6 +177,9 @@ class OrgIn(BaseModel):
     channel_creation: str | None = None  # everyone | admins
     ai_enabled: bool | None = None
     integrations_google: bool | None = None
+    quality_team: list[str] | None = None  # uids who own/see every plant record (NCR, downtime, safety)
+    qr_public: bool | None = None  # QR scans show current/obsolete without sign-in
+    shifts: str | None = None  # "A 06:00, B 14:00, C 22:00" — shift handover timing
 
 
 @router.patch("/org")
@@ -209,6 +212,22 @@ def update_org(body: OrgIn, admin=Depends(admin_user)):
         update["settings.channel_creation"] = body.channel_creation
     if body.ai_enabled is not None:
         update["settings.ai_enabled"] = body.ai_enabled
+    if body.quality_team is not None:
+        from .firebase import same_org
+
+        update["settings.quality_team"] = same_org(admin, body.quality_team)
+    if body.qr_public is not None:
+        update["settings.qr_public"] = body.qr_public
+    if body.shifts is not None:
+        rows = []
+        for part in [p for p in re.split(r"[,;\n]+", body.shifts) if p.strip()]:
+            m = re.fullmatch(r"\s*([A-Za-z0-9]{1,8})\s+([01]?\d|2[0-3]):([0-5]\d)\s*", part)
+            if not m:
+                raise HTTPException(400, f"“{part.strip()}” should look like “A 06:00”")
+            rows.append({"name": m.group(1).upper(), "start": f"{int(m.group(2)):02d}:{m.group(3)}"})
+        if not 1 <= len(rows) <= 4 or len({r["start"] for r in rows}) != len(rows) or len({r["name"] for r in rows}) != len(rows):
+            raise HTTPException(400, "Give 1 to 4 shifts with different names and start times")
+        update["settings.shifts"] = sorted(rows, key=lambda r: r["start"])
     if body.integrations_google is not None:
         update["settings.integrations_google"] = body.integrations_google
         if not body.integrations_google:  # turning it off disconnects everyone in the workspace

@@ -136,3 +136,16 @@ export const Highlighter = make("Highlighter");
 export const FontColor = make("FontColor");
 export const CodeBlock = make("CodeBlock");
 export const Heading = make("Heading");
+export const Reply = make("Reply");
+export const MessagesSquare = make("MessagesSquare");
+export const Camera = make("Camera");
+
+/** Google Drive (line style). */
+export function DriveIcon({ size = 24, className, ...rest }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" className={clsx("shrink-0", className)} aria-hidden={rest["aria-hidden"] ?? true}>
+      <path d="M8.6 3.5h6.8l6.1 10.6-3.4 5.9H5.9l-3.4-5.9z" />
+      <path d="M8.6 3.5l6.5 11.1M15.4 3.5L9 14.6M2.5 14.1h19" />
+    </svg>
+  );
+}

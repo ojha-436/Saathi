@@ -366,7 +366,9 @@ export function CommandPalette({ chatList, onClose }: { chatList: Chat[]; onClos
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => inputRef.current?.focus(), []);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   const items = useMemo(() => {
     const t = q.trim().toLowerCase();

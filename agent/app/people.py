@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from .config import TZ
-from .firebase import audit, auth, current_user, db, forget_profile
+from .firebase import audit, auth, current_user, db, firestore, forget_profile
 
 router = APIRouter(prefix="/api/me")
 
@@ -60,7 +60,7 @@ def set_status(body: StatusIn, user=Depends(current_user)):
     elif body.clear_after_minutes:
         until = t + timedelta(minutes=max(1, min(body.clear_after_minutes, 60 * 24 * 14)))
     db.collection("users").document(user["uid"]).update(
-        {"status": {"state": body.state, "text": _clean(body.text, 100), "until": until, "set_at": t}, "last_active": t}
+        {"status": {"state": body.state, "text": "" if "(calendar)" in body.text else _clean(body.text, 100), "until": until, "set_at": t}, "last_active": t}
     )
     return {"ok": True}
 
@@ -83,6 +83,9 @@ class SettingsIn(BaseModel):
     level: str | None = None  # all | mentions | off for chat_id
     quiet_hours: dict | None = None  # {"enabled": bool, "start": "20:00", "end": "08:00"}
     defaults: dict | None = None  # {"dm": "all", "group": "all", "channel": "mentions"}
+    snooze: dict | None = None  # {"key": "task:abc", "until": ISO time or null to unsnooze}
+    live_prompt: bool | None = None  # offer Saathi Live when a synced calendar meeting starts
+    live_announce: bool | None = None  # play the spoken recording notice when Saathi Live starts listening
 
 
 @router.post("/settings")
@@ -103,6 +106,18 @@ def update_settings(body: SettingsIn, user=Depends(current_user)):
             if q.get(k) and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(q[k])):
                 raise HTTPException(400, "Quiet hours use HH:MM")
         update["quiet_hours"] = {"enabled": bool(q.get("enabled")), "start": q.get("start", "20:00"), "end": q.get("end", "08:00")}
+    if body.snooze is not None:
+        key = str(body.snooze.get("key") or "")
+        if not re.fullmatch(r"[a-z]+:[A-Za-z0-9_\-/]{1,120}", key):
+            raise HTTPException(400, "Invalid item")
+        from . import ai
+
+        until = ai.parse_iso(body.snooze.get("until"))
+        update[f"snoozed.{key.replace('/', '|').replace('.', '_')}"] = until.isoformat() if until else firestore.DELETE_FIELD
+    if body.live_prompt is not None:
+        update["live_prompt"] = body.live_prompt
+    if body.live_announce is not None:
+        update["live_announce"] = body.live_announce
     if body.defaults is not None:
         update["defaults"] = {k: v for k, v in body.defaults.items() if k in ("dm", "group", "channel") and v in NOTIFY_LEVELS}
     if ref.get().exists:
@@ -112,6 +127,9 @@ def update_settings(body: SettingsIn, user=Depends(current_user)):
         for k, v in update.items():  # set() doesn't expand dotted keys
             if k.startswith("notify."):
                 nested.setdefault("notify", {})[k[7:]] = v
+            elif k.startswith("snoozed."):
+                if v is not firestore.DELETE_FIELD:
+                    nested.setdefault("snoozed", {})[k[8:]] = v
             else:
                 nested[k] = v
         ref.set(nested)
@@ -123,4 +141,72 @@ def sign_out_everywhere(user=Depends(current_user)):
     """Invalidates every refresh token: other devices are signed out within the hour (immediately for the API)."""
     auth.revoke_refresh_tokens(user["uid"])
     audit(user, "user.sessions_revoked", user["uid"])
+    return {"ok": True}
+
+
+class PushIn(BaseModel):
+    token: str
+    enabled: bool = True
+
+
+@router.post("/push")
+def register_push(body: PushIn, user=Depends(current_user)):
+    """Registers (or removes) this browser's FCM token. Tokens are private to the user."""
+    token = body.token.strip()
+    if not 20 <= len(token) <= 4096:
+        raise HTTPException(400, "Invalid push token")
+    ref = db.collection("user_settings").document(user["uid"])
+    op = firestore.ArrayUnion if body.enabled else firestore.ArrayRemove
+    if ref.get().exists:
+        ref.update({"push_tokens": op([token])})
+    elif body.enabled:
+        ref.set({"org_id": user["org_id"], "push_tokens": [token]})
+    if body.enabled:
+        tokens = (ref.get().to_dict() or {}).get("push_tokens") or []
+        if len(tokens) > 10:  # keep the 10 most recent devices
+            ref.update({"push_tokens": tokens[-10:]})
+    return {"ok": True}
+
+
+@router.post("/push/test")
+def test_push(user=Depends(current_user)):
+    from .push import push
+
+    push(user["uid"], "Saathi notifications are on", "You'll get mentions, replies, tasks and reminders here.", tag="test")
+    return {"ok": True}
+
+
+class PhotoIn(BaseModel):
+    data_url: str  # data:image/(jpeg|png|webp);base64,...  — resized in the browser to 256 px
+
+
+_MAGIC = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG", "webp": b"RIFF"}
+
+
+@router.post("/photo")
+def set_photo(body: PhotoIn, user=Depends(current_user)):
+    """Profile photo, stored on the profile (visible only to the workspace, like the rest of the directory)."""
+    import base64
+    import binascii
+
+    m = re.fullmatch(r"data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)", body.data_url.strip())
+    if not m:
+        raise HTTPException(400, "Upload a JPEG, PNG or WebP image")
+    try:
+        raw = base64.b64decode(m.group(2), validate=True)
+    except binascii.Error:
+        raise HTTPException(400, "That image couldn't be read")
+    if len(raw) > 150_000:
+        raise HTTPException(413, "Image too large after resizing (max 150 KB)")
+    if not raw.startswith(_MAGIC[m.group(1)]) or (m.group(1) == "webp" and raw[8:12] != b"WEBP"):
+        raise HTTPException(400, "That file isn't a valid image")
+    db.collection("users").document(user["uid"]).update({"photo": body.data_url.strip()})
+    forget_profile(user["uid"])
+    return {"ok": True}
+
+
+@router.delete("/photo")
+def remove_photo(user=Depends(current_user)):
+    db.collection("users").document(user["uid"]).update({"photo": ""})
+    forget_profile(user["uid"])
     return {"ok": True}

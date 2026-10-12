@@ -511,3 +511,12 @@ aside.blueprint-grid .text-saffron {
 .tiptap pre code { background: none; padding: 0; }
 .tiptap a { color: var(--color-brand); text-decoration: underline; text-underline-offset: 2px; cursor: text; }
 .tiptap mark { border-radius: 0.2rem; padding: 0 0.125rem; color: inherit; }
+/* Privacy policy and other long-form pages */
+.policy section { margin-top: 2.5rem; scroll-margin-top: 1.5rem; }
+.policy h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 0.75rem; }
+.policy h3 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.4rem; }
+.policy p { line-height: 1.7; margin: 0.6rem 0; }
+.policy ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+.policy li { line-height: 1.65; margin: 0.35rem 0; }
+.policy code { font-family: var(--font-mono); font-size: 0.85em; background: var(--color-paper-2); padding: 0 4px; border-radius: 4px; }
+.policy a { text-underline-offset: 2px; }

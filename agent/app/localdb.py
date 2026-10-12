@@ -32,6 +32,11 @@ class ArrayRemove:
         self.values = list(values)
 
 
+class Increment:
+    def __init__(self, value):
+        self.value = value
+
+
 class _ServerTimestamp:
     """Stand-in for firestore.SERVER_TIMESTAMP: replaced by the current time when written."""
 
@@ -62,8 +67,28 @@ firestore = SimpleNamespace(
     Query=SimpleNamespace(ASCENDING="ASCENDING", DESCENDING="DESCENDING"),
     ArrayUnion=ArrayUnion,
     ArrayRemove=ArrayRemove,
+    Increment=Increment,
     SERVER_TIMESTAMP=SERVER_TIMESTAMP,
+    transactional=lambda fn: (lambda tx: _run_tx(fn, tx)),
 )
+
+
+def _run_tx(fn, tx):
+    with _lock:  # one writer at a time: good enough for a single-process local database
+        return fn(tx)
+
+
+class _Tx:
+    """Stand-in for a Firestore transaction: reads and writes apply directly under the global lock."""
+
+    def set(self, ref, data, merge=False):
+        ref.set(data, merge=merge)
+
+    def update(self, ref, changes):
+        ref.update(changes)
+
+    def delete(self, ref):
+        ref.delete()
 
 
 def _enc(o):
@@ -100,6 +125,8 @@ def _set_path(data: dict, dotted: str, value) -> None:
         cur[last] = existing + [v for v in value.values if v not in existing]
     elif isinstance(value, ArrayRemove):
         cur[last] = [v for v in (cur.get(last) or []) if v not in value.values]
+    elif isinstance(value, Increment):
+        cur[last] = (cur.get(last) or 0) + value.value
     else:
         cur[last] = copy.deepcopy(_resolve(value))
 
@@ -139,7 +166,7 @@ class DocRef:
     def __init__(self, db: "LocalDB", path: str):
         self.db, self.path, self.id = db, path, path.rsplit("/", 1)[-1]
 
-    def get(self) -> DocSnap:
+    def get(self, transaction=None) -> DocSnap:
         with _lock:
             return DocSnap(self, copy.deepcopy(self.db.docs.get(self.path)))
 
@@ -277,6 +304,9 @@ class LocalDB:
 
     def batch(self) -> _Batch:
         return _Batch(self)
+
+    def transaction(self) -> "_Tx":
+        return _Tx()
 
 
 # ---------------- storage ----------------

@@ -278,6 +278,10 @@ def process_message(chat_id: str, msg_id: str) -> None:
         update["decision"] = sig.decision
     if update:
         ref.update(update)
+    if update.get("decision") and chat.get("org_id"):
+        from .decisions import capture_from_message
+
+        capture_from_message(chat, msg_id, msg, update["decision"])
 
 
 def ocr_document(data: bytes, mime: str) -> dict | None:
@@ -358,6 +362,9 @@ def process_file(chat_id: str, msg_id: str, file_id: str) -> None:
         }
     )
 
+    from .drawings import rebuild_for_file
+
+    rebuild_for_file(file_id)  # drawing register / Revision Guard (released state is workspace knowledge)
     if chat.get("ai_excluded"):
         return
     field_lines = "; ".join(f"{k.name}: {k.value}" for k in doc.key_fields)

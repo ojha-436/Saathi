@@ -40,6 +40,10 @@ service cloud.firestore {
     match /external_items/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
     }
+    // Plant records: reporter, owner and the quality team only
+    match /records/{id} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participants;
+    }
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
     }

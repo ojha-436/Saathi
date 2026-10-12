@@ -1,18 +1,22 @@
 "use client";
 
-import { ArrowUp, FileSearch, Handshake, Loader2, Radar, RotateCcw, Sparkles, Timer } from "@/lib/icons";
+import { ArrowUp, BarChart3, FileSearch, Handshake, History, Loader2, Radar, RotateCcw, Sparkles, Timer, Workflow } from "@/lib/icons";
 import { LogoMark } from "./Logo";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAssistant } from "@/lib/hooks";
 import type { Task } from "@/lib/types";
 import { useWs } from "./ctx";
+import { ChartCard } from "./Knowledge";
 import { Markdown } from "./Markdown";
+import { MicButton } from "./Quality";
 import { ProposedTaskCard } from "./Tasks";
 
 const STARTERS = [
-  { icon: FileSearch, text: "Find the bogie side frame drawing Amit sent me" },
   { icon: FileSearch, text: "Which revision of SRC-BF-2041 is latest and who approved it?" },
+  { icon: History, text: "Side frame casting me porosity aa rahi hai, pehle hua hai kya?" },
+  { icon: Workflow, text: "Should we keep Om Castings for side frame castings?" },
+  { icon: BarChart3, text: "NCRs by vendor this year" },
   { icon: Handshake, text: "What have people promised me this week?" },
   { icon: Timer, text: "Kal subah 10 baje Om Castings ko call karne ka reminder laga do" },
 ];
@@ -153,6 +157,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
                   ) : (
                     <Markdown text={m.text} />
                   )}
+                  {m.charts?.map((c, i) => <ChartCard key={i} chart={c} />)}
                   {m.tasks?.map((id) => (taskById[id] ? <ProposedTaskCard key={id} task={taskById[id]} /> : null))}
                 </div>
               </div>
@@ -188,6 +193,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
             placeholder="Ask anything about your work, in English or Hinglish…"
             className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] outline-none"
           />
+          <MicButton onText={(t) => setText((prev) => (prev ? `${prev} ${t}` : t))} className="h-10" />
           <button disabled={busy || !text.trim()} className="flex h-10 w-10 items-center justify-center rounded-xl bg-saffron text-ink transition hover:brightness-105 disabled:opacity-30" aria-label="Ask">
             {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
           </button>

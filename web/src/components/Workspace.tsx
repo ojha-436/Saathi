@@ -2,21 +2,29 @@
 
 import clsx from "clsx";
 import { signOut } from "@/lib/auth";
-import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile } from "@/lib/icons";
+import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { STATUS_META, isUnread, presence, statusText } from "@/lib/format";
-import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useSettings, useTasks, useUsers } from "@/lib/hooks";
-import type { Account, StatusState } from "@/lib/types";
+import { rememberKnowledge } from "@/lib/knowledgeNames";
+import { getFbAuth } from "@/lib/firebase";
+import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
+import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useSettings, useTasks, useUsers } from "@/lib/hooks";
+import type { Account, DriveFile, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { Menu, UserAvatar } from "./bits";
+import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
 import { Ctx, isAdmin, type DialogKind, type MeetingPrefill, type TaskPrefill, type View } from "./ctx";
 import { BrowseChannelsDialog, CommandPalette, CreateChannelDialog, NewChatDialog, ProfileDialog } from "./Dialogs";
 import { InsightsView } from "./InsightsView";
 import { LogoMark } from "./Logo";
+import { CalendarView, DriveView, GmailView } from "./Integrations";
+import { QualityView, ReportDialog } from "./Quality";
+import { DecisionsView } from "./Knowledge";
+import { HandoverView } from "./Handover";
+import { LiveView } from "./Live";
 import { MeetingView, NewMeetingDialog } from "./Meetings";
 import { MyDayView } from "./MyDay";
 import { ProfileCard, SettingsDialog, StatusDialog, StatusIcon } from "./People";
@@ -35,13 +43,26 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const notices = useNotices(uid);
   const meetingList = useMeetings(uid);
   const settings = useSettings(uid);
+  const recordList = useRecords(guest ? undefined : uid);
+  const records = useMemo(() => Object.fromEntries(recordList.map((r) => [r.id, r])), [recordList]);
+  // Register refreshes when drawing files finish processing (their doc fields change)
+  const registerVersion = fileList.filter((f) => f.doc?.drawing_no).map((f) => `${f.id}:${f.doc?.revision}`).join("|");
+  const register = useRegister(!guest, registerVersion.length + registerVersion.split("|").length);
   const events = useEvents(uid);
   const emailList = useEmailItems(uid);
-  const emails = useMemo(() => Object.fromEntries(emailList.map((e) => [e.id, e])), [emailList]);
+  const emails = useMemo(() => Object.fromEntries(emailList.filter((e) => (e as { provider?: string }).provider !== "drive").map((e) => [e.id, e])), [emailList]);
+  const driveFiles = useMemo(
+    () => Object.fromEntries(emailList.filter((e) => (e as { provider?: string }).provider === "drive").map((e) => [e.id, e as unknown as DriveFile])),
+    [emailList],
+  );
+  const connected = settings.connected ?? [];
+  const emailPromises = Object.values(emails).filter((e) => e.promise && !e.task_id && !e.dismissed).length;
   const [meetingPrefill, setMeetingPrefill] = useState<MeetingPrefill | null>(null);
   const [view, setView] = useState<View>({ kind: "home" });
   // Phones show one pane at a time: the chat list, or the open conversation.
   const [mobileList, setMobileList] = useState(false);
+  // Deep link from a push notification: /app?open=msg:CHAT/MSG (also meet:, mail:)
+  const [deepLink] = useState(() => new URLSearchParams(location.search).get("open") ?? "");
   const [oauthReturn] = useState(() => {
     const q = new URLSearchParams(location.search);
     if (q.get("connected") !== "google") return "";
@@ -82,6 +103,14 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         const [chatId, msgId] = ref.slice(4).split("/");
         open({ kind: "chat", chatId, focusMsg: msgId });
       } else if (ref.startsWith("meet:")) open({ kind: "meeting", id: ref.slice(5) });
+      else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
+      else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
+      else if (ref.startsWith("kn:")) open({ kind: "live" });
+      else if (ref.startsWith("ev:")) open({ kind: "live", eventId: ref.slice(3) });
+      else if (ref.startsWith("ho:")) {
+        const id = ref.slice(3);
+        open({ kind: "handover", chatId: id.split("_").slice(0, -2).join("_"), id });
+      }
     },
     [open],
   );
@@ -93,6 +122,30 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     const t = setTimeout(() => toast(oauthReturn), 0);
     return () => clearTimeout(t);
   }, [oauthReturn, toast]);
+
+  useEffect(() => {
+    if (!deepLink) return;
+    history.replaceState(null, "", "/app");
+    const t = setTimeout(() => openRef(deepLink), 0);
+    return () => clearTimeout(t);
+  }, [deepLink, openRef]);
+
+  // A notification clicked while the app is already open: the service worker asks this tab to navigate.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type !== "saathi-open") return;
+      const ref = new URL(e.data.url).searchParams.get("open");
+      if (ref) openRef(ref);
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, [openRef]);
+
+  // Knowledge-hub names for [kn:...] citations in Saathi answers (the items themselves are fetched by the Live screen).
+  useEffect(() => {
+    api<{ id: string; name: string }[]>("/api/knowledge").then(rememberKnowledge).catch(() => {});
+  }, []);
 
   // Presence heartbeat while the app is open and visible.
   useEffect(() => {
@@ -108,8 +161,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
   // If the open chat disappears (left, removed, deleted), fall back to My Day.
   useEffect(() => {
-    if (view.kind === "chat" && chatList.length && !chats[view.chatId]) {
-      const t = setTimeout(() => setView({ kind: "home" }), 1500);
+    if (view.kind === "chat" && !chats[view.chatId]) {
+      const t = setTimeout(() => setView({ kind: "chats" }), 2500);
       return () => clearTimeout(t);
     }
   }, [view, chats, chatList.length]);
@@ -147,7 +200,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
   async function setStatus(state: StatusState) {
     try {
-      await api("/api/me/status", { json: { state, text: statusText(me) } });
+      await api("/api/me/status", { json: { state, text: ownStatusText(me) } });
     } catch (e) {
       toast((e as Error).message);
     }
@@ -157,15 +210,15 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
   const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
-  const listPane = view.kind === "chat" || view.kind === "assistant";
+  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant";
   const admin = isAdmin(account);
   const myState = presence(me);
 
   function selectRail(k: ReturnType<typeof railKey>) {
     if (k === "chat") {
-      // Desktop: reopen the most recent conversation. Phones: show the list.
+      // Desktop: reopen the most recent conversation (or the chat home when there is none). Phones: show the list.
       setMobileList(true);
-      if (view.kind !== "chat" && chatList[0]) setView({ kind: "chat", chatId: chatList[0].id });
+      if (view.kind !== "chat") setView(chatList[0] ? { kind: "chat", chatId: chatList[0].id } : { kind: "chats" });
       return;
     }
     open({ kind: k } as View);
@@ -174,7 +227,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   return (
     <Ctx.Provider
       value={{
-        uid, account, me, users, chats, files, meetings, events, emails, settings, view, open, openRef, toast, dialog: setDlg,
+        uid, account, me, users, chats, files, meetings, events, emails, driveFiles, records, register, settings, view, open, openRef, toast, dialog: setDlg,
         newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true),
       }}
     >
@@ -217,6 +270,13 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                 { label: "Settings", icon: Settings, onSelect: () => setDlg("settings") },
                 ...(admin ? [{ label: "Workspace admin", icon: ShieldCheck, onSelect: () => open({ kind: "admin" }) }] : []),
                 { label: "My insights", icon: BarChart3, onSelect: () => open({ kind: "insights" }) },
+                ...(!guest ? [{ label: "Quality & plant records", icon: Gavel, onSelect: () => open({ kind: "quality" }) }] : []),
+                { label: "Decisions", icon: Workflow, onSelect: () => open({ kind: "decisions" }) },
+                ...(!guest ? [{ label: "Saathi Live (meetings)", icon: Radar, onSelect: () => open({ kind: "live" }) }] : []),
+                // Phones: connected apps live here (the bottom bar has five slots)
+                ...(connected.includes("gmail") ? [{ label: "Gmail", icon: Mail, onSelect: () => open({ kind: "gmail" }) }] : []),
+                ...(connected.includes("calendar") ? [{ label: "Calendar", icon: CalendarDays, onSelect: () => open({ kind: "calendar" }) }] : []),
+                ...(connected.includes("drive") ? [{ label: "Google Drive", icon: DriveIcon as typeof Mail, onSelect: () => open({ kind: "drive" }) }] : []),
                 "sep",
                 {
                   label: "Sign out",
@@ -232,7 +292,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <AppRail unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} />
+          <AppRail unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} emailPromises={emailPromises} openRecords={recordList.filter((r) => r.status !== "closed" && r.owner === uid).length} guest={guest} />
 
           {listPane && (
             <div className={clsx("w-full shrink-0 lg:block lg:w-80", mobileList ? "block" : "hidden")}>
@@ -249,10 +309,27 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "admin" && admin && <AdminView />}
             {view.kind === "meeting" && <MeetingView id={view.id} tasks={tasks} />}
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
+            {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
+            {view.kind === "decisions" && <DecisionsView focusId={view.id} />}
+            {view.kind === "live" && !guest && <LiveView key={view.eventId ?? view.sessionId ?? "home"} sessionId={view.sessionId} eventId={view.eventId} />}
+            {view.kind === "handover" && <HandoverView key={view.chatId} chatId={view.chatId} focusId={view.id} />}
+            {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
+            {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
+            {view.kind === "calendar" && connected.includes("calendar") && <CalendarView />}
+            {view.kind === "drive" && connected.includes("drive") && <DriveView />}
           </main>
         </div>
 
-        <AppRail mobile unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} />
+        {!guest && view.kind !== "chat" && (
+          <button
+            onClick={() => setDlg("report")}
+            className="fixed bottom-20 right-4 z-30 flex h-12 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white shadow-xl lg:hidden"
+            aria-label="Report an issue"
+          >
+            <Plus size={18} /> Report
+          </button>
+        )}
+        <AppRail mobile unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} />
 
         <div className="pointer-events-none fixed bottom-20 right-4 z-[70] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 lg:bottom-5" role="status" aria-live="polite">
           {toasts.map((t) => (
@@ -278,6 +355,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         />
       )}
       {dlg === "status" && <StatusDialog onClose={() => setDlg(null)} />}
+      {dlg === "report" && <ReportDialog onClose={() => setDlg(null)} />}
       {(dlg === "meeting-new" || meetingPrefill) && (
         <NewMeetingDialog
           prefill={meetingPrefill ?? {}}

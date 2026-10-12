@@ -1,11 +1,13 @@
 "use client";
 
-import { ArrowRight, AtSign, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X } from "@/lib/icons";
+import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X, Gavel } from "@/lib/icons";
 import { api } from "@/lib/api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { enablePush, pushState, type PushState } from "@/lib/push";
 import { dueLabel, toDate } from "@/lib/format";
 import type { Notice, Task } from "@/lib/types";
 import { useWs } from "./ctx";
+import { NeedsYou } from "./NeedsYou";
 import { TaskRow } from "./Tasks";
 
 const LIVE = ["open", "in_progress", "blocked"];
@@ -70,6 +72,21 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
     }
   }
 
+  const [push, setPush] = useState<PushState | null>(null);
+  useEffect(() => {
+    let dismissed = false;
+    try {
+      dismissed = localStorage.getItem("saathi.pushPrompt") === "dismissed";
+    } catch {}
+    if (!dismissed) pushState().then(setPush);
+  }, []);
+  const hidePush = () => {
+    setPush(null);
+    try {
+      localStorage.setItem("saathi.pushPrompt", "dismissed");
+    } catch {}
+  };
+
   const first = me?.name.split(" ")[0] ?? "";
   const hour = +new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false });
   const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -95,6 +112,11 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
               <Radar size={16} className="text-white" /> Brief me
             </button>
+            {account.org_role !== "guest" && (
+              <button onClick={() => dialog("report")} className="flex h-10 items-center gap-2 rounded-lg border border-rust/40 bg-surface px-3.5 text-sm font-semibold text-rust hover:bg-rust-soft">
+                <Gavel size={16} /> Report issue
+              </button>
+            )}
             <button onClick={() => newTask()} className="flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-3.5 text-sm font-semibold hover:bg-hover">
               <Plus size={16} /> Task
             </button>
@@ -104,7 +126,44 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        {push === "install" && (
+          <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft/60 px-4 py-3 text-sm">
+            <BellRing size={18} className="text-brand" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <b>Get notifications on your iPhone:</b> tap <b>Share</b> → <b>Add to Home Screen</b>, then open Saathi from your Home Screen.
+            </span>
+            <button onClick={hidePush} className="text-xs font-medium text-muted hover:underline">
+              Got it
+            </button>
+          </div>
+        )}
+        {push === "off" && (
+          <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft/60 px-4 py-3 text-sm">
+            <BellRing size={18} className="text-brand" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <b>Don&rsquo;t miss mentions and replies.</b> Turn on push notifications for this device.
+            </span>
+            <button
+              onClick={async () => {
+                const s = await enablePush().catch(() => "off" as const);
+                toast(s === "on" ? "Push notifications are on." : s === "denied" ? "Blocked by the browser. Allow notifications in site settings." : "Notifications not enabled.");
+                hidePush();
+              }}
+              className="h-8 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-strong"
+            >
+              Turn on
+            </button>
+            <button onClick={hidePush} className="text-xs font-medium text-muted hover:underline">
+              Not now
+            </button>
+          </div>
+        )}
+
+        <div className="mt-6">
+          <NeedsYou tasks={tasks} notices={notices} />
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <Card icon={ListTodo} title="Due today" count={dueToday.length} action={<GoLink onClick={() => open({ kind: "tasks" })} />}>
             {dueToday.length ? dueToday.map((t) => <TaskRow key={t.id} t={t} compact />) : <Empty text="Nothing due today. 🎉" />}
             {nextUp.length > 0 && (
