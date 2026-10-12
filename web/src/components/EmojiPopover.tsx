@@ -8,12 +8,12 @@ import { createPortal } from "react-dom";
 // The picker (and its emoji data) is large, so it loads only when someone opens it.
 const Picker = dynamic(() => import("emoji-picker-react"), {
   ssr: false,
-  loading: () => <div className="flex h-[340px] w-[300px] items-center justify-center text-sm text-muted">Loading emoji…</div>,
+  loading: () => <div className="flex h-[280px] w-[300px] items-center justify-center text-sm text-muted">Loading emoji…</div>,
 });
 
 const W = 300;
-const H = 340;
-const MIN_H = 220;
+const H = 280;
+const MIN_H = 200;
 
 /**
  * Full emoji picker (emoji-picker-react: all categories, search, skin tones, recently used) in a popover.

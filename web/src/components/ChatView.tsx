@@ -28,6 +28,16 @@ import {
   UserPlus,
   Users,
   Wand2,
+  CodeSimple,
+  LinkSimple,
+  ListBullets,
+  ListNumbers,
+  MessageSquareQuote,
+  TextAa,
+  TextBold,
+  TextItalic,
+  TextStrike,
+  TextUnderline,
   X,
 } from "@/lib/icons";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +45,7 @@ import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
 import { DOC_LABEL, REACTION_EMOJI, chatTitle, reactionEmoji, reactionKey, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
 import type { Chat, Message, Reaction, UserProfile } from "@/lib/types";
+import { ChatText } from "./ChatText";
 import { EmojiPopover } from "./EmojiPopover";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
 import { useWs } from "./ctx";
@@ -421,7 +432,7 @@ function MessageRow({ m, mine, grouped, bubbles, highlight, chatId, chatName }: 
   const right = bubbles && mine;
   const body = (
     <>
-      {m.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-ink">{withMentions(m.text, m.mentions, users, uid)}</p>}
+      {m.text && <ChatText text={m.text} plain={(t) => withMentions(t, m.mentions, users, uid)} />}
       {m.file && <FileCard file={m.file} />}
       {m.decision && (
         <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-moss/25 bg-moss-soft px-2.5 py-1.5 text-xs text-moss">
@@ -615,9 +626,80 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     caretRef.current = start + e.length;
   }
 
+  const [fmt, setFmt] = useState(false);
+  const selRef = useRef<[number, number] | null>(null);
+  function edit(next: string, a: number, b = a) {
+    setText(next);
+    setQuery(null);
+    selRef.current = [a, b];
+  }
+  /** **bold**, *italic*… around the selection (or an empty pair at the cursor); pressing again removes it. */
+  function wrap(open: string, close = open, hint = "") {
+    const el = inputRef.current;
+    const a = el?.selectionStart ?? text.length;
+    const b = el?.selectionEnd ?? a;
+    const sel = text.slice(a, b);
+    if (text.slice(a - open.length, a) === open && text.slice(b, b + close.length) === close && open !== "") {
+      edit(text.slice(0, a - open.length) + sel + text.slice(b + close.length), a - open.length, b - open.length);
+      return;
+    }
+    const inner = sel || hint;
+    edit(text.slice(0, a) + open + inner + close + text.slice(b), a + open.length, a + open.length + inner.length);
+  }
+  /** Prefix every selected line ("- ", "1. ", "> "); pressing again removes the prefix. */
+  function prefix(kind: "ul" | "ol" | "quote") {
+    const el = inputRef.current;
+    const a = el?.selectionStart ?? text.length;
+    const b = el?.selectionEnd ?? a;
+    const NL = String.fromCharCode(10);
+    const start = text.lastIndexOf(NL, a - 1) + 1;
+    let end = text.indexOf(NL, b);
+    if (end < 0) end = text.length;
+    const re = kind === "ul" ? /^- / : kind === "ol" ? /^\d+\. / : /^> /;
+    const lines = text.slice(start, end).split(NL);
+    const on = lines.every((l) => re.test(l));
+    const out = lines.map((l, i) => (on ? l.replace(re, "") : (kind === "ul" ? "- " : kind === "ol" ? `${i + 1}. ` : "> ") + l.replace(re, ""))).join(NL);
+    edit(text.slice(0, start) + out + text.slice(end), start, start + out.length);
+  }
+  function code() {
+    const el = inputRef.current;
+    const a = el?.selectionStart ?? text.length;
+    const b = el?.selectionEnd ?? a;
+    const NL = String.fromCharCode(10);
+    if (text.slice(a, b).includes(NL)) wrap("```" + NL, NL + "```");
+    else wrap("`");
+  }
+  function link() {
+    const el = inputRef.current;
+    const a = el?.selectionStart ?? text.length;
+    const b = el?.selectionEnd ?? a;
+    const label = text.slice(a, b) || "link text";
+    const url = "https://";
+    const head = text.slice(0, a) + `[${label}](`;
+    edit(head + url + ")" + text.slice(b), head.length, head.length + url.length);
+  }
+  function onShortcut(e: React.KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+    const k = e.key.toLowerCase();
+    if (k === "b") wrap("**");
+    else if (k === "i") wrap("*");
+    else if (k === "u") wrap("__");
+    else if (k === "k") link();
+    else if (k === "x" && e.shiftKey) setFmt((v) => !v);
+    else if (k === "x" && e.shiftKey === false) return false;
+    else return false;
+    e.preventDefault();
+    return true;
+  }
+
   const caretRef = useRef<number | null>(null);
   useLayoutEffect(() => {
     const el = inputRef.current;
+    if (el && selRef.current) {
+      el.focus();
+      el.setSelectionRange(selRef.current[0], selRef.current[1]);
+      selRef.current = null;
+    }
     if (el && caretRef.current !== null) {
       el.focus();
       el.setSelectionRange(caretRef.current, caretRef.current);
@@ -679,12 +761,51 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
         <label htmlFor="composer" className="sr-only">
           Message {title}
         </label>
+        {fmt && (
+          <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-1.5 py-1" role="toolbar" aria-label="Text formatting">
+            {([
+              [TextBold, "Bold (Ctrl+B)", () => wrap("**")],
+              [TextItalic, "Italic (Ctrl+I)", () => wrap("*")],
+              [TextUnderline, "Underline (Ctrl+U)", () => wrap("__")],
+              [TextStrike, "Strikethrough", () => wrap("~~")],
+              null,
+              [ListBullets, "Bulleted list", () => prefix("ul")],
+              [ListNumbers, "Numbered list", () => prefix("ol")],
+              null,
+              [MessageSquareQuote, "Quote", () => prefix("quote")],
+              [LinkSimple, "Link (Ctrl+K)", link],
+              [CodeSimple, "Code", code],
+            ] as const).map((it, i) =>
+              it ? (
+                (() => {
+                  const Ico = it[0];
+                  return (
+                <button
+                  key={i}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={it[2]}
+                  title={it[1]}
+                  aria-label={it[1]}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink"
+                >
+                  <Ico size={17} />
+                </button>
+                  );
+                })()
+              ) : (
+                <span key={i} className="mx-1 h-4 w-px bg-border" aria-hidden />
+              ),
+            )}
+          </div>
+        )}
         <textarea
           id="composer"
           ref={inputRef}
           value={text}
           onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
           onKeyDown={(e) => {
+            if (onShortcut(e)) return;
             if (candidates.length) {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                 e.preventDefault();
@@ -743,6 +864,15 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
           <input ref={fileRef} type="file" className="hidden" accept=".pdf,image/*,.docx,.xlsx,.txt" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
           <button onClick={() => fileRef.current?.click()} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Attach a PDF or image" aria-label="Attach file">
             <Paperclip size={17} />
+          </button>
+          <button
+            onClick={() => setFmt((v) => !v)}
+            className={clsx("flex h-8 w-8 items-center justify-center rounded-md hover:bg-hover hover:text-ink", fmt ? "bg-brand-soft text-brand" : "text-muted")}
+            title={fmt ? "Hide formatting options (Ctrl+Shift+X)" : "Formatting options (Ctrl+Shift+X)"}
+            aria-label="Formatting options"
+            aria-pressed={fmt}
+          >
+            <TextAa size={17} />
           </button>
           <div className="relative">
             <button ref={emojiBtnRef} onClick={() => setEmoji((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Emoji" aria-label="Insert emoji" aria-expanded={emoji}>
