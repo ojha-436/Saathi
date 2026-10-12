@@ -55,6 +55,7 @@ import { docToText, needsDoc, type DocNode } from "@/lib/richtext";
 import { RichDoc } from "./RichDoc";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import Highlight from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -730,6 +731,32 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
     }
   }
 
+  /** Put “curly quotation marks” around the selection (or an empty pair at the cursor); again removes them. */
+  function quoteMarks() {
+    if (!editor) return;
+    const doc = editor.state.doc;
+    const sel0 = editor.state.selection;
+    // Select-all covers the whole document; pull it in to the text so the marks land inside the paragraph
+    const norm = TextSelection.between(doc.resolve(sel0.from), doc.resolve(sel0.to));
+    const { from, to } = norm;
+    const empty = from === to;
+    const before = from > 1 ? doc.textBetween(from - 1, from) : "";
+    const after = to < doc.content.size - 1 ? doc.textBetween(to, to + 1) : "";
+    if (!empty && before === "“" && after === "”") {
+      editor.chain().focus().deleteRange({ from: to, to: to + 1 }).deleteRange({ from: from - 1, to: from }).run();
+    } else if (empty) {
+      editor.chain().focus().insertContent("“”").command(({ tr }) => {
+        tr.setSelection(TextSelection.create(tr.doc, tr.selection.from - 1));
+        return true;
+      }).run();
+    } else {
+      editor.chain().focus().command(({ tr }) => {
+        tr.insertText("”", to).insertText("“", from);
+        tr.setSelection(TextSelection.create(tr.doc, from + 1, to + 1));
+        return true;
+      }).run();
+    }
+  }
   function setLink() {
     if (!editor) return;
     setLinkUrl((editor.getAttributes("link").href as string | undefined) ?? "https://");
@@ -843,7 +870,7 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             <button type="button" className={tb(false)} title="Decrease indent (Shift+Tab)" aria-label="Decrease indent" disabled={!inList || !ed.can().liftListItem("listItem")} onClick={() => ed.chain().focus().liftListItem("listItem").run()}><Outdent size={17} /></button>
             <button type="button" className={tb(false)} title="Increase indent (Tab)" aria-label="Increase indent" disabled={!inList || !ed.can().sinkListItem("listItem")} onClick={() => ed.chain().focus().sinkListItem("listItem").run()}><Indent size={17} /></button>
             <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-            <button type="button" className={tb(ed.isActive("blockquote"))} title="Quote" aria-label="Quote" aria-pressed={ed.isActive("blockquote")} onClick={run(() => ed.chain().focus().toggleBlockquote().run())}><MessageSquareQuote size={17} /></button>
+            <button type="button" className={tb(false)} title="Quotation marks" aria-label="Quote" onClick={run(quoteMarks)}><MessageSquareQuote size={17} /></button>
             <button type="button" className={tb(ed.isActive("link"))} title="Link (Ctrl+K)" aria-label="Link" aria-pressed={ed.isActive("link")} onClick={run(setLink)}><LinkSimple size={17} /></button>
             {palette && (
               <div className="ws-pop absolute left-2 top-full z-30 mt-1 flex items-center gap-1 rounded-xl border border-border bg-surface p-2 shadow-xl" role="group" aria-label={palette === "color" ? "Text colours" : "Highlight colours"}>
