@@ -94,7 +94,7 @@ function render(nodes: DocNode[] | undefined, plain: Plain, path: string): React
         return <li key={key}>{render(n.content, plain, key)}</li>;
       case "blockquote":
         return (
-          <blockquote key={key} className="my-1 border-l-[3px] border-brand/40 pl-3 text-muted">
+          <blockquote key={key} className="my-1 rounded-r-lg border-l-4 border-brand bg-paper-2 px-3 py-1 text-ink-3">
             {render(n.content, plain, key)}
           </blockquote>
         );

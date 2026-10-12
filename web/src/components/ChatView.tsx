@@ -28,8 +28,6 @@ import {
   UserPlus,
   Users,
   Wand2,
-  CodeBlock,
-  CodeSimple,
   FontColor,
   Highlighter,
   Indent,
@@ -862,8 +860,6 @@ function Composer({ chat, title }: { chat: Chat; title: string }) {
             <span className="mx-1 h-4 w-px bg-border" aria-hidden />
             <button type="button" className={tb(ed.isActive("blockquote"))} title="Quote" aria-label="Quote" aria-pressed={ed.isActive("blockquote")} onClick={run(() => ed.chain().focus().toggleBlockquote().run())}><MessageSquareQuote size={17} /></button>
             <button type="button" className={tb(ed.isActive("link"))} title="Link (Ctrl+K)" aria-label="Link" aria-pressed={ed.isActive("link")} onClick={run(setLink)}><LinkSimple size={17} /></button>
-            <button type="button" className={tb(ed.isActive("code"))} title="Inline code" aria-label="Inline code" aria-pressed={ed.isActive("code")} onClick={run(() => ed.chain().focus().toggleCode().run())}><CodeSimple size={17} /></button>
-            <button type="button" className={tb(ed.isActive("codeBlock"))} title="Code block" aria-label="Code block" aria-pressed={ed.isActive("codeBlock")} onClick={run(() => ed.chain().focus().toggleCodeBlock().run())}><CodeBlock size={17} /></button>
             {palette && (
               <div className="ws-pop absolute left-2 top-full z-30 mt-1 flex items-center gap-1 rounded-xl border border-border bg-surface p-2 shadow-xl" role="group" aria-label={palette === "color" ? "Text colours" : "Highlight colours"}>
                 {(palette === "color" ? TEXT_COLORS : HIGHLIGHTS).map((c) => (
