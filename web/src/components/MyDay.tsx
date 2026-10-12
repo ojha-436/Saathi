@@ -92,7 +92,7 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} className="flex h-10 items-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-white hover:bg-ink-3">
+            <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
               <Radar size={16} className="text-saffron" /> Brief me
             </button>
             <button onClick={() => newTask()} className="flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-3.5 text-sm font-semibold hover:bg-hover">
@@ -146,7 +146,7 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
                               {!done && (
                                 <button
                                   onClick={() => open({ kind: "assistant", prompt: `Prep me for my meeting "${e.title}" at ${clock(e.start)} today${who.length ? ` with ${who.join(", ")}` : ""}.` })}
-                                  className="flex h-7 items-center gap-1 rounded-md bg-ink px-2 text-[11px] font-semibold text-white hover:bg-ink-3"
+                                  className="flex h-7 items-center gap-1 rounded-md bg-brand px-2 text-[11px] font-semibold text-white hover:bg-brand-strong"
                                 >
                                   <Sparkles size={12} className="text-saffron" /> Prep me
                                 </button>

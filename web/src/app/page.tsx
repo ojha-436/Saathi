@@ -242,7 +242,7 @@ export default function Landing() {
 
         {/* ---------------- CTA ---------------- */}
         <section data-reveal className="px-5 pb-24 lg:px-8">
-          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-ink px-8 py-16 text-paper sm:px-14">
+          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-rail px-8 py-16 text-paper sm:px-14">
             <div className="blueprint-grid absolute inset-0 opacity-60" />
             <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
               <div>
@@ -302,7 +302,7 @@ function Feature({
   children?: React.ReactNode;
 }) {
   return (
-    <article className={`lift group relative overflow-hidden rounded-2xl border p-7 ${dark ? "border-ink bg-ink text-paper" : "border-line bg-paper hover:border-ink/25"} ${className ?? ""}`}>
+    <article className={`lift group relative overflow-hidden rounded-2xl border p-7 ${dark ? "border-rail bg-rail text-paper" : "border-line bg-paper hover:border-ink/25"} ${className ?? ""}`}>
       <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${dark ? "bg-saffron text-ink" : "bg-saffron-soft text-saffron-ink"}`}>
         <Icon size={19} aria-hidden />
       </span>

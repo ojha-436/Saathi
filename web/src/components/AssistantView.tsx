@@ -91,7 +91,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
             </h2>
 
             {/* catch-up card */}
-            <div className="rise relative mt-8 overflow-hidden rounded-2xl bg-ink p-6 text-paper" style={{ animationDelay: "120ms" }}>
+            <div className="rise relative mt-8 overflow-hidden rounded-2xl bg-rail p-6 text-paper" style={{ animationDelay: "120ms" }}>
               <div className="blueprint-grid absolute inset-0 opacity-70" aria-hidden />
               <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                 <div>

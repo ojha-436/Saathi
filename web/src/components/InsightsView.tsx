@@ -35,7 +35,7 @@ export function InsightsView() {
   return (
     <section className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto bg-canvas/50" aria-label="My insights">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white">
           <BarChart3 size={18} aria-hidden />
         </span>
         <div className="flex-1">
@@ -82,7 +82,7 @@ export function InsightsView() {
                         </span>
                       </span>
                       <span className="mt-1.5 block h-2 rounded-full bg-canvas" aria-hidden>
-                        <span className="block h-2 rounded-full bg-blueprint" style={{ width: `${(c.messages / maxMsgs) * 100}%` }} />
+                        <span className="block h-2 rounded-full bg-brand" style={{ width: `${(c.messages / maxMsgs) * 100}%` }} />
                       </span>
                     </button>
                   </li>
