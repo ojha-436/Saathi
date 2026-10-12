@@ -4,7 +4,7 @@ import { Logo } from "@/components/Logo";
 
 export const metadata = { title: "Privacy Policy", description: "How Saathi collects, uses, protects and deletes your information." };
 
-const UPDATED = "10 October 2026";
+const UPDATED = "12 October 2026";
 
 /** Contact details come from Cloud Run env vars, so they can change without a code change. */
 function contact() {
@@ -121,6 +121,10 @@ export default async function PrivacyPage() {
                 it.
               </li>
               <li>Voice dictation: audio is sent to our AI provider only to produce the text and is not stored. Voice notes attached to a plant record are stored with that record.</li>
+              <li>
+                Decisions Saathi recognises in chats and meeting summaries: what was decided, the reasons and options given in the conversation, who decided and
+                a link to the source message or meeting.
+              </li>
               <li>
                 Drawing control: a register of drawing numbers, revisions, release status and approver, built from drawings shared in Saathi, and a log of
                 controlled copies printed (who and when).
@@ -255,6 +259,18 @@ export default async function PrivacyPage() {
                 file.
               </li>
               <li>
+                <b>Lessons from past records.</b> So that the same problem isn&rsquo;t solved twice, members of a workspace (not guests) can see a summary of past
+                defect and downtime records when they report something similar: the number, title, part, drawing, vendor, root cause, fix and who owned it.
+                Photos, voice notes and the reporter&rsquo;s name are never part of a lesson, and safety reports are never shown this way.
+              </li>
+              <li>
+                <b>Decisions</b> are visible only to the members of the chat or meeting they came from, and stop being visible to someone who leaves that chat.
+              </li>
+              <li>
+                <b>Plant analytics</b> (for example &ldquo;NCRs by vendor&rdquo;) count only the records and chats the person asking is part of, or the whole workspace for admins
+                and the quality team.
+              </li>
+              <li>
                 <b>Workspace admins</b> can manage members, roles, invitations and channels, and view the audit log. They see channel names and membership, not the
                 messages or files inside them, and they cannot see your connected Google data.
               </li>
@@ -274,7 +290,7 @@ export default async function PrivacyPage() {
             <ul>
               <li>
                 <b>Google Cloud:</b> Cloud Run (hosting), Firestore (database), Cloud Storage (files), Vertex AI (Gemini), Document AI (text recognition), BigQuery
-                (usage analytics), Cloud Logging, Secret Manager, Key Management Service and Cloud Scheduler.
+                (usage analytics and plant-record analytics), Cloud Logging, Secret Manager, Key Management Service and Cloud Scheduler.
               </li>
               <li>
                 <b>Firebase (Google):</b> Authentication (sign-in) and Cloud Messaging (push notifications).

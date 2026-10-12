@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users, DriveIcon } from "@/lib/icons";
+import { CalendarDays, FileText, Hash, Lock, Mail, MessageSquare, Users, DriveIcon, Workflow } from "@/lib/icons";
 import { useEffect, useRef, useState } from "react";
 import { openFile } from "@/lib/api";
 import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
@@ -57,7 +57,9 @@ export function CiteChip({ refId }: { refId: string }) {
       </a>
     );
   }
-  if (refId.startsWith("rec:")) {
+  if (refId.startsWith("dec:")) {
+    label = "decision";
+  } else if (refId.startsWith("rec:")) {
     label = records[refId.slice(4)]?.number ?? "plant record";
   } else if (refId.startsWith("meet:")) {
     label = meetings[refId.slice(5)]?.title ?? "meeting";
@@ -72,10 +74,10 @@ export function CiteChip({ refId }: { refId: string }) {
     <button
       type="button"
       onClick={() => (isFile ? openFile(refId.slice(5)) : openRef(refId))}
-      title={isFile ? `Open ${label}` : `Jump to the message in ${label}`}
+      title={isFile ? `Open ${label}` : refId.startsWith("dec:") ? "Open in the decision log" : `Jump to the message in ${label}`}
       className="mx-0.5 inline-flex max-w-[16rem] items-center gap-1 rounded-md border border-blueprint/20 bg-blueprint-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-blueprint transition hover:border-blueprint/50"
     >
-      {isFile ? <FileText size={11} aria-hidden /> : refId.startsWith("meet:") ? <CalendarDays size={11} aria-hidden /> : <MessageSquare size={11} aria-hidden />}
+      {isFile ? <FileText size={11} aria-hidden /> : refId.startsWith("dec:") ? <Workflow size={11} aria-hidden /> : refId.startsWith("meet:") ? <CalendarDays size={11} aria-hidden /> : <MessageSquare size={11} aria-hidden />}
       <span className="truncate">{label}</span>
     </button>
   );

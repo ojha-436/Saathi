@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { signOut } from "firebase/auth";
-import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus } from "@/lib/icons";
+import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus, Workflow } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -21,6 +21,7 @@ import { InsightsView } from "./InsightsView";
 import { LogoMark } from "./Logo";
 import { CalendarView, DriveView, GmailView } from "./Integrations";
 import { QualityView, ReportDialog } from "./Quality";
+import { DecisionsView } from "./Knowledge";
 import { MeetingView, NewMeetingDialog } from "./Meetings";
 import { MyDayView } from "./MyDay";
 import { ProfileCard, SettingsDialog, StatusDialog, StatusIcon } from "./People";
@@ -100,6 +101,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         open({ kind: "chat", chatId, focusMsg: msgId });
       } else if (ref.startsWith("meet:")) open({ kind: "meeting", id: ref.slice(5) });
       else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
+      else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
     },
     [open],
   );
@@ -255,6 +257,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                 ...(admin ? [{ label: "Workspace admin", icon: ShieldCheck, onSelect: () => open({ kind: "admin" }) }] : []),
                 { label: "My insights", icon: BarChart3, onSelect: () => open({ kind: "insights" }) },
                 ...(!guest ? [{ label: "Quality & plant records", icon: Gavel, onSelect: () => open({ kind: "quality" }) }] : []),
+                { label: "Decisions", icon: Workflow, onSelect: () => open({ kind: "decisions" }) },
                 // Phones: connected apps live here (the bottom bar has five slots)
                 ...(connected.includes("gmail") ? [{ label: "Gmail", icon: Mail, onSelect: () => open({ kind: "gmail" }) }] : []),
                 ...(connected.includes("calendar") ? [{ label: "Calendar", icon: CalendarDays, onSelect: () => open({ kind: "calendar" }) }] : []),
@@ -292,6 +295,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "meeting" && <MeetingView id={view.id} tasks={tasks} />}
             {view.kind === "chat" && <ChatView key={view.chatId} chatId={view.chatId} focusMsg={view.focusMsg} />}
             {view.kind === "chats" && <ChatHome empty={chatList.length === 0} />}
+            {view.kind === "decisions" && <DecisionsView focusId={view.id} />}
             {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
             {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
             {view.kind === "calendar" && connected.includes("calendar") && <CalendarView />}

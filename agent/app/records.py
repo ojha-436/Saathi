@@ -45,6 +45,7 @@ class RecordDraft(BaseModel):
     revision: str | None
     job_no: str | None
     heat_no: str | None
+    vendor: str | None
     machine: str | None
     location: str | None
     quantity: str | None
@@ -64,7 +65,7 @@ Return JSON:
 - title: short, specific (e.g. "Porosity on bolster pocket weld, side frame SRC-BF-2041").
 - description: 2-4 plain sentences of what was observed, in English.
 - transcript: verbatim transcript of the voice note (Hindi words in Roman script, as Indian users type), or null.
-- part_name, drawing_no, revision, job_no, heat_no, machine, location, quantity: ONLY if stated, written on a tag/drawing in
+- part_name, drawing_no, revision, job_no, heat_no, vendor (supplier of the part or material), machine, location, quantity: ONLY if stated, written on a tag/drawing in
   the photo, or clearly spoken. Otherwise null. Never guess identifiers.
 - defect_type (NCR): e.g. porosity, crack, undercut, dimensional, surface, wrong material, wrong revision, other; else null.
 - severity: "minor", "major" or "critical" for NCR/safety (critical = safety risk or wrong material/revision); else null.
@@ -190,7 +191,15 @@ async def draft(type: str = Form("ncr"), text: str = Form(""), hint: str = Form(
     fields = _fields_for(type, _clean_fields(d.model_dump()))
     db.collection("record_drafts").document(draft_id).set({"org_id": user["org_id"], "uid": user["uid"], "type": type, "media": media,
                                                            "fields": fields, "ts": datetime.now(TZ)})
-    return {"draft_id": draft_id, "type": type, "fields": fields, "links": _enrich(user, fields), "media": len(media)}
+    lessons = []
+    if type in ("ncr", "downtime"):
+        from .memory import lesson_text, lessons_for
+
+        try:
+            lessons = lessons_for(user, lesson_text({"fields": fields}), fields=fields)
+        except Exception:
+            log.exception("similar incidents lookup failed")
+    return {"draft_id": draft_id, "type": type, "fields": fields, "links": _enrich(user, fields), "media": len(media), "lessons": lessons}
 
 
 class RecordIn(BaseModel):
@@ -202,7 +211,7 @@ class RecordIn(BaseModel):
     anonymous: bool = False
 
 
-EDITABLE = ("title", "description", "part_name", "drawing_no", "revision", "job_no", "heat_no", "machine", "location", "quantity",
+EDITABLE = ("title", "description", "part_name", "drawing_no", "revision", "job_no", "heat_no", "vendor", "machine", "location", "quantity",
             "defect_type", "severity", "downtime_reason", "hazard", "suggested_action", "transcript")
 
 
@@ -224,7 +233,7 @@ def _clean_fields(f: dict) -> dict:
 
 def _fields_for(kind: str, f: dict) -> dict:
     """Keep only the fields that make sense for this record type."""
-    drop = {"ncr": ("downtime_reason", "hazard"), "downtime": ("defect_type", "hazard", "heat_no"), "safety": ("defect_type", "downtime_reason", "heat_no", "revision")}[kind]
+    drop = {"ncr": ("downtime_reason", "hazard"), "downtime": ("defect_type", "hazard", "heat_no", "vendor"), "safety": ("defect_type", "downtime_reason", "heat_no", "revision", "vendor")}[kind]
     return {k: (None if k in drop else v) for k, v in f.items()}
 
 
@@ -237,12 +246,13 @@ def create_record(body: RecordIn, bg: BackgroundTasks, user=Depends(current_user
     fields = _fields_for(body.type, _clean_fields(body.fields))
     if not fields.get("title"):
         raise HTTPException(400, "Give the record a title")
-    media = []
+    media, drafted_at = [], None
     if body.draft_id:
         dsnap = db.collection("record_drafts").document(body.draft_id).get()
         if not dsnap.exists or dsnap.get("uid") != user["uid"]:
             raise HTTPException(404, "Draft not found")
         media = dsnap.get("media") or []
+        drafted_at = dsnap.get("ts")
     anonymous = body.anonymous and body.type == "safety"
     team = _quality_team(user["org_id"])
     owner = (same_org(user, [body.owner]) or [None])[0] if body.owner else None
@@ -254,7 +264,8 @@ def create_record(body: RecordIn, bg: BackgroundTasks, user=Depends(current_user
     rec = {"org_id": user["org_id"], "type": body.type, "number": number, "status": "open", "fields": fields, "owner": owner,
            "reporter": None if anonymous else user["uid"], "reporter_name": None if anonymous else user["name"], "anonymous": anonymous,
            "participants": participants, "media": media, "chat_id": None, "history": [{"status": "open", "by": None if anonymous else user["uid"], "ts": now}],
-           "links": _enrich(user, fields), "created_at": now, "updated_at": now}
+           "links": _enrich(user, fields), "created_at": now, "updated_at": now,
+           "capture_seconds": round((now - drafted_at).total_seconds()) if drafted_at else None}
     if body.chat_id and not anonymous:
         chat = get_chat_for_member(body.chat_id, user["uid"])
         rec["chat_id"] = chat["id"]
@@ -270,6 +281,9 @@ def create_record(body: RecordIn, bg: BackgroundTasks, user=Depends(current_user
         sev = f" · {fields['severity']}" if fields.get("severity") else ""
         post_message({"id": rec["chat_id"]}, user, f"📋 {number}{sev}: {fields['title']}")
     bg.add_task(_index, rid)
+    from .plantdata import refresh
+
+    bg.add_task(refresh)
     audit(actor or {"uid": None, "name": "Anonymous", "org_id": user["org_id"]}, "record.created", rid, number=number, type=body.type)
     return {"id": rid, "number": number}
 
@@ -283,6 +297,11 @@ def _index(rid: str) -> None:
     f = r["fields"]
     text = f"{r['number']} ({r['type']}, {r['status']}): {f.get('title')}\n{f.get('description') or ''}\n" + "; ".join(
         f"{k}: {v}" for k, v in f.items() if v and k not in ("title", "description", "transcript"))
+    if r["type"] in ("ncr", "downtime"):
+        from .memory import lesson_text
+
+        # kept out of the record itself so the vector never reaches browsers listening to `records`
+        db.collection("record_vecs").document(rid).set({"org_id": r["org_id"], "type": r["type"], "vec": ai.embed([lesson_text(r)])[0]})
     _chunk_doc(f"rec_{rid}", text=text, embed_text=text, members=r["participants"], chat={"id": f"records_{r['org_id']}", "name": "Plant records", "org_id": r["org_id"]},
                recheck=False, extra={"source_type": "record", "sender_name": r.get("reporter_name") or "Anonymous", "ts": r["created_at"], "ref": f"rec:{rid}"})
 
@@ -337,12 +356,16 @@ def update_record(rid: str, body: RecordPatch, bg: BackgroundTasks, user=Depends
         if body.status == "closed" and r["type"] == "ncr" and not (r.get("capa") or {}).get("corrective_action") and not body.corrective_action:
             raise HTTPException(400, "Record the corrective action before closing an NCR")
         upd["status"] = body.status
+        upd["closed_at"] = datetime.now(TZ) if body.status == "closed" else None
         upd["history"] = firestore.ArrayUnion([{"status": body.status, "by": user["uid"], "ts": datetime.now(TZ), "note": (body.note or "")[:300]}])
         if r.get("reporter") and r["reporter"] != user["uid"]:
             notify(r["reporter"], "record", f"{r['number']} is now {body.status.replace('_', ' ')}", r["fields"].get("title") or "", actor=user, source_ref=f"rec:{rid}")
     ref.update(upd)
     audit(user, "record.updated", rid, number=r["number"], **{k: v for k, v in body.model_dump().items() if v and k in ("status", "owner")})
     bg.add_task(_index, rid)
+    from .plantdata import refresh
+
+    bg.add_task(refresh)
     return {"ok": True}
 
 
