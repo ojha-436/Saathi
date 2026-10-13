@@ -590,18 +590,29 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
     pending = col.document()
     pending.set({"role": "assistant", "text": "", "pending": True, "ts": now()})
     started = time.monotonic()
+    last = [0.0]
+
+    def on_partial(t: str) -> None:  # stream into the message the browser is already listening to (~4 writes/s max)
+        if time.monotonic() - last[0] >= 0.25:
+            last[0] = time.monotonic()
+            try:
+                pending.update({"text": t})
+            except Exception:
+                logging.warning("partial update failed")
+
     try:
-        result = await ask(user, text, history)
+        result = await ask(user, text, history, on_partial=on_partial)
     except Exception as e:
         logging.exception("assistant failed")
         pending.update({"text": "Sorry, something went wrong while I was working on that. Please try again.", "pending": False, "error": str(e)[:300]})
         raise HTTPException(500, "Assistant failed")
-    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
-                    "charts": result.get("charts") or []})
     latency = int((time.monotonic() - started) * 1000)
+    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
+                    "charts": result.get("charts") or [], "provenance": {"model": result.get("model"), "latency_ms": latency,
+                    "first_token_ms": result.get("first_token_ms"), "prefetched": result.get("prefetched", [])}})
     tools = [c["tool"] for c in result["tool_calls"]]
     db.collection("audit_log").add({"uid": user["uid"], "org_id": user["org_id"], "kind": "assistant", "query": text, "tool_calls": result["tool_calls"],
-                                    "tools": tools, "latency_ms": latency, "ts": now(),
+                                    "tools": tools, "latency_ms": latency, "first_token_ms": result.get("first_token_ms"), "ts": now(),
                                     "cited": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"])))})
     bg.add_task(log_event_bigquery, {
         "uid": user["uid"], "query": text[:1000], "tools": json.dumps(tools), "latency_ms": latency,

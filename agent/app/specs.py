@@ -116,7 +116,7 @@ def search_library(org_id: str, query: str, k: int = 5) -> list[dict]:
         if not names[sid]:
             continue  # not a live standard of this workspace (deleted, or another workspace's)
         out.append({"ref": f"std:{sid}", "title": names[sid],
-                    "page": page, "text": ch.content[:800]})
+                    "page": page, "text": ch.content[:3000]})
     return out
 
 

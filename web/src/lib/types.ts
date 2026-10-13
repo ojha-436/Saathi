@@ -169,6 +169,8 @@ export type AssistantMsg = {
   pending?: boolean;
   tasks?: string[];
   charts?: Chart[];
+  tool_calls?: { tool: string; args: Record<string, unknown> }[];
+  provenance?: { model?: string; latency_ms?: number; first_token_ms?: number | null; prefetched?: string[] };
 };
 
 /** A small analytic answer from BigQuery, drawn under the assistant's reply. */

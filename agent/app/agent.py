@@ -1,10 +1,12 @@
 """The Saathi personal assistant: one ADK agent whose tools are scoped to the calling user."""
 import logging
+import re
+import time
 import uuid
 from datetime import datetime, timedelta
 
 from google.adk.agents import Agent
-from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig
+from google.adk.agents.run_config import RunConfig, StreamingMode, ToolThreadPoolConfig
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -402,7 +404,8 @@ How to work:
 - Vendor or colleague reliability: call promise_record.
 - Material certificates ("is heat X within spec", "did the MTC pass"): call spec_check; the verdict is computed in code from approved
   limits, so report it as is, property by property, citing the certificate [file:...] and the limit's source [std:...].
-- Requirements, limits, procedures and acceptance criteria from company standards: call standards_library and cite [std:...].
+- Requirements, limits, procedures and acceptance criteria from company standards: call standards_library (at most twice per
+  question; it returns whole passages) and cite [std:...]. If spec_check finds no certificate, say so plainly; don't keep searching.
 - "What happened last shift", handover questions: call shift_handover.
 - Counts, trends, rankings, "how many", "which vendor/machine/drawing has the most": call plant_data. A chart is shown automatically; summarise the numbers.
 - "Should we ...", "help me decide", choosing between options: write a **decision brief**. Gather evidence first: find_decisions (past decisions on the topic), similar_incidents, promise_record for vendors involved, plant_data for the trend, search_workspace for recent discussion. Then answer with sections **Question**, **Options**, **Evidence** (bullets with citations, for and against each option), **Past decisions**, **What we don't know**, and **Suggestion** (clearly labelled as a suggestion; the decision is the user's). Never invent numbers, and never say a condition or trigger from a past decision has been met unless the evidence shows it. Cite numbers from promise_record with the refs of the promises behind them.
@@ -431,14 +434,34 @@ agent = Agent(
 # A normal answer takes 2-5 model calls; cap runaway tool loops (ADK's default allows 500) to bound cost and latency.
 # Tools are synchronous (Firestore, embeddings, BigQuery): run them in a thread pool so one user's tool call never blocks
 # the event loop that serves every other request on this instance, and parallel function calls really run in parallel.
-RUN_CONFIG = RunConfig(max_llm_calls=15, tool_thread_pool_config=ToolThreadPoolConfig(max_workers=16))
+RUN_CONFIG = RunConfig(max_llm_calls=15, tool_thread_pool_config=ToolThreadPoolConfig(max_workers=16), streaming_mode=StreamingMode.SSE)
+
+# Messages that are clearly about the user's own tasks/reminders don't need a workspace search up front
+_TASKY = re.compile(r"\b(remind|reminder|task|todo|to-do|kal subah|parso|laga do|assign|owe|calendar|meeting today|meetings tomorrow)\b", re.I)
+
+
+def prefetch(uid: str, text: str) -> list[dict]:
+    """Retrieval-first: search the workspace for the user's message before the model starts, so most questions are answered
+    in one model turn instead of a tool call plus a second turn."""
+    if len(text) < 6 or _TASKY.search(text):
+        return []
+    try:
+        return search(uid, text, k=6)
+    except Exception:
+        log.exception("prefetch failed")
+        return []
 
 session_service = InMemorySessionService()
 runner = Runner(app_name=APP_NAME, agent=agent, session_service=session_service)
 
 
-async def ask(user: dict, text: str, history: list[dict]) -> dict:
-    """Runs one assistant turn. History is passed in from Firestore so any Cloud Run instance can serve it."""
+async def ask(user: dict, text: str, history: list[dict], on_partial=None) -> dict:
+    """Runs one assistant turn. History is passed in from Firestore so any Cloud Run instance can serve it.
+    on_partial(text) receives the answer as it streams (throttled by the caller)."""
+    import asyncio
+
+    started = time.monotonic()
+    found = await asyncio.to_thread(prefetch, user["uid"], text)
     session = await session_service.create_session(
         app_name=APP_NAME,
         user_id=user["uid"],
@@ -446,21 +469,40 @@ async def ask(user: dict, text: str, history: list[dict]) -> dict:
                "org_name": (db.collection("orgs").document(user.get("org_id") or "-").get().to_dict() or {}).get("name", "")},
     )
     convo = "\n".join(f"{h['role']}: {h['text'][:800]}" for h in history[-6:])
+    pre = ""
+    if found:
+        rows = "\n".join(f"- [{r['ref']}] {r.get('chat') or r.get('file_name') or ''} · {r.get('sender') or ''} · {r.get('when') or ''}: {(r.get('text') or '')[:350]}" for r in found)
+        pre = ("Saathi already ran search_workspace for this message (results below, same permissions). If they answer the question, "
+               "answer directly and cite them; call tools for anything they don't cover (revision status, decisions, records, tasks...).\n"
+               f"{rows}\n\n")
     prompt = (
         (f"Earlier in this conversation (context only):\n{convo}\n\n" if convo else "")
+        + pre
         + f"User's latest message: {text}\n\n(Reply in the language of this latest message only.)"
     )
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
 
-    reply, tool_calls = "", []
+    reply, tool_calls, streamed, first_token_ms = "", [], "", None
     async for event in runner.run_async(user_id=user["uid"], session_id=session.id, new_message=content, run_config=RUN_CONFIG):
-        for call in event.get_function_calls() or []:
-            tool_calls.append({"tool": call.name, "args": dict(call.args or {})})
-        if event.is_final_response() and event.content and event.content.parts:
+        calls = event.get_function_calls() or []
+        if not event.partial:  # with streaming, a call also appears on the partial event; record it once
+            for call in calls:
+                tool_calls.append({"tool": call.name, "args": dict(call.args or {})})
+        if calls:
+            streamed = ""  # text before a tool call isn't the answer
+        if event.partial and event.content and event.content.parts:
+            delta = "".join(p.text or "" for p in event.content.parts if not getattr(p, "thought", False))
+            if delta:
+                streamed += delta
+                first_token_ms = first_token_ms or int((time.monotonic() - started) * 1000)
+                if on_partial:
+                    on_partial(streamed)
+        elif event.is_final_response() and event.content and event.content.parts:
             reply = "".join(p.text or "" for p in event.content.parts if not getattr(p, "thought", False))
 
     final = await session_service.get_session(app_name=APP_NAME, user_id=user["uid"], session_id=session.id)
     proposed = list((final.state if final else {}).get("proposed_tasks", []))
     charts = list((final.state if final else {}).get("charts", []))[:3]
     await session_service.delete_session(app_name=APP_NAME, user_id=user["uid"], session_id=session.id)
-    return {"text": reply.strip() or "Sorry, I couldn't produce an answer.", "tool_calls": tool_calls, "proposed_tasks": proposed, "charts": charts}
+    return {"text": (reply or streamed).strip() or "Sorry, I couldn't produce an answer.", "tool_calls": tool_calls, "proposed_tasks": proposed,
+            "charts": charts, "prefetched": [r["ref"] for r in found], "first_token_ms": first_token_ms, "model": AGENT_MODEL}
