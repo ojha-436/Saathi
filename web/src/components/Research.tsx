@@ -75,6 +75,9 @@ const TOOL_LABEL: Record<string, { label: string; icon: typeof Search }> = {
   who_owes: { label: "Pending tasks", icon: ListTodo },
   get_calendar: { label: "Calendar", icon: CalendarDays },
   get_message_context: { label: "Conversation", icon: MessageSquare },
+  archive_search: { label: "Full history (BigQuery)", icon: History },
+  spec_check: { label: "Spec Check", icon: ShieldCheck },
+  standards_library: { label: "Standards library", icon: FileSearch },
 };
 
 const STATUS: Record<ResearchRun["status"], { label: string; cls: string }> = {

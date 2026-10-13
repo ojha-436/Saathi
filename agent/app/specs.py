@@ -102,7 +102,7 @@ def search_library(org_id: str, query: str, k: int = 5) -> list[dict]:
     except Exception:
         log.exception("standards search failed")
         return []
-    out = []
+    out, names = [], {}
     for r in resp.results:
         ch = r.chunk
         if not ch or not ch.content:
@@ -110,7 +110,12 @@ def search_library(org_id: str, query: str, k: int = 5) -> list[dict]:
         sid = (ch.document_metadata.uri or "").rsplit("/", 1)[-1] if ch.document_metadata else ""
         sid = sid or ch.name.split("/documents/")[-1].split("/")[0]
         page = ch.page_span.page_start if ch.page_span else None
-        out.append({"ref": f"std:{sid}", "title": ch.document_metadata.title if ch.document_metadata else "",
+        if sid not in names:
+            d = db.collection("standards").document(sid).get().to_dict() or {}
+            names[sid] = d.get("title") or d.get("name") if d.get("org_id") == org_id else None
+        if not names[sid]:
+            continue  # not a live standard of this workspace (deleted, or another workspace's)
+        out.append({"ref": f"std:{sid}", "title": names[sid],
                     "page": page, "text": ch.content[:800]})
     return out
 

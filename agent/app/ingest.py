@@ -7,7 +7,7 @@ from google.cloud.firestore_v1.vector import Vector
 from google.genai import types
 from pydantic import BaseModel
 
-from . import ai
+from . import ai, archive
 from .config import DOCAI_LOCATION, DOCAI_PROCESSOR, PROJECT, TZ, VISION_MODEL
 from .firebase import db, user_profile
 
@@ -64,18 +64,18 @@ class DocExtract(BaseModel):
 def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str], chat: dict, extra: dict, recheck: bool = True):
     vec = ai.embed([embed_text])[0]
     ref = db.collection("chunks").document(chunk_id)
-    ref.set(
-        {
-            "text": text,
-            "embedding": Vector(vec),
-            "members": members,
-            "chat_id": chat["id"],
-            "chat_name": chat.get("name", ""),
-            "keywords": ai.keywords(embed_text),
-            "org_id": chat.get("org_id") or extra.get("org_id", ""),
-            **extra,
-        }
-    )
+    data = {
+        "text": text,
+        "embedding": Vector(vec),
+        "members": members,
+        "chat_id": chat["id"],
+        "chat_name": chat.get("name", ""),
+        "keywords": ai.keywords(embed_text),
+        "org_id": chat.get("org_id") or extra.get("org_id", ""),
+        **extra,
+    }
+    ref.set(data)
+    archive.mirror(chunk_id, data, data["org_id"])  # BigQuery archive index for deep research
     if not recheck:
         return
     # Membership or the name may have changed while we were embedding (join, removal, rename). Re-read after the

@@ -41,12 +41,15 @@ CALLS_PER_RESEARCHER = 7  # tool calls each researcher may make (≈ 40 per run 
 RUN_BUDGET_S = 300
 MAX_RUNNING_PER_ORG = 5
 
+from .archive import archive_search  # noqa: E402
 from .specs import spec_check, standards_library  # noqa: E402
 
-TOOLS = {f.__name__: f for f in (search_workspace, lookup_document, revision_status, find_decisions, similar_incidents, promise_record,
-                                 plant_data, shift_handover, who_owes, get_calendar, get_message_context, spec_check, standards_library)}
+TOOLS = {f.__name__: f for f in (search_workspace, archive_search, lookup_document, revision_status, find_decisions, similar_incidents,
+                                 promise_record, plant_data, shift_handover, who_owes, get_calendar, get_message_context, spec_check,
+                                 standards_library)}
 TOOL_HELP = {
     "search_workspace": "chats, files, meetings, records, knowledge hub, email and Drive the user can access (meaning + identifiers)",
+    "archive_search": "deep search over the FULL history in the BigQuery archive (slower, broader recall: history, trends, older threads)",
     "lookup_document": "drawings, test certificates (MTC), inspection reports and quotes with their extracted fields",
     "revision_status": "the controlled drawing register: current released revision, superseded revisions, approvals",
     "find_decisions": "the decision log with rationale, rejected options and supersession",
@@ -328,6 +331,7 @@ def build_workflow(plan: Plan, goal: str) -> SequentialAgent:
 
 TOOL_VERB = {
     "search_workspace": lambda a: f"Searching chats and files for “{a.get('query', '')}”",
+    "archive_search": lambda a: f"Searching the full history (BigQuery) for “{a.get('query', '')}”",
     "lookup_document": lambda a: f"Reading documents for “{a.get('query', '')}”",
     "revision_status": lambda a: f"Checking the drawing register for {a.get('drawing_no', '')}",
     "find_decisions": lambda a: f"Looking up decisions on “{a.get('topic', '') or 'recent decisions'}”",
