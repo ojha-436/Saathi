@@ -14,7 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, specs
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, specs, voice
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, SAATHI_ROLE, TZ
@@ -36,6 +36,7 @@ app.include_router(knowledge.router)
 app.include_router(live.router)
 app.include_router(research.router)
 app.include_router(specs.router)
+app.include_router(voice.router)
 if SAATHI_ROLE in ("worker", "all"):
     app.include_router(jobs.router)  # Cloud Tasks targets; the worker service is private
 app.add_middleware(
@@ -147,6 +148,12 @@ def notify(uid: str, kind: str, title: str, body: str, actor: dict | None = None
 
 # ---------------- chats ----------------
 
+def mark_seen(uid: str, chat_id: str, ts: datetime | None = None) -> None:
+    """Read markers live on the reader's own document (users/{uid}/reads/{chatId}), never on the chat document: a busy channel
+    with thousands of members would otherwise turn every "seen" into a write on one hot document."""
+    db.collection("users").document(uid).collection("reads").document(chat_id).set({"at": ts or now(), "chat_id": chat_id})
+
+
 def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None,
                  parent_id: str | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
@@ -165,9 +172,8 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
         })
     col.document(msg_id).set(body)
     preview = ("↪ " if parent_id else "") + (text or (f"📎 {file['name']}" if file else ""))
-    db.collection("chats").document(chat["id"]).update(
-        {"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"], f"read_at.{user['uid']}": ts}
-    )
+    db.collection("chats").document(chat["id"]).update({"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"]})
+    mark_seen(user["uid"], chat["id"], ts)
     return msg_id
 
 
@@ -177,14 +183,17 @@ def post_system(chat_id: str, text: str, actor: str) -> None:
     db.collection("chats").document(chat_id).collection("messages").document().set(
         {"sender": "system", "sender_name": "", "text": text, "ts": ts, "system": True}
     )
-    db.collection("chats").document(chat_id).update({"last_ts": ts, "last_text": text[:120], "last_sender": "", f"read_at.{actor}": ts})
+    db.collection("chats").document(chat_id).update({"last_ts": ts, "last_text": text[:120], "last_sender": ""})
+    if actor:
+        mark_seen(actor, chat_id, ts)
 
 
 def sync_members(chat_id: str, members: list[str]) -> None:
-    """Keeps search chunks and file permissions in step with chat membership, so the assistant and
-    file downloads immediately follow joins, invites and removals."""
+    """Keeps the member copies on files, decisions and handovers (read directly by browsers through security rules) in step
+    with chat membership. Search chunks are NOT rewritten: search resolves permissions from the caller's current chats at query
+    time, so a join or leave in a 5,000-member channel costs O(files), not O(every message ever indexed)."""
     batch, n = db.batch(), 0
-    for col in ("chunks", "files", "decisions", "handovers"):
+    for col in ("files", "decisions", "handovers"):
         for snap in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
             batch.update(snap.reference, {"members": members})
             n += 1
@@ -248,7 +257,7 @@ def create_channel(body: ChannelIn, user=Depends(current_user)):
     db.collection("chats").document(chat_id).set(
         {"type": "channel", "name": name, "name_key": name.lower(), "description": body.description.strip()[:300],
          "visibility": body.visibility, "members": members, "owners": [user["uid"]], "created_by": user["uid"],
-         "created_at": now(), "last_ts": now(), "last_text": "", "ai_excluded": False, "read_at": {user["uid"]: now()},
+         "created_at": now(), "last_ts": now(), "last_text": "", "ai_excluded": False,
          "org_id": user["org_id"]}
     )
     audit(user, "channel.created", chat_id, name=name, visibility=body.visibility)
@@ -283,7 +292,8 @@ def join_channel(chat_id: str, bg: BackgroundTasks, user=Depends(current_user)):
         raise HTTPException(404, "Channel not found")
     if user["uid"] not in snap.get("members"):
         members = sorted(set(snap.get("members")) | {user["uid"]})
-        update = {"members": members, f"read_at.{user['uid']}": now()}
+        update = {"members": members}
+        mark_seen(user["uid"], chat_id)
         if not snap.to_dict().get("owners"):
             update["owners"] = [user["uid"]]  # an abandoned channel gets its next member as owner
         ref.update(update)
@@ -388,7 +398,7 @@ def delete_chat_everything(chat_id: str) -> None:
 @app.post("/api/chats/{chat_id}/read")
 def mark_read(chat_id: str, user=Depends(current_user)):
     get_chat_for_member(chat_id, user["uid"])
-    db.collection("chats").document(chat_id).update({f"read_at.{user['uid']}": now()})
+    mark_seen(user["uid"], chat_id)
     return {"ok": True}
 
 

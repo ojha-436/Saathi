@@ -22,7 +22,7 @@ export type View =
   | { kind: "drive" }
   | { kind: "chat"; chatId: string; focusMsg?: string };
 
-export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new" | "report";
+export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new" | "report" | "voice";
 
 export type TaskPrefill = { title?: string; assignee?: string; sourceRef?: string; due?: string };
 export type MeetingPrefill = { title?: string; when?: Date; attendees?: string[] };
@@ -51,6 +51,8 @@ export type WorkspaceCtx = {
   showProfile: (uid: string) => void;
   /** Mobile only: go back from a conversation to the chat list. */
   showList: () => void;
+  /** chatId → when the user last opened it */
+  reads: Record<string, import("firebase/firestore").Timestamp>;
 };
 
 export const Ctx = createContext<WorkspaceCtx | null>(null);

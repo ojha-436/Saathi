@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, doc, limit, onSnapshot, orderBy, query, where, type Query } from "firebase/firestore";
+import { collection, doc, limit, onSnapshot, orderBy, query, where, type Query, type Timestamp } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getDb } from "./firebase";
@@ -128,3 +128,9 @@ export const useResearchEvents = (runId?: string) =>
     () => (runId ? query(collection(getDb(), "research_runs", runId, "events"), orderBy("ts", "asc"), limit(400)) : null),
     `research-events:${runId}`,
   );
+
+/** The user's read markers: chatId → last time they opened it (users/{uid}/reads). */
+export function useReads(uid?: string): Record<string, Timestamp> {
+  const rows = useLive<{ id: string; at?: Timestamp }>(() => (uid ? collection(getDb(), "users", uid, "reads") : null), `reads:${uid}`);
+  return Object.fromEntries(rows.filter((r) => r.at).map((r) => [r.id, r.at as Timestamp]));
+}

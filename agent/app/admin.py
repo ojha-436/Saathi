@@ -179,6 +179,7 @@ class OrgIn(BaseModel):
     channel_creation: str | None = None  # everyone | admins
     ai_enabled: bool | None = None
     integrations_google: bool | None = None
+    voice_us: bool | None = None  # allow Saathi Voice (Gemini Live is served from us-central1 for this project)
     quality_team: list[str] | None = None  # uids who own/see every plant record (NCR, downtime, safety)
     qr_public: bool | None = None  # QR scans show current/obsolete without sign-in
     shifts: str | None = None  # "A 06:00, B 14:00, C 22:00" — shift handover timing
@@ -230,6 +231,8 @@ def update_org(body: OrgIn, admin=Depends(admin_user)):
         if not 1 <= len(rows) <= 4 or len({r["start"] for r in rows}) != len(rows) or len({r["name"] for r in rows}) != len(rows):
             raise HTTPException(400, "Give 1 to 4 shifts with different names and start times")
         update["settings.shifts"] = sorted(rows, key=lambda r: r["start"])
+    if body.voice_us is not None:
+        update["settings.voice_us"] = body.voice_us
     if body.integrations_google is not None:
         update["settings.integrations_google"] = body.integrations_google
         if not body.integrations_google:  # turning it off disconnects everyone in the workspace

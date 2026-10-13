@@ -42,7 +42,7 @@ const COMPOSER_EMOJI = ["👍", "🙏", "✅", "👌", "🎉", "😄", "🙂", "
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: string }) {
-  const { uid, users, chats, toast, open, showList, settings } = useWs();
+  const { uid, users, chats, toast, open, showList, settings, reads } = useWs();
   const chat = chats[chatId];
   const messages = useMessages(chatId);
   const [tab, setTab] = useState<Tab>("messages");
@@ -88,7 +88,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
   // Mark the conversation read while it is open.
   const lastTs = chat?.last_ts?.toMillis();
   useEffect(() => {
-    if (chat && isUnread(chat, uid)) api(`/api/chats/${chatId}/read`, { method: "POST" }).catch(() => {});
+    if (chat && isUnread(chat, uid, reads)) api(`/api/chats/${chatId}/read`, { method: "POST" }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, lastTs]);
 
