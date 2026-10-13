@@ -50,6 +50,10 @@ service cloud.firestore {
     match /assistant/{uid}/messages/{id} {
       allow read: if signedIn() && request.auth.uid == uid;
     }
+    // Voice transcripts (text only; audio is never stored): private to the speaker, deleted after 30 days (TTL on expire_at)
+    match /voice_sessions/{id} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
     // Research runs and their live progress: only the person who ran them (shared copies live on chat messages)
     match /research_runs/{runId} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;

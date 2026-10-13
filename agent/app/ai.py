@@ -15,13 +15,39 @@ embed_client = genai.Client(vertexai=True, project=PROJECT, location=EMBED_LOCAT
 _pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="embed")
 
 
-def transient(e: BaseException) -> bool:
-    """Rate limits, 5xx and dropped connections are worth retrying; everything else is a real error."""
+def _network_errors() -> tuple:
     import httpx
 
+    kinds: list = [httpx.TransportError, ConnectionError, TimeoutError]
+    try:
+        from google.auth.exceptions import TransportError as AuthTransportError  # token refresh hit a dropped connection
+
+        kinds.append(AuthTransportError)
+    except ImportError:
+        pass
+    try:
+        import requests
+
+        kinds += [requests.exceptions.ConnectionError, requests.exceptions.Timeout]
+    except ImportError:
+        pass
+    try:
+        from websockets.exceptions import ConnectionClosedError  # Gemini Live sessions run over websockets
+
+        kinds.append(ConnectionClosedError)
+    except ImportError:
+        pass
+    return tuple(kinds)
+
+
+_NETWORK = _network_errors()
+
+
+def transient(e: BaseException) -> bool:
+    """Rate limits, 5xx and dropped connections (HTTP, auth refresh, websockets) are worth retrying; everything else is a real error."""
     if isinstance(e, genai.errors.APIError):
         return e.code in (408, 429, 500, 502, 503, 504)
-    return isinstance(e, (httpx.TransportError, ConnectionError, TimeoutError))
+    return isinstance(e, _NETWORK)
 
 
 def _retry(fn, attempts: int = 6):

@@ -20,6 +20,10 @@ EMBED_LOCATION = os.getenv("EMBED_LOCATION", "asia-south1")
 # Streaming speech-to-text for Saathi Live and the voice for its recording notice
 LIVE_STT_MODEL = os.getenv("LIVE_STT_MODEL", "gemini-3.5-transcribe-live-preview")
 TTS_MODEL = os.getenv("TTS_MODEL", "gemini-2.5-flash-tts")
+# Saathi Voice: native-audio Live model with tool calling. Verified 2026-10-12: served from us-central1 for this project
+# (not global or asia-south1), so voice audio is processed in the US; workspaces opt in (settings.voice_us).
+VOICE_MODEL = os.getenv("VOICE_MODEL", "gemini-3.8-live")
+VOICE_LOCATION = os.getenv("VOICE_LOCATION", "us-central1")
 
 FILES_BUCKET = os.getenv("FILES_BUCKET", "aibuildergc-saathi-files")
 CRON_SECRET = os.getenv("CRON_SECRET", "dev-cron-secret")

@@ -112,6 +112,15 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} className="flex h-10 items-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-white hover:bg-ink-3">
               <Radar size={16} className="text-saffron" /> Brief me
             </button>
+            {account.org.settings.voice_us && account.org_role !== "guest" && (
+              <button onClick={() => dialog("voice")} className="flex h-10 items-center gap-2 rounded-lg bg-ink px-3.5 text-sm font-semibold text-white hover:bg-ink-3">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                  <rect x="9" y="3" width="6" height="11" rx="3" />
+                  <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                </svg>
+                Talk to Saathi
+              </button>
+            )}
             {account.org_role !== "guest" && (
               <button onClick={() => dialog("report")} className="flex h-10 items-center gap-2 rounded-lg border border-rust/40 bg-surface px-3.5 text-sm font-semibold text-rust hover:bg-rust-soft">
                 <Gavel size={16} /> Report issue

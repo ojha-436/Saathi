@@ -32,7 +32,7 @@ export type Account = {
     id: string;
     name: string;
     domains: string[];
-    settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; quality_team?: string[]; qr_public?: boolean; shifts?: { name: string; start: string }[] };
+    settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; voice_us?: boolean; quality_team?: string[]; qr_public?: boolean; shifts?: { name: string; start: string }[] };
   };
 };
 

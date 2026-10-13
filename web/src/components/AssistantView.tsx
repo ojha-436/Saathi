@@ -28,7 +28,7 @@ const RANGES = [
 ];
 
 export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; prompt?: string; onPromptUsed: () => void }) {
-  const { uid, me, toast } = useWs();
+  const { uid, me, toast, dialog, account } = useWs();
   const messages = useAssistant(uid);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -77,6 +77,15 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
           <h1 className="text-[15px] font-bold leading-tight">Ask Saathi</h1>
           <p className="hidden truncate text-xs text-muted sm:block">Searches only the chats and files you can access · every answer cites its source</p>
         </div>
+        {account.org.settings.voice_us && account.org_role !== "guest" && (
+          <button onClick={() => dialog("voice")} className="flex h-9 items-center gap-1.5 rounded-lg bg-ink px-3 text-xs font-semibold text-white hover:bg-ink-3" title="Talk to Saathi (hands-free)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
+            Talk
+          </button>
+        )}
         <SaathiTabs active="ask" />
         {messages.length > 0 && (
           <button

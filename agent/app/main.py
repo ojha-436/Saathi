@@ -14,7 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, specs
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, specs, voice
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, SAATHI_ROLE, TZ
@@ -36,6 +36,7 @@ app.include_router(knowledge.router)
 app.include_router(live.router)
 app.include_router(research.router)
 app.include_router(specs.router)
+app.include_router(voice.router)
 if SAATHI_ROLE in ("worker", "all"):
     app.include_router(jobs.router)  # Cloud Tasks targets; the worker service is private
 app.add_middleware(

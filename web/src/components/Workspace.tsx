@@ -14,6 +14,7 @@ import type { Account, DriveFile, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { ResearchView } from "./Research";
+import { VoiceSheet } from "./VoiceSheet";
 import { Menu, UserAvatar } from "./bits";
 import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
@@ -360,6 +361,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       )}
       {dlg === "status" && <StatusDialog onClose={() => setDlg(null)} />}
       {dlg === "report" && <ReportDialog onClose={() => setDlg(null)} />}
+      {dlg === "voice" && <VoiceSheet onClose={() => setDlg(null)} />}
       {(dlg === "meeting-new" || meetingPrefill) && (
         <NewMeetingDialog
           prefill={meetingPrefill ?? {}}
