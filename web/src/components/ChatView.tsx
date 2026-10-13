@@ -1,12 +1,73 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, Check, Copy, Eye, EyeOff, FileText, Gavel, Handshake, Info, Bell, Reply, MessagesSquare, BellOff, AtSign, ListPlus, Loader2, LogOut, MoreHorizontal, Paperclip, ScanText, SendHorizontal, Smile, Sparkles, Star, Trash2, UserPlus, Users, Wand2, X, AlertTriangle, RefreshCw } from "@/lib/icons";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Eye,
+  EyeOff,
+  FileText,
+  Gavel,
+  Handshake,
+  Info,
+  Bell,
+  BellOff,
+  AtSign,
+  ListPlus,
+  Loader2,
+  LogOut,
+  MoreHorizontal,
+  Paperclip,
+  ScanText,
+  SendHorizontal,
+  Smile,
+  Sparkles,
+  Star,
+  Trash2,
+  UserPlus,
+  Users,
+  Wand2,
+  FontColor,
+  Highlighter,
+  Indent,
+  Outdent,
+  Redo,
+  Undo,
+  LinkSimple,
+  ListBullets,
+  ListNumbers,
+  MessageSquareQuote,
+  TextAa,
+  Heading,
+  TextBold,
+  TextItalic,
+  TextStrike,
+  TextUnderline,
+  X,
+  AlertTriangle,
+  MessagesSquare,
+  RefreshCw,
+  Reply,
+} from "@/lib/icons";
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
-import { DOC_LABEL, REACTION_EMOJI, chatTitle, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
+import { DOC_LABEL, REACTION_EMOJI, chatTitle, reactionEmoji, reactionKey, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
 import type { Chat, Message, Reaction, UserProfile } from "@/lib/types";
+import { ChatText } from "./ChatText";
+import { docToText, needsDoc, type DocNode } from "@/lib/richtext";
+import { RichDoc } from "./RichDoc";
+import { useEditor, EditorContent } from "@tiptap/react";
+import type { Editor } from "@tiptap/core";
+import "opengrammer/styles";
+import { Grammar } from "@/lib/grammarExtension";
+import { TextSelection } from "@tiptap/pm/state";
+import StarterKit from "@tiptap/starter-kit";
+import Highlight from "@tiptap/extension-highlight";
+import Placeholder from "@tiptap/extension-placeholder";
+import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
+import { EmojiPopover } from "./EmojiPopover";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
@@ -38,7 +99,6 @@ function withMentions(text: string, mentions: string[] | undefined, users: Recor
 type Tab = "messages" | "decisions" | "files";
 type Panel = null | "about" | "members";
 
-const COMPOSER_EMOJI = ["👍", "🙏", "✅", "👌", "🎉", "😄", "🙂", "🤔", "👀", "🔥", "⚠️", "📌", "📎", "🚚", "🏭", "🔧", "📐", "🧪", "⏰", "❤️"];
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: string }) {
@@ -428,7 +488,7 @@ function MessageRow({
   const right = bubbles && mine;
   const body = (
     <>
-      {m.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-ink">{withMentions(m.text, m.mentions, users, uid)}</p>}
+      {m.text && (m.doc ? <RichDoc doc={m.doc} plain={(t) => withMentions(t, m.mentions, users, uid)} /> : <ChatText text={m.text} plain={(t) => withMentions(t, m.mentions, users, uid)} />)}
       {m.file && <FileCard file={m.file} />}
       {m.file?.spec && <SpecBadge file={m.file} chatId={chatId} />}
       {m.research && (
@@ -504,6 +564,8 @@ function MessageRow({
 
 function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; chatId: string; chatName: string; align: "left" | "right"; onReply?: () => void }) {
   const { open, toast, newTask, uid } = useWs();
+  const [picking, setPicking] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
   async function react(r: Reaction) {
     try {
       await api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: r } });
@@ -526,10 +588,14 @@ function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; c
       aria-label="Message actions"
     >
       {(Object.keys(REACTION_EMOJI) as Reaction[]).slice(0, 5).map((r) => (
-        <button key={r} onClick={() => react(r)} className={clsx(btn, "text-base")} aria-label={`React ${REACTION_EMOJI[r]}`} title={`React ${REACTION_EMOJI[r]}`}>
+        <button key={r} onClick={() => react(reactionKey(REACTION_EMOJI[r]))} className={clsx(btn, "text-base")} aria-label={`React ${REACTION_EMOJI[r]}`} title={`React ${REACTION_EMOJI[r]}`}>
           {REACTION_EMOJI[r]}
         </button>
       ))}
+      <button ref={moreRef} onClick={() => setPicking((v) => !v)} className={btn} aria-label="Add another reaction" aria-expanded={picking} title="More reactions">
+        <Smile size={15} />
+      </button>
+      {picking && <EmojiPopover anchor={moreRef.current} onPick={(e) => react(reactionKey(e))} onClose={() => setPicking(false)} />}
       <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
       {onReply && (
         <button onClick={onReply} className={btn} aria-label="Reply in thread" title="Reply in thread">
@@ -565,22 +631,32 @@ function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; c
 
 function Reactions({ m, chatId }: { m: Message; chatId: string }) {
   const { uid, users, toast } = useWs();
-  const entries = Object.entries(m.reactions ?? {}).filter(([, who]) => who && who.length) as [Reaction, string[]][];
-  if (!entries.length) return null;
+  // group by the emoji shown, so an old "like" and a picked 👍 count together
+  const groups = new Map<string, { who: Set<string>; keys: string[] }>();
+  for (const [key, who] of Object.entries(m.reactions ?? {})) {
+    if (!who || !who.length) continue;
+    const e = reactionEmoji(key);
+    const g = groups.get(e) ?? { who: new Set<string>(), keys: [] };
+    who.forEach((w) => g.who.add(w));
+    g.keys.push(key);
+    groups.set(e, g);
+  }
+  if (!groups.size) return null;
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {entries.map(([r, who]) => {
-        const mineOn = who.includes(uid);
+      {[...groups.entries()].map(([emoji, g]) => {
+        const mineKey = g.keys.find((k) => m.reactions?.[k]?.includes(uid));
+        const mineOn = !!mineKey;
         return (
           <button
-            key={r}
-            onClick={() => api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: r } }).catch((e) => toast((e as Error).message))}
-            title={who.map((w) => users[w]?.name ?? "Someone").join(", ")}
+            key={emoji}
+            onClick={() => api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: mineKey ?? g.keys[0] } }).catch((e) => toast((e as Error).message))}
+            title={[...g.who].map((w) => users[w]?.name ?? "Someone").join(", ")}
             aria-pressed={mineOn}
-            className={clsx("flex h-6 items-center gap-1 rounded-full border px-2 text-xs transition", mineOn ? "border-brand/40 bg-brand-soft text-brand" : "border-border bg-surface text-muted hover:border-[#c5cad3]")}
+            className={clsx("flex h-6 items-center gap-1 rounded-full border px-2 text-xs transition", mineOn ? "border-brand/40 bg-brand-soft text-brand" : "border-border bg-surface text-muted hover:border-brand/40")}
           >
-            <span>{REACTION_EMOJI[r]}</span>
-            <span className="font-semibold">{who.length}</span>
+            <span>{emoji}</span>
+            <span className="font-semibold">{g.who.size}</span>
           </button>
         );
       })}
@@ -589,17 +665,68 @@ function Reactions({ m, chatId }: { m: Message; chatId: string }) {
   );
 }
 
+const TEXT_COLORS = ["#202124", "#d93025", "#e37400", "#1e8e3e", "#1a73e8", "#8430ce", "#5f6368"];
+const HIGHLIGHTS = ["#fff3a3", "#ceead6", "#d2e3fc", "#fad2cf", "#fde7c3", "#f3e8fd"];
+const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28];
+
+/** Slash commands: type "/" in the message box, then a name (/h1, /bold, /red…) and press Enter. */
+type SlashCtx = { editor: Editor; link: () => void; quote: () => void };
+type SlashCmd = { id: string; label: string; hint: string; keys: string; icon: typeof Heading; run: (c: SlashCtx) => void };
+const SLASH: SlashCmd[] = [
+  { id: "text", label: "Normal text", hint: "/text", keys: "text normal paragraph clear plain reset", icon: TextAa, run: ({ editor }) => editor.chain().focus().setParagraph().unsetAllMarks().run() },
+  { id: "h1", label: "Heading 1", hint: "/h1", keys: "h1 heading1 heading title", icon: Heading, run: ({ editor }) => editor.chain().focus().setHeading({ level: 1 }).run() },
+  { id: "h2", label: "Heading 2", hint: "/h2", keys: "h2 heading2 heading subtitle", icon: Heading, run: ({ editor }) => editor.chain().focus().setHeading({ level: 2 }).run() },
+  { id: "h3", label: "Heading 3", hint: "/h3", keys: "h3 heading3 heading", icon: Heading, run: ({ editor }) => editor.chain().focus().setHeading({ level: 3 }).run() },
+  { id: "bold", label: "Bold", hint: "/bold", keys: "bold b strong", icon: TextBold, run: ({ editor }) => editor.chain().focus().toggleBold().run() },
+  { id: "italic", label: "Italic", hint: "/italic", keys: "italic i emphasis", icon: TextItalic, run: ({ editor }) => editor.chain().focus().toggleItalic().run() },
+  { id: "underline", label: "Underline", hint: "/underline", keys: "underline u", icon: TextUnderline, run: ({ editor }) => editor.chain().focus().toggleUnderline().run() },
+  { id: "strike", label: "Strikethrough", hint: "/strike", keys: "strike strikethrough cross delete", icon: TextStrike, run: ({ editor }) => editor.chain().focus().toggleStrike().run() },
+  { id: "highlight", label: "Highlight (yellow)", hint: "/highlight", keys: "highlight yellow marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#fff3a3" }).run() },
+  { id: "highlight-green", label: "Highlight green", hint: "/highlight-green", keys: "highlight green marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#ceead6" }).run() },
+  { id: "highlight-blue", label: "Highlight blue", hint: "/highlight-blue", keys: "highlight blue marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#d2e3fc" }).run() },
+  { id: "highlight-pink", label: "Highlight pink", hint: "/highlight-pink", keys: "highlight pink red marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#fad2cf" }).run() },
+  { id: "nohighlight", label: "Remove highlight", hint: "/nohighlight", keys: "nohighlight remove highlight clear", icon: Highlighter, run: ({ editor }) => editor.chain().focus().unsetHighlight().run() },
+  { id: "red", label: "Red text", hint: "/red", keys: "red color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#d93025").run() },
+  { id: "orange", label: "Orange text", hint: "/orange", keys: "orange color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#e37400").run() },
+  { id: "green", label: "Green text", hint: "/green", keys: "green color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#1e8e3e").run() },
+  { id: "blue", label: "Blue text", hint: "/blue", keys: "blue color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#1a73e8").run() },
+  { id: "purple", label: "Purple text", hint: "/purple", keys: "purple color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#8430ce").run() },
+  { id: "nocolor", label: "Default text colour", hint: "/nocolor", keys: "nocolor default color colour clear black", icon: FontColor, run: ({ editor }) => editor.chain().focus().unsetColor().run() },
+  { id: "small", label: "Small text", hint: "/small", keys: "small size smaller", icon: TextAa, run: ({ editor }) => editor.chain().focus().setFontSize("12px").run() },
+  { id: "large", label: "Large text", hint: "/large", keys: "large size bigger big", icon: TextAa, run: ({ editor }) => editor.chain().focus().setFontSize("20px").run() },
+  { id: "huge", label: "Huge text", hint: "/huge", keys: "huge size biggest", icon: TextAa, run: ({ editor }) => editor.chain().focus().setFontSize("28px").run() },
+  { id: "normalsize", label: "Default text size", hint: "/normalsize", keys: "normalsize default size reset", icon: TextAa, run: ({ editor }) => editor.chain().focus().unsetFontSize().run() },
+  { id: "bullet", label: "Bulleted list", hint: "/bullet", keys: "bullet bullets list ul unordered", icon: ListBullets, run: ({ editor }) => editor.chain().focus().toggleBulletList().run() },
+  { id: "numbered", label: "Numbered list", hint: "/numbered", keys: "numbered number list ol ordered", icon: ListNumbers, run: ({ editor }) => editor.chain().focus().toggleOrderedList().run() },
+  { id: "indent", label: "Increase indent", hint: "/indent", keys: "indent nest tab", icon: Indent, run: ({ editor }) => editor.chain().focus().sinkListItem("listItem").run() },
+  { id: "outdent", label: "Decrease indent", hint: "/outdent", keys: "outdent unindent", icon: Outdent, run: ({ editor }) => editor.chain().focus().liftListItem("listItem").run() },
+  { id: "quote", label: "Quotation marks", hint: "/quote", keys: "quote quotation marks", icon: MessageSquareQuote, run: ({ quote }) => quote() },
+  { id: "link", label: "Link", hint: "/link", keys: "link url href", icon: LinkSimple, run: ({ link }) => link() },
+  { id: "undo", label: "Undo", hint: "/undo", keys: "undo back", icon: Undo, run: ({ editor }) => editor.chain().focus().undo().run() },
+  { id: "redo", label: "Redo", hint: "/redo", keys: "redo forward", icon: Redo, run: ({ editor }) => editor.chain().focus().redo().run() },
+];
+
 function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat; title: string; parentId?: string; inputId?: string }) {
   const { toast, users, uid, account } = useWs();
   const chatId = chat.id;
   const isChannel = chat.type === "channel";
-  const [text, setText] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const caretRef = useRef<number | null>(null);
+  const [text, setText] = useState(""); // plain-text copy of the editor, used for the send button and the upload caption
   const [mentioned, setMentioned] = useState<Record<string, string>>({}); // uid -> inserted "@Name"
   const [query, setQuery] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [emoji, setEmoji] = useState(false);
+  const [fmt, setFmt] = useState(false);
+  const [palette, setPalette] = useState<null | "color" | "highlight">(null);
+  const [slash, setSlash] = useState<string | null>(null); // text after "/" while the command menu is open
+  const [slashSel, setSlashSel] = useState(0);
+  const [linkUrl, setLinkUrl] = useState<string | null>(null); // address being typed in the link bar (null = bar closed)
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const keyRef = useRef<(e: KeyboardEvent) => boolean>(() => false);
+  const placeholder = parentId ? "Reply in thread" : isChannel ? `Post in ${title}` : `Message ${title}`;
+
   const canChannel = isChannel && (chat.owners?.includes(uid) || account.org_role === "owner" || account.org_role === "admin");
   const candidates = query === null ? [] : [
     ...(canChannel && "channel".startsWith(query.toLowerCase()) ? [{ id: "channel", name: "channel", role: "Notify everyone in this channel" }] : []),
@@ -609,58 +736,162 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
       .filter((u) => u.name.toLowerCase().includes(query.toLowerCase())),
   ].slice(0, 6);
 
-  function onChange(v: string, caret: number) {
-    setText(v);
-    const m = /(^|\s)@([\w.]*)$/.exec(v.slice(0, caret));
-    setQuery(m ? m[2] : null);
+  // The editor must be created once: giving useEditor fresh options on every render (the chat list polls)
+  // would reconfigure it and wipe what is being typed. Handlers reach the latest state through `live`.
+  const live = useRef({ detectMention: () => {}, redraw: () => {}, setText: (_t: string) => {}, placeholder, title, grammarClick: (_e: MouseEvent) => {} });
+  live.current = { detectMention, redraw, setText, placeholder, title, grammarClick };
+  const editorOptions = useMemo(
+    () => ({
+      immediatelyRender: false, // the page is server-rendered; the editor mounts in the browser
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [1, 2, 3] as ( 1 | 2 | 3)[] },
+          horizontalRule: false as const,
+          link: { openOnClick: false, autolink: true, defaultProtocol: "https", isAllowedUri: (url: string) => /^(https?:\/\/|mailto:)/i.test(url) },
+        }),
+        TextStyle,
+        Color,
+        FontSize,
+        Highlight.configure({ multicolor: true }),
+        Grammar,
+        Placeholder.configure({ placeholder: () => live.current.placeholder }),
+      ],
+      editorProps: {
+        attributes: { id: inputId, role: "textbox", "aria-multiline": "true", "aria-label": parentId ? "Reply in thread" : "Message", spellcheck: "true" },
+        handleKeyDown: (_v: unknown, e: KeyboardEvent) => keyRef.current(e),
+        // pasted images/files are not supported here; plain and rich text paste normally
+        handlePaste: (_v: unknown, e: ClipboardEvent) => (e.clipboardData?.files?.length ?? 0) > 0,
+        handleDOMEvents: { click: (_v: unknown, e: Event) => { live.current.grammarClick(e as MouseEvent); return false; } },
+      },
+      onUpdate: ({ editor: ed }: { editor: Editor }) => {
+        live.current.setText(docToText(ed.getJSON() as DocNode));
+        live.current.detectMention();
+      },
+      onSelectionUpdate: () => live.current.detectMention(),
+      onTransaction: () => live.current.redraw(),
+    }),
+    [],
+  );
+  const editor = useEditor(editorOptions);
+
+  // Clicking an underlined word opens the fix popover (the library's own hover tooltip is hidden in globals.css).
+  type GrammarFix = { left: number; bottom: number; from: number; to: number; message: string; suggestions: string[] };
+  const [fix, setFix] = useState<GrammarFix | null>(null);
+  function grammarClick(e: MouseEvent) {
+    const el = (e.target as HTMLElement | null)?.closest?.(".grammar-error") as HTMLElement | null;
+    if (!el || !editor) {
+      setFix(null);
+      return;
+    }
+    let suggestions: string[] = [];
+    try {
+      suggestions = JSON.parse(el.getAttribute("data-suggestions") || "[]");
+    } catch {}
+    const from = editor.view.posAtDOM(el, 0);
+    const r = el.getBoundingClientRect();
+    setFix({ left: Math.min(r.left, window.innerWidth - 280), bottom: window.innerHeight - r.top + 8, from, to: from + (el.textContent ?? "").length, message: el.getAttribute("data-message") || "Check this", suggestions });
+  }
+  function applyFix(text: string) {
+    if (!editor || !fix) return;
+    const was = editor.state.doc.textBetween(fix.from, fix.to);
+    const fixed = was && was[0] !== was[0].toLowerCase() ? text.charAt(0).toUpperCase() + text.slice(1) : text; // keep a leading capital
+    editor.chain().focus().insertContentAt({ from: fix.from, to: fix.to }, fixed).run();
+    setFix(null);
+  }
+  useEffect(() => {
+    if (!fix) return;
+    const close = (e: Event) => {
+      if (!(e.target as HTMLElement | null)?.closest?.("[data-grammar-fix]")) setFix(null);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setFix(null);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [fix]);
+
+
+  /** Is an "@name" being typed right before the cursor? */
+  function mentionBefore(): { q: string; len: number } | null {
+    if (!editor) return null;
+    const { from, empty } = editor.state.selection;
+    if (!empty) return null;
+    const before = editor.state.doc.textBetween(Math.max(0, from - 40), from, "\n", "\n");
+    const m = /(^|\s)@([\w.]*)$/.exec(before);
+    return m ? { q: m[2], len: m[2].length + 1 } : null;
+  }
+  /** Is a "/command" being typed right before the cursor (start of a line or after a space)? */
+  function slashBefore(): { q: string; len: number } | null {
+    if (!editor) return null;
+    const { from, empty } = editor.state.selection;
+    if (!empty) return null;
+    const before = editor.state.doc.textBetween(Math.max(0, from - 30), from, "\n", "\n");
+    const m = /(^|\s)\/([a-z0-9-]*)$/i.exec(before);
+    return m ? { q: m[2].toLowerCase(), len: m[2].length + 1 } : null;
+  }
+  function detectMention() {
+    const m = mentionBefore();
+    setQuery(m ? m.q : null);
     setSel(0);
+    const c = m ? null : slashBefore();
+    setSlash(c ? c.q : null);
+    setSlashSel(0);
+  }
+  const slashItems =
+    slash === null
+      ? []
+      : SLASH.map((c, i) => ({ c, i, rank: c.id === slash ? 0 : c.id.startsWith(slash) ? 1 : !slash || c.keys.split(" ").some((k) => k.startsWith(slash)) ? 2 : 3 }))
+          .filter((x) => x.rank < 3)
+          .sort((a, b) => a.rank - b.rank || a.i - b.i) // exact name first, then names that start with it, then keyword matches
+          .map((x) => x.c)
+          .slice(0, 9);
+
+  function runSlash(c: SlashCmd) {
+    if (!editor) return;
+    const m = slashBefore();
+    if (m) {
+      const to = editor.state.selection.from;
+      editor.chain().focus().deleteRange({ from: to - m.len, to }).run();
+    }
+    setSlash(null);
+    if (c.id === "link") setFmt(true);
+    c.run({ editor, link: setLink, quote: quoteMarks });
   }
 
   function pick(c: { id: string; name: string }) {
-    const el = inputRef.current;
-    const caret = el?.selectionStart ?? text.length;
-    const before = text.slice(0, caret).replace(/@([\w.]*)$/, `@${c.name} `);
-    const next = before + text.slice(caret);
-    setText(next);
-    setMentioned((m) => ({ ...m, [c.id]: `@${c.name}` }));
+    const m = mentionBefore();
+    if (!editor || !m) return;
+    const to = editor.state.selection.from;
+    editor.chain().focus().deleteRange({ from: to - m.len, to }).insertContent(`@${c.name} `).run();
+    setMentioned((x) => ({ ...x, [c.id]: `@${c.name}` }));
     setQuery(null);
-    caretRef.current = before.length; // placed synchronously after React writes the new value (see layout effect)
   }
 
-  useLayoutEffect(() => {
-    const el = inputRef.current;
-    if (el && caretRef.current !== null) {
-      el.focus();
-      el.setSelectionRange(caretRef.current, caretRef.current);
-      caretRef.current = null;
-    }
-  }, [text]);
-  const [sending, setSending] = useState(false);
-  const [emoji, setEmoji] = useState(false);
-
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [text]);
+  function clear() {
+    editor?.chain().clearContent(true).unsetAllMarks().run();
+    setText("");
+    setMentioned({});
+  }
 
   async function send() {
-    const body = text.trim();
-    if (!body || sending) return;
+    if (!editor || sending) return;
+    const doc = editor.getJSON() as DocNode;
+    const body = docToText(doc).trim();
+    if (!body) return;
     setSending(true);
     try {
       const mentions = Object.entries(mentioned)
         .filter(([, tag]) => body.includes(tag))
         .map(([id]) => id);
-      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, parent_id: parentId ?? null } });
-      setText("");
-      setMentioned({});
+      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, parent_id: parentId ?? null, ...(needsDoc(doc) ? { doc } : {}) } });
+      clear();
     } catch (e) {
       toast(`Message not sent: ${(e as Error).message}. Try again.`);
     } finally {
       setSending(false);
-      inputRef.current?.focus();
+      editor.commands.focus();
     }
   }
 
@@ -673,7 +904,7 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
     setSending(true);
     try {
       await api(`/api/chats/${chatId}/files`, { form });
-      setText("");
+      clear();
       toast("File shared. Saathi is reading it…");
     } catch (e) {
       toast(`Upload failed: ${(e as Error).message}`);
@@ -683,44 +914,271 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
     }
   }
 
+  /** Put “curly quotation marks” around the selection (or an empty pair at the cursor); again removes them. */
+  function quoteMarks() {
+    if (!editor) return;
+    const doc = editor.state.doc;
+    const sel0 = editor.state.selection;
+    // Select-all covers the whole document; pull it in to the text so the marks land inside the paragraph
+    const norm = TextSelection.between(doc.resolve(sel0.from), doc.resolve(sel0.to));
+    const { from, to } = norm;
+    const empty = from === to;
+    const before = from > 1 ? doc.textBetween(from - 1, from) : "";
+    const after = to < doc.content.size - 1 ? doc.textBetween(to, to + 1) : "";
+    if (!empty && before === "“" && after === "”") {
+      editor.chain().focus().deleteRange({ from: to, to: to + 1 }).deleteRange({ from: from - 1, to: from }).run();
+    } else if (empty) {
+      editor.chain().focus().insertContent("“”").command(({ tr }) => {
+        tr.setSelection(TextSelection.create(tr.doc, tr.selection.from - 1));
+        return true;
+      }).run();
+    } else {
+      editor.chain().focus().command(({ tr }) => {
+        tr.insertText("”", to).insertText("“", from);
+        tr.setSelection(TextSelection.create(tr.doc, from + 1, to + 1));
+        return true;
+      }).run();
+    }
+  }
+  function setLink() {
+    if (!editor) return;
+    setLinkUrl((editor.getAttributes("link").href as string | undefined) ?? "https://");
+  }
+  function applyLink(raw: string) {
+    if (!editor) return;
+    const href = raw.trim();
+    setLinkUrl(null);
+    if (!href) {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    if (!/^(https?:\/\/|mailto:)[^\s<>"']+$/i.test(href)) {
+      editor.commands.focus();
+      return toast("Links must start with http://, https:// or mailto:");
+    }
+    if (editor.state.selection.empty && !editor.isActive("link")) {
+      editor.chain().focus().insertContent({ type: "text", text: href, marks: [{ type: "link", attrs: { href } }] }).run();
+    } else {
+      editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+    }
+  }
+
+  // Latest-state key handler (the editor keeps the first closure it was given).
+  keyRef.current = (e) => {
+    if (!editor) return false;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.altKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      setFmt(true);
+      setLink();
+      return true;
+    }
+    if (mod && e.shiftKey && e.key.toLowerCase() === "x") {
+      e.preventDefault();
+      setFmt((v) => !v);
+      return true;
+    }
+    if (candidates.length) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSel((i) => (i + (e.key === "ArrowDown" ? 1 : candidates.length - 1)) % candidates.length);
+        return true;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pick(candidates[sel]);
+        return true;
+      }
+      if (e.key === "Escape") {
+        setQuery(null);
+        return true;
+      }
+    }
+    if (slashItems.length) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashSel((i) => (i + (e.key === "ArrowDown" ? 1 : slashItems.length - 1)) % slashItems.length);
+        return true;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        runSlash(slashItems[Math.min(slashSel, slashItems.length - 1)]);
+        return true;
+      }
+      if (e.key === "Escape") {
+        setSlash(null);
+        return true;
+      }
+    }
+    if (e.key === "Enter" && !e.isComposing) {
+      // inside a list, quote or code block Enter adds the next line; Ctrl+Enter always sends
+      const inBlock = editor.isActive("listItem") || editor.isActive("blockquote") || editor.isActive("codeBlock");
+      if (mod || (!e.shiftKey && !inBlock)) {
+        e.preventDefault();
+        send();
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const tb = (on: boolean, off = false) =>
+    clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-hover hover:text-ink disabled:opacity-35 disabled:hover:bg-transparent", on ? "bg-brand-soft text-brand" : "text-muted", off && "pointer-events-none");
+  const ed = editor;
+  const run = (fn: () => void) => () => {
+    fn();
+    setPalette(null);
+  };
+  const heading = !ed ? "0" : ed.isActive("heading", { level: 1 }) ? "1" : ed.isActive("heading", { level: 2 }) ? "2" : ed.isActive("heading", { level: 3 }) ? "3" : "0";
+  const curSize = ((ed?.getAttributes("textStyle").fontSize as string | undefined) ?? "").replace("px", "");
+  const curColor = (ed?.getAttributes("textStyle").color as string | undefined) ?? "";
+  const curHl = (ed?.getAttributes("highlight").color as string | undefined) ?? "";
+  const inList = !!ed && ed.isActive("listItem");
+
   return (
     <div className="shrink-0 px-3 pb-3 pt-1 lg:px-5">
       <div className="relative rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.05)] transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
-        <label htmlFor={inputId} className="sr-only">
-          {parentId ? "Reply in thread" : `Message ${title}`}
-        </label>
-        <textarea
-          id={inputId}
-          ref={inputRef}
-          value={text}
-          onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
-          onKeyDown={(e) => {
-            if (candidates.length) {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                setSel((i) => (i + (e.key === "ArrowDown" ? 1 : candidates.length - 1)) % candidates.length);
-                return;
-              }
-              if (e.key === "Enter" || e.key === "Tab") {
-                e.preventDefault();
-                pick(candidates[sel]);
-                return;
-              }
-              if (e.key === "Escape") {
-                setQuery(null);
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        {fmt && ed && (
+          <div className="relative border-b border-border">
+          <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto px-1.5 py-1 sm:flex-wrap sm:overflow-visible" role="toolbar" aria-label="Text formatting" onMouseDown={(e) => { if (!(e.target instanceof HTMLSelectElement)) e.preventDefault(); }}>
+            <button type="button" className={tb(false)} title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!ed.can().undo()} onClick={() => ed.chain().focus().undo().run()}><Undo size={17} /></button>
+            <button type="button" className={tb(false)} title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!ed.can().redo()} onClick={() => ed.chain().focus().redo().run()}><Redo size={17} /></button>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <select
+              aria-label="Font size"
+              value={curSize}
+              onChange={(e) => (e.target.value ? ed.chain().focus().setFontSize(`${e.target.value}px`).run() : ed.chain().focus().unsetFontSize().run())}
+              className="h-8 shrink-0 rounded-md border border-border bg-surface px-1.5 text-xs text-ink"
+            >
+              <option value="">Size</option>
+              {FONT_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <button type="button" className={tb(ed.isActive("bold"))} title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={ed.isActive("bold")} onClick={run(() => ed.chain().focus().toggleBold().run())}><TextBold size={17} /></button>
+            <button type="button" className={tb(ed.isActive("italic"))} title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={ed.isActive("italic")} onClick={run(() => ed.chain().focus().toggleItalic().run())}><TextItalic size={17} /></button>
+            <button type="button" className={tb(ed.isActive("underline"))} title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={ed.isActive("underline")} onClick={run(() => ed.chain().focus().toggleUnderline().run())}><TextUnderline size={17} /></button>
+            <button type="button" className={tb(ed.isActive("strike"))} title="Strikethrough" aria-label="Strikethrough" aria-pressed={ed.isActive("strike")} onClick={run(() => ed.chain().focus().toggleStrike().run())}><TextStrike size={17} /></button>
+            <button type="button" className={tb(palette === "color" || !!curColor)} title="Text colour" aria-label="Text colour" aria-expanded={palette === "color"} onClick={() => setPalette((p) => (p === "color" ? null : "color"))}>
+              <span className="relative flex flex-col items-center"><FontColor size={17} /><span className="absolute -bottom-0.5 h-[3px] w-4 rounded-full" style={{ background: curColor || "#202124" }} /></span>
+            </button>
+            <button type="button" className={tb(palette === "highlight" || !!curHl)} title="Highlight" aria-label="Highlight" aria-expanded={palette === "highlight"} onClick={() => setPalette((p) => (p === "highlight" ? null : "highlight"))}>
+              <span className="relative flex flex-col items-center"><Highlighter size={17} /><span className="absolute -bottom-0.5 h-[3px] w-4 rounded-full" style={{ background: curHl || "#fff3a3" }} /></span>
+            </button>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <button type="button" className={tb(ed.isActive("bulletList"))} title="Bulleted list" aria-label="Bulleted list" aria-pressed={ed.isActive("bulletList")} onClick={run(() => ed.chain().focus().toggleBulletList().run())}><ListBullets size={17} /></button>
+            <button type="button" className={tb(ed.isActive("orderedList"))} title="Numbered list" aria-label="Numbered list" aria-pressed={ed.isActive("orderedList")} onClick={run(() => ed.chain().focus().toggleOrderedList().run())}><ListNumbers size={17} /></button>
+            <button type="button" className={tb(false)} title="Decrease indent (Shift+Tab)" aria-label="Decrease indent" disabled={!inList || !ed.can().liftListItem("listItem")} onClick={() => ed.chain().focus().liftListItem("listItem").run()}><Outdent size={17} /></button>
+            <button type="button" className={tb(false)} title="Increase indent (Tab)" aria-label="Increase indent" disabled={!inList || !ed.can().sinkListItem("listItem")} onClick={() => ed.chain().focus().sinkListItem("listItem").run()}><Indent size={17} /></button>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <button type="button" className={tb(false)} title="Quotation marks" aria-label="Quote" onClick={run(quoteMarks)}><MessageSquareQuote size={17} /></button>
+            <button type="button" className={tb(ed.isActive("link"))} title="Link (Ctrl+K)" aria-label="Link" aria-pressed={ed.isActive("link")} onClick={run(setLink)}><LinkSimple size={17} /></button>
+          </div>
+            {palette && (
+              <div className="ws-pop absolute left-2 top-full z-30 mt-1 flex items-center gap-1 rounded-xl border border-border bg-surface p-2 shadow-xl" role="group" aria-label={palette === "color" ? "Text colours" : "Highlight colours"}>
+                {(palette === "color" ? TEXT_COLORS : HIGHLIGHTS).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={c}
+                    title={c}
+                    onClick={() => {
+                      if (palette === "color") ed.chain().focus().setColor(c).run();
+                      else ed.chain().focus().setHighlight({ color: c }).run();
+                      setPalette(null);
+                    }}
+                    className="h-6 w-6 rounded-full border border-border transition hover:scale-110"
+                    style={{ background: c }}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (palette === "color") ed.chain().focus().unsetColor().run();
+                    else ed.chain().focus().unsetHighlight().run();
+                    setPalette(null);
+                  }}
+                  className="ml-1 rounded-md px-2 py-1 text-xs text-muted hover:bg-hover hover:text-ink"
+                >
+                  None
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {fmt && linkUrl !== null && (
+          <form
+            className="flex items-center gap-2 border-b border-border px-2 py-1.5"
+            onSubmit={(e) => {
               e.preventDefault();
-              send();
-            }
-          }}
-          rows={1}
-          placeholder={parentId ? "Reply in thread · type @ to mention" : isChannel ? `Post in ${title} · type @ to mention` : `Type a message to ${title}`}
-          className="block max-h-40 min-h-11 w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[14.5px] outline-none"
-          aria-autocomplete="list"
-        />
+              applyLink(linkUrl);
+            }}
+          >
+            <LinkSimple size={16} className="text-muted" />
+            <input
+              autoFocus
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setLinkUrl(null);
+                  editor?.commands.focus();
+                }
+              }}
+              placeholder="https://example.com"
+              aria-label="Link address"
+              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-surface px-2 text-sm outline-none focus:border-brand"
+            />
+            <button type="submit" className="h-8 rounded-md bg-brand px-3 text-xs font-medium text-white hover:bg-brand-strong">Apply</button>
+            <button type="button" onClick={() => { setLinkUrl(null); editor?.commands.focus(); }} className="h-8 rounded-md px-2 text-xs text-muted hover:bg-hover">Cancel</button>
+          </form>
+        )}
+        <EditorContent editor={editor} />
+        {fix && (
+          <div
+            data-grammar-fix
+            role="dialog"
+            aria-label="Grammar suggestion"
+            className="ws-pop fixed z-[90] w-64 rounded-xl border border-border bg-surface p-3 shadow-xl"
+            style={{ left: fix.left, bottom: fix.bottom }}
+          >
+            <p className="text-sm text-ink">{fix.message}</p>
+            {fix.suggestions.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {fix.suggestions.map((sg) => (
+                  <button key={sg} onMouseDown={(e) => e.preventDefault()} onClick={() => applyFix(sg)} className="rounded-lg bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand hover:bg-brand hover:text-white">
+                    {sg}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted">No automatic suggestion.</p>
+            )}
+          </div>
+        )}
+        {slashItems.length > 0 && candidates.length === 0 && (
+          <ul role="listbox" aria-label="Formatting commands" className="ws-pop absolute bottom-full left-2 z-30 mb-2 max-h-72 w-72 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
+            <li className="px-2 pb-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted" aria-hidden>Formatting</li>
+            {slashItems.map((c, i) => {
+              const Ico = c.icon;
+              return (
+                <li key={c.id} role="option" aria-selected={i === slashSel}>
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      runSlash(c);
+                    }}
+                    onMouseEnter={() => setSlashSel(i)}
+                    className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left", i === slashSel && "bg-hover")}
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand"><Ico size={16} /></span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.label}</span>
+                    <span className="shrink-0 text-[11px] text-muted">{c.hint}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {candidates.length > 0 && (
           <ul role="listbox" aria-label="Mention someone" className="ws-pop absolute bottom-full left-2 z-30 mb-2 w-72 rounded-xl border border-border bg-surface p-1 shadow-xl">
             {candidates.map((c, i) => (
@@ -754,28 +1212,35 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
           <button onClick={() => fileRef.current?.click()} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Attach a PDF or image" aria-label="Attach file">
             <Paperclip size={17} />
           </button>
-          <MicButton onText={(t) => setText((prev) => (prev ? `${prev} ${t}` : t))} />
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setFmt((v) => !v)}
+            className={tb(fmt)}
+            title={fmt ? "Hide formatting options (Ctrl+Shift+X)" : "Formatting options (Ctrl+Shift+X)"}
+            aria-label="Formatting options"
+            aria-pressed={fmt}
+          >
+            <TextAa size={17} />
+          </button>
+          <MicButton
+            onText={(t) => {
+              if (!editor) return;
+              editor.chain().focus("end").insertContent((editor.isEmpty ? "" : " ") + t).run();
+            }}
+          />
           <div className="relative">
-            <button onClick={() => setEmoji((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Emoji" aria-label="Insert emoji" aria-expanded={emoji}>
+            <button
+              ref={emojiBtnRef}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setEmoji((v) => !v)}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink"
+              title="Emoji"
+              aria-label="Insert emoji"
+              aria-expanded={emoji}
+            >
               <Smile size={17} />
             </button>
-            {emoji && (
-              <div className="ws-pop absolute bottom-full left-0 z-30 mb-2 grid w-64 grid-cols-8 gap-0.5 rounded-xl border border-border bg-surface p-2 shadow-xl" role="dialog" aria-label="Emoji">
-                {COMPOSER_EMOJI.map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => {
-                      setText((t) => t + e);
-                      setEmoji(false);
-                      inputRef.current?.focus();
-                    }}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-lg hover:bg-hover"
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            )}
+            {emoji && <EmojiPopover anchor={emojiBtnRef.current} onPick={(e) => editor?.chain().focus().insertContent(e).run()} onClose={() => setEmoji(false)} />}
           </div>
           <span className="ml-2 hidden min-w-0 flex-1 truncate text-[11px] text-muted md:block">
             <Sparkles size={11} className="mr-1 inline text-saffron-ink" aria-hidden />

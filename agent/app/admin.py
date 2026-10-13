@@ -4,12 +4,10 @@ import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from firebase_admin import auth
-from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
 from .config import TZ
-from .firebase import ORG_ROLES, PUBLIC_DOMAINS, audit, current_user, db, forget_profile, require_admin, set_claims, user_profile
+from .firebase import audit, auth, current_user, db, FieldFilter, forget_profile, ORG_ROLES, PUBLIC_DOMAINS, require_admin, set_claims, user_profile
 
 router = APIRouter(prefix="/api/admin")
 

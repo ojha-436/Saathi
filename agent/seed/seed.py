@@ -4,13 +4,11 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from firebase_admin import auth
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import ingest  # noqa: E402
 from app.config import TZ  # noqa: E402
-from app.firebase import bucket, db  # noqa: E402
+from app.firebase import auth, bucket, db  # noqa: E402
 
 FILES = Path(__file__).parent / "files"
 PASSWORD = "Saathi@2026"

@@ -82,7 +82,8 @@ export type Chat = {
 
 export type ChannelSummary = { id: string; name: string; description: string; member_count: number; joined: boolean; last_ts: string | null };
 
-export type Reaction = "like" | "heart" | "laugh" | "check" | "pray" | "wow";
+/** An old reaction name ("like"…) or "e_<hex codepoints>" for any emoji (see reactionKey in lib/format). */
+export type Reaction = string;
 
 export type DocSummary = {
   doc_type?: string;
@@ -101,6 +102,7 @@ export type Message = {
   ts?: Timestamp;
   system?: boolean;
   mentions?: string[];
+  doc?: import("./richtext").DocNode; // formatted version of `text` (Tiptap JSON)
   parent_id?: string;
   reply_count?: number;
   last_reply_ts?: Timestamp;

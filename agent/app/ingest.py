@@ -1,15 +1,14 @@
 """Background pipelines: index messages/files for search, detect promises and decisions, extract document fields."""
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from google.cloud.firestore_v1.vector import Vector
 from google.genai import types
 from pydantic import BaseModel
 
 from . import ai, archive
 from .config import DOCAI_LOCATION, DOCAI_PROCESSOR, PROJECT, TZ, VISION_MODEL
-from .firebase import db, user_profile
+from .firebase import db, user_profile, Vector
 
 log = logging.getLogger("saathi.ingest")
 
@@ -61,6 +60,126 @@ class DocExtract(BaseModel):
     full_text: str
 
 
+# ---------------- offline fallbacks (local mode without a Gemini key) ----------------
+
+_FIRST_PERSON = re.compile(r"\b(i'?ll|i will|we'?ll|we will|kar dunga|bhej dunga|de dunga|batata hoon|bata dunga)\b", re.I)
+_VENDOR_WILL = re.compile(r"\bwill be (dispatched|delivered|shipped|sent)\b|\bdispatch(ed)? on\b", re.I)
+_REQUEST = re.compile(r"\b(please|can you|could you|kindly)\b|\?\s*$", re.I)
+_DECISION = re.compile(r"\b(final decision|final:|approved|finali[sz]ed|decided|go ahead)\b", re.I)
+_WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+def _due_from_text(text: str, sent_at: datetime) -> str | None:
+    t = text.lower()
+    base = sent_at.astimezone(TZ)
+    evening = {"hour": 18, "minute": 0, "second": 0, "microsecond": 0}
+    m = re.search(r"\b(?:by|on) (mon|tue|wed|thu|fri|sat|sun)\w*", t)
+    if m:
+        ahead = (_WEEKDAYS.index(m.group(1)) - base.weekday()) % 7 or 7
+        return (base + timedelta(days=ahead)).replace(**evening).isoformat()
+    if re.search(r"\b(tomorrow|kal)\b", t):
+        hour = 10 if re.search(r"subah|morning", t) else 18
+        return (base + timedelta(days=1)).replace(hour=hour, minute=0, second=0, microsecond=0).isoformat()
+    m = re.search(r"\bon (\d{1,2})(?:st|nd|rd|th)\b", t)
+    if m:
+        day = int(m.group(1))
+        for add_month in (0, 1):
+            month = base.month + add_month
+            year = base.year + (month - 1) // 12
+            month = (month - 1) % 12 + 1
+            try:
+                due = base.replace(year=year, month=month, day=day, **evening)
+            except ValueError:
+                continue
+            if due > base:
+                return due.isoformat()
+    return None
+
+
+def classify_offline(text: str, sender_name: str, sent_at: datetime) -> Signal:
+    """Rule-based stand-in for the Gemini classifier."""
+    mine = bool(_FIRST_PERSON.search(text))
+    theirs = bool(_VENDOR_WILL.search(text))
+    commit = (mine or theirs) and not _REQUEST.search(text)
+    committer = sender_name
+    if commit and theirs and not mine:
+        m = re.search(r"\b([A-Z][\w&.]+(?: [A-Z][\w&.]+)*) (?:confirmed|will|has)", text)
+        committer = m.group(1) if m else sender_name
+    action = re.sub(r"^\w+, ", "", text).strip().rstrip(".")
+    action = re.sub(r"^(i'?ll|i will|we'?ll|we will) ", "", action, flags=re.I)
+    action = (action[:1].upper() + action[1:])[:140]
+    decision = bool(_DECISION.search(text))
+    return Signal(
+        is_commitment=commit, committer=committer if commit else "", action=action if commit else "",
+        due_at=_due_from_text(text, sent_at) if commit else None, confidence=0.8 if commit else 0.0,
+        is_decision=decision, decision=text.strip()[:160] if decision else None,
+    )
+
+
+def _after(lines: list[str], label: str) -> str | None:
+    for i, ln in enumerate(lines[:-1]):
+        if ln.strip().rstrip(":").lower() == label.lower():
+            return lines[i + 1].strip()
+    return None
+
+
+def extract_document_offline(data: bytes, mime: str, file_name: str) -> DocExtract:
+    """Rule-based stand-in for Gemini document extraction, using the PDF text layer."""
+    import io
+
+    text = ""
+    if mime == "application/pdf":
+        from pypdf import PdfReader
+
+        text = "\n".join((pg.extract_text() or "") for pg in PdfReader(io.BytesIO(data)).pages)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    name = file_name.lower()
+    if "quote" in name or "quotation" in text.lower()[:400]:
+        doc_type = "vendor_quote"
+    elif name.startswith("mtc") or "mill test certificate" in text.lower():
+        doc_type = "test_certificate"
+    elif "inspection" in name:
+        doc_type = "inspection_report"
+    elif _after(lines, "DRAWING No.") or "drawing" in name or re.search(r"\bSRC-[A-Z]{2}-\d+", file_name):
+        doc_type = "engineering_drawing"
+    else:
+        doc_type = "other"
+
+    def grab(pattern: str, haystack: str, flags: int = 0) -> str | None:
+        m = re.search(pattern, haystack, flags)
+        return (m.group(1) if m.groups() else m.group(0)) if m else None
+
+    drawing_no = _after(lines, "DRAWING No.") or grab(r"\b[A-Z]{2,4}-[A-Z]{2}-\d{3,5}\b", file_name)
+    revision = _after(lines, "REVISION") or grab(r"Rev([A-Z0-9]+)", file_name)
+    approved = _after(lines, "APPROVED BY")
+    job = grab(r"Job\s*(\d{3,})", file_name + " " + text, re.I)
+    heat = _after(lines, "Heat No.") or grab(r"\bH-\d{4,}\b", file_name + " " + text)
+    po = _after(lines, "Purchase Order") or grab(r"\bPO-[A-Z0-9-]+", text)
+    vendor = grab(r"Issued by:\s*([^|]+)", text)
+    if not vendor and doc_type == "vendor_quote" and lines:
+        vendor = lines[0].title()
+
+    revisions = []
+    if "APPROVED" in lines and "COMPANY" in lines:
+        rows = lines[lines.index("APPROVED") + 1 : lines.index("COMPANY")]
+        for i in range(0, len(rows) - 3, 4):
+            revisions.append(Revision(rev=rows[i], description=rows[i + 1], date=rows[i + 2], approved_by=rows[i + 3]))
+
+    key_fields = []
+    for label in ["TITLE", "MATERIAL", "APPROVAL DATE", "Material Grade", "Quantity", "Date of Issue", "Purchase Order"]:
+        if v := _after(lines, label):
+            key_fields.append(KeyField(name=label.title(), value=v[:120]))
+    for ln in lines:
+        if re.match(r"^(OVERALL RESULT|Delivery|Payment terms|Validity|TOTAL)\b", ln):
+            key_fields.append(KeyField(name=ln.split(":")[0][:40], value=ln.split(":", 1)[-1].strip()[:140]))
+    title = _after(lines, "TITLE") or (lines[0].title() if lines else file_name)
+    summary = f"{doc_type.replace('_', ' ').title()}: {title}." + (f" Drawing {drawing_no} Rev {revision}." if drawing_no and revision else "")
+    return DocExtract(
+        doc_type=doc_type, title=title, summary=summary, drawing_no=drawing_no, revision=revision, approved_by=approved,
+        job_no=job, vendor=vendor, heat_no=heat, po_no=po, key_fields=key_fields[:12], revisions=revisions, full_text=text[:4000],
+    )
+
+
 def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str], chat: dict, extra: dict, recheck: bool = True):
     vec = ai.embed([embed_text])[0]
     ref = db.collection("chunks").document(chunk_id)
@@ -90,6 +209,8 @@ def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str],
 def classify_signals(text: str, sender_name: str, sent_at: datetime, chat: dict) -> Signal | None:
     if not SIGNAL_HINT.search(text or ""):
         return None
+    if ai.client is None:
+        return classify_offline(text, sender_name, sent_at)
     member_names = ", ".join(user_profile(u)["name"] for u in chat.get("members", []))
     prompt = f"""You analyse one workplace chat message from an Indian manufacturing company.
 Message sent at: {sent_at.astimezone(TZ).strftime('%A %d %B %Y %H:%M')} (Asia/Kolkata)
@@ -191,6 +312,8 @@ def ocr_document(data: bytes, mime: str) -> dict | None:
 
 
 def extract_document(data: bytes, mime: str, file_name: str, ocr_text: str = "") -> DocExtract:
+    if ai.client is None:
+        return extract_document_offline(data, mime, file_name)
     prompt = f"""You are a document-intelligence engine for a railway rolling-stock component manufacturer.
 File name: {file_name}
 Classify the document (doc_type: engineering_drawing | test_certificate | inspection_report | vendor_quote | purchase_order | specification | other)

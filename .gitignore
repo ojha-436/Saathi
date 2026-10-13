@@ -9,3 +9,7 @@ __pycache__
 
 # OAuth client credentials (kept in Secret Manager, never in git)
 client_secret_*.json
+
+# local offline mode data
+agent/.local/
+agent/.local_*/

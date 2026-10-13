@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { signOut } from "firebase/auth";
+import { signOut } from "@/lib/auth";
 import { AlertTriangle, Bell, Building2, CalendarDays, CheckCircle2, Clock, Loader2, Mail, MapPin, MessageSquare, Phone, Plug, RefreshCw, ShieldCheck, Smile, UserRound, X, DriveIcon, Camera } from "@/lib/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -448,7 +448,7 @@ function SecuritySettings() {
             setBusy(true);
             try {
               await api("/api/me/sessions/revoke", { method: "POST" });
-              await signOut(getFbAuth());
+              await signOut();
             } catch (e) {
               toast((e as Error).message);
               setBusy(false);

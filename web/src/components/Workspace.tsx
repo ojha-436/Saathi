@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { signOut } from "firebase/auth";
+import { signOut } from "@/lib/auth";
 import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -241,26 +241,26 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       </a>
       <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-ink">
         {/* Title bar: workspace, global search, status + profile */}
-        <header className="flex h-12 shrink-0 items-center gap-3 bg-rail px-3 text-white lg:pl-[18px]">
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-canvas px-3 text-ink lg:pl-[18px]">
           <span className="flex min-w-0 items-center gap-2.5 lg:w-[calc(68px+20rem-18px)]">
             <LogoMark size={28} />
             <span className="text-[15px] font-semibold tracking-tight">Saathi</span>
-            <span className="hidden truncate text-xs text-white/50 sm:inline">{account.org.name}</span>
+            <span className="hidden truncate text-xs text-muted sm:inline">{account.org.name}</span>
             {guest && <span className="rounded-full bg-saffron px-2 py-px text-[10px] font-bold text-ink">GUEST</span>}
           </span>
           <button
             onClick={() => setDlg("palette")}
-            className="ml-auto flex h-8 min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/8 px-3 text-left text-[13px] text-white/60 transition hover:border-white/25 hover:bg-white/12 hover:text-white sm:ml-0 sm:w-full sm:max-w-xl"
+            className="ml-auto flex h-8 min-w-0 items-center gap-2 rounded-lg border border-border bg-white px-3 text-left text-[13px] text-muted transition hover:border-brand hover:text-ink sm:ml-0 sm:w-full sm:max-w-xl"
             aria-label="Search or ask Saathi"
           >
             <Search size={15} aria-hidden /> <span className="hidden flex-1 truncate sm:inline">Search chats, channels and files, or ask Saathi</span>
-            <kbd className="hidden rounded border border-white/15 px-1.5 font-mono text-[10px] sm:inline">⌘K</kbd>
+            <kbd className="hidden rounded border border-border px-1.5 font-mono text-[10px] sm:inline">⌘K</kbd>
           </button>
           <div className="sm:ml-auto">
             <Menu
               label="Your profile and status"
-              className="flex items-center gap-2 rounded-full p-0.5 transition hover:bg-white/10"
-              trigger={<UserAvatar uid={uid} size={30} clickable={false} ring="ring-rail" />}
+              className="flex items-center gap-2 rounded-full p-0.5 transition hover:bg-black/5"
+              trigger={<UserAvatar uid={uid} size={30} clickable={false} ring="ring-canvas" />}
               items={[
                 { label: me ? [me.name, me.role].filter(Boolean).join(" · ") : account.name, onSelect: () => setProfileOf(uid) },
                 "sep",
@@ -287,7 +287,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                   label: "Sign out",
                   icon: LogOut,
                   onSelect: async () => {
-                    await signOut(getFbAuth());
+                    await signOut();
                     router.replace("/");
                   },
                 },

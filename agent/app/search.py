@@ -1,12 +1,8 @@
 """Permission-aware hybrid retrieval. Every query is filtered to chats the caller is a member of."""
 from concurrent.futures import ThreadPoolExecutor
 
-from google.cloud.firestore_v1.base_query import FieldFilter
-from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
-from google.cloud.firestore_v1.vector import Vector
-
 from . import ai
-from .firebase import db
+from .firebase import db, DistanceMeasure, FieldFilter, Vector
 
 
 def user_chats(uid: str) -> dict[str, dict]:

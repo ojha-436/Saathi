@@ -81,6 +81,20 @@ export function isUnread(chat: Chat, me: string, reads?: Record<string, Timestam
 
 export const REACTION_EMOJI: Record<string, string> = { like: "👍", heart: "❤️", laugh: "😄", check: "✅", pray: "🙏", wow: "😮" };
 
+/** Reactions are stored under a key: an old name (like, heart…) or "e_<hex codepoints>" for any emoji. */
+export function reactionKey(emoji: string): string {
+  return "e_" + Array.from(emoji).map((c) => c.codePointAt(0)!.toString(16)).join("_");
+}
+export function reactionEmoji(key: string): string {
+  if (REACTION_EMOJI[key]) return REACTION_EMOJI[key];
+  if (key.startsWith("e_")) {
+    try {
+      return String.fromCodePoint(...key.slice(2).split("_").map((h) => parseInt(h, 16)));
+    } catch {}
+  }
+  return "👍";
+}
+
 
 /** Effective presence: an expired status reverts to available; no heartbeat for 10 min shows away. */
 export function presence(u?: UserProfile): StatusState {

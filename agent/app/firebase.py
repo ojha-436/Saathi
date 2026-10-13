@@ -3,18 +3,84 @@ import re
 import time
 import uuid
 
-import firebase_admin
 from fastapi import Header, HTTPException
-from firebase_admin import auth, firestore
-from google.cloud import storage
 
-from .config import FILES_BUCKET, PROJECT, SIGNUP_DOMAINS
+from .config import FILES_BUCKET, LOCAL_MODE, PROJECT, SIGNUP_DOMAINS
 
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(options={"projectId": PROJECT})
+if LOCAL_MODE:
+    from .localdb import DistanceMeasure, FieldFilter, LocalBucket, LocalDB, Vector, firestore  # noqa: F401
 
-db = firestore.client()
-bucket = storage.Client(project=PROJECT).bucket(FILES_BUCKET)
+    db = LocalDB()
+    bucket = LocalBucket()
+
+    class _LocalAuth:
+        """Stand-in for firebase_admin.auth: accounts live in the local `_auth` collection and tokens are "local:<uid>"."""
+
+        class UserNotFoundError(Exception):
+            pass
+
+        def _ref(self, uid: str):
+            return db.collection("_auth").document(uid)
+
+        def _rec(self, uid: str):
+            snap = self._ref(uid).get()
+            return snap.to_dict() if snap.exists else None
+
+        def verify_id_token(self, token: str, *a, **k) -> dict:
+            uid = token[6:] if token.startswith("local:") else ""
+            rec = self._rec(uid) if uid else None
+            if not rec or rec.get("disabled"):
+                raise ValueError("invalid local token")
+            return {"uid": uid, "email": rec["email"], "name": rec.get("name", ""), "email_verified": True, "picture": "",
+                    "firebase": {"sign_in_provider": "password"}, **(rec.get("claims") or {})}
+
+        def get_user(self, uid: str):
+            rec = self._rec(uid)
+            if not rec:
+                raise self.UserNotFoundError(uid)
+            return type("U", (), {"uid": uid, "email": rec["email"], "display_name": rec.get("name", "")})()
+
+        def create_user(self, uid: str | None = None, email: str = "", password: str = "", display_name: str = "", **_):
+            uid = uid or "u_" + uuid.uuid4().hex[:16]
+            self._ref(uid).set({"email": email.lower(), "password": password, "name": display_name, "disabled": False, "claims": {}})
+            return type("U", (), {"uid": uid})()
+
+        def update_user(self, uid: str, email: str | None = None, password: str | None = None, display_name: str | None = None, disabled: bool | None = None, **_):
+            if not self._rec(uid):
+                raise self.UserNotFoundError(uid)
+            changes = {k: v for k, v in {"email": email.lower() if email else None, "password": password, "name": display_name, "disabled": disabled}.items() if v is not None}
+            if changes:
+                self._ref(uid).update(changes)
+
+        def delete_user(self, uid: str):
+            self._ref(uid).delete()
+
+        def set_custom_user_claims(self, uid: str, claims: dict):
+            if self._rec(uid):
+                self._ref(uid).update({"claims": claims})
+
+        def revoke_refresh_tokens(self, uid: str):
+            pass
+
+        def login(self, email: str, password: str) -> str | None:
+            for s in db.collection("_auth").where("email", "==", email.strip().lower()).stream():
+                if s.get("password") == password and not s.get("disabled"):
+                    return s.id
+            return None
+
+    auth = _LocalAuth()
+else:
+    import firebase_admin
+    from firebase_admin import auth, firestore  # noqa: F401
+    from google.cloud import storage
+    from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: F401
+    from google.cloud.firestore_v1.base_vector_query import DistanceMeasure  # noqa: F401
+    from google.cloud.firestore_v1.vector import Vector  # noqa: F401
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(options={"projectId": PROJECT})
+    db = firestore.client()
+    bucket = storage.Client(project=PROJECT).bucket(FILES_BUCKET)
 log = logging.getLogger("saathi.auth")
 
 ORG_ROLES = ("owner", "admin", "member", "guest")

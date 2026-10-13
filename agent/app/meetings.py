@@ -58,6 +58,19 @@ Return:
   task = short imperative; due_at = ISO 8601 with +05:30 resolved relative to the meeting time (kal = next day, EOD = 18:00, a weekday = 18:00 that day), or null.
 - language: "en" or "hinglish".
 """
+    if ai.client is None:  # offline: plain-text notes -> first lines as the summary, action items by simple rules
+        from .ingest import classify_offline
+
+        lines = [ln.strip(" -*\t") for ln in (text or "").splitlines() if ln.strip()]
+        items, decisions = [], []
+        for ln in lines:
+            sig = classify_offline(ln, "", when)
+            if sig.is_commitment:
+                items.append(ActionItem(owner=sig.committer or "", task=sig.action, due_at=sig.due_at))
+            if sig.is_decision and sig.decision:
+                decisions.append(sig.decision)
+        summary = "\n".join(f"- {ln[:160]}" for ln in lines[:5]) or "- (no notes provided)"
+        return MeetingSummary(summary=summary, decisions=decisions[:5], action_items=items[:8], language="en")
     parts = [types.Part.from_bytes(data=pdf, mime_type="application/pdf")] if pdf else None
     if text:
         prompt += f"\nTranscript / notes:\n\"\"\"\n{text[:60000]}\n\"\"\""

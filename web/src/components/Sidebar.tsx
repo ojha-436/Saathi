@@ -8,8 +8,14 @@ import { chatTitle, isUnread, timeShort } from "@/lib/format";
 import type { Chat, NotifyLevel, UserSettings } from "@/lib/types";
 import { ChatIcon, Menu } from "./bits";
 import { useWs, type View } from "./ctx";
+import { LogoMark } from "./Logo";
 
 export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "quality" | "decisions" | "live" | "insights" | "admin" | "gmail" | "calendar" | "drive";
+
+/** One-line chat preview: drop the list and quote markers formatted messages carry in their plain text. */
+function stripMarkers(t?: string): string {
+  return (t ?? "").split(String.fromCharCode(10)).map((l) => l.replace(/^(> |- |[0-9]+\. )/, "")).join(" ").trim();
+}
 
 export function railKey(view: View): RailKey {
   if (view.kind === "research") return "assistant";
@@ -58,7 +64,7 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
       className={clsx(
         mobile
           ? "flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
-          : "hidden w-[68px] shrink-0 flex-col items-center gap-1 bg-rail py-2 lg:flex",
+          : "hidden w-[68px] shrink-0 flex-col items-center gap-1 border-r border-border bg-canvas py-2 lg:flex",
       )}
     >
       {items.map((it) => {
@@ -71,18 +77,22 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
             className={clsx(
               "relative flex flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition",
               mobile ? "h-14 flex-1" : "h-14 w-14 rounded-xl",
-              mobile ? (on ? "text-brand" : "text-muted") : on ? "bg-white/12 text-white" : "text-white/60 hover:bg-white/6 hover:text-white",
+              mobile ? (on ? "text-brand" : "text-muted") : on ? "bg-brand-soft text-brand" : "text-muted hover:bg-black/5 hover:text-ink",
             )}
           >
             {!mobile && on && <span className="absolute left-[-6px] top-3 bottom-3 w-[3px] rounded-r bg-saffron" aria-hidden />}
             <span className="relative">
-              <it.icon size={20} strokeWidth={on ? 2.4 : 1.9} className={clsx(it.key === "assistant" && (mobile ? on && "text-saffron-ink" : "text-saffron"))} aria-hidden />
+              {it.key === "assistant" ? (
+                <LogoMark size={26} className="rounded-[8px] ring-1 ring-brand/25" />
+              ) : (
+                <it.icon size={20} aria-hidden />
+              )}
               {!!it.badge && (
                 <span
                   className={clsx(
                     "absolute -right-2.5 -top-1.5 min-w-[17px] rounded-full px-1 text-center text-[10px] font-bold leading-[17px] text-white",
                     it.dot ? "bg-[#5b6573]" : "bg-rust",
-                    !mobile && "ring-2 ring-rail",
+                    !mobile && "ring-2 ring-canvas",
                   )}
                 >
                   {it.badge > 99 ? "99+" : it.badge}
@@ -157,7 +167,8 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
     const level = notifyLevel(c, settings);
     const unread = !active && isUnread(c, uid, reads) && level !== "off";
     const fav = !!c.favorite_of?.includes(uid);
-    const preview = c.type !== "dm" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ${c.last_text}` : c.last_text;
+    const lastText = stripMarkers(c.last_text);
+    const preview = c.type !== "dm" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ${lastText}` : lastText;
     return (
       <li key={c.id} className="group relative">
         <button
@@ -267,9 +278,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
           aria-current={assistantActive ? "page" : undefined}
           className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-[7px] text-left transition", assistantActive ? "bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.08)]" : "hover:bg-hover")}
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#d4691a] text-white" aria-hidden>
-            <Sparkles size={16} />
-          </span>
+          <LogoMark size={32} className="shrink-0" />
           <span className="min-w-0 flex-1">
             <span className="block text-[13.5px] font-semibold">Saathi</span>
             <span className="block truncate text-xs text-muted">Your AI colleague · search, catch up, remind</span>

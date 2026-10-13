@@ -89,7 +89,9 @@ def row(chunk_id: str, data: dict, org_id: str) -> dict:
 def mirror(chunk_id: str, data: dict, org_id: str) -> None:
     """Called next to every Firestore chunk write. Buffered and streamed in small batches; never blocks ingestion."""
     global _flusher
-    if not org_id or not data.get("embedding"):
+    from .config import LOCAL_MODE
+
+    if LOCAL_MODE or not org_id or not data.get("embedding"):  # offline mode has no BigQuery
         return
     with _lock:
         _buf.append(row(chunk_id, data, org_id))

@@ -10,15 +10,13 @@ from datetime import datetime, timedelta
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, specs, voice
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice
 from .agent import ask
 from .plantdata import refresh as plant_refresh
-from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, SAATHI_ROLE, TZ
-from .firebase import audit, bucket, current_user, db, get_chat_for_member, require_admin, same_org, user_profile
+from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
+from .firebase import auth, audit, bucket, current_user, db, FieldFilter, firestore, get_chat_for_member, require_admin, same_org, user_profile
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Saathi API")
@@ -40,7 +38,8 @@ app.include_router(voice.router)
 if SAATHI_ROLE in ("worker", "all"):
     app.include_router(jobs.router)  # Cloud Tasks targets; the worker service is private
 app.add_middleware(
-    CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
+    CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?" if LOCAL_MODE else None,
 )
 
 MAX_UPLOAD = 20 * 1024 * 1024
@@ -120,6 +119,102 @@ class FavoriteIn(BaseModel):
 
 
 REACTIONS = {"like", "heart", "laugh", "check", "pray", "wow"}
+# Any emoji is allowed: the browser sends "e_<hex codepoints>" (e.g. e_1f44d), a safe Firestore field name.
+EMOJI_REACTION = re.compile(r"^e_[0-9a-f]{2,6}(_[0-9a-f]{2,6}){0,9}$")
+MAX_REACTION_KINDS = 20
+
+
+# ---------------- local mode: sign-in and read API (replaces Firebase Auth + Firestore listeners) ----------------
+
+def _jsonable(v):
+    if isinstance(v, datetime):
+        return {"__ts__": int(v.timestamp() * 1000)}
+    if isinstance(v, dict):
+        return {k: _jsonable(x) for k, x in v.items() if k != "embedding"}
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    return v
+
+
+class LocalLoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class LocalSignupIn(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+
+
+class LocalQueryIn(BaseModel):
+    path: str
+    where: list[list] = []
+    order_by: list | None = None  # [field, "asc" | "desc"]
+    limit: int | None = None
+
+
+if LOCAL_MODE:
+
+    @app.post("/api/local/login")
+    def local_login(body: LocalLoginIn):
+        uid = auth.login(body.email, body.password)
+        if not uid:
+            raise HTTPException(401, "Invalid email or password")
+        return {"uid": uid, "token": f"local:{uid}", "email": body.email.strip().lower()}
+
+    @app.post("/api/local/signup")
+    def local_signup(body: LocalSignupIn):
+        email = body.email.strip().lower()
+        if "@" not in email or len(body.password) < 8:
+            raise HTTPException(400, "Enter a valid email and a password of at least 8 characters")
+        if auth.login(email, body.password) or list(db.collection("_auth").where("email", "==", email).limit(1).stream()):
+            raise HTTPException(409, "An account with this email already exists")
+        created = auth.create_user(email=email, password=body.password, display_name=body.name.strip())
+        return {"uid": created.uid, "token": f"local:{created.uid}", "email": email}
+
+    @app.post("/api/local/query")
+    def local_query(body: LocalQueryIn, user=Depends(current_user)):
+        """Read-only equivalent of the browser Firestore listeners, with the same access rules as firestore.rules."""
+        uid, parts = user["uid"], body.path.strip("/").split("/")
+        has = lambda f, op, v: [f, op, v] in body.where  # noqa: E731
+        allowed = False
+        if parts == ["users"]:
+            allowed = has("org_id", "==", user["org_id"]) and not is_guest(user)
+        elif parts == ["chats"]:
+            allowed = has("members", "array-contains", uid)
+        elif len(parts) == 3 and parts[0] == "chats" and parts[2] == "messages":
+            allowed = uid in (db.collection("chats").document(parts[1]).get().get("members") or [])
+        elif parts in (["files"], ):
+            allowed = has("members", "array-contains", uid)
+        elif parts in (["tasks"], ["meetings"]):
+            allowed = has("participants", "array-contains", uid)
+        elif parts in (["events"], ["external_items"], ["notifications"]):
+            allowed = has("uid", "==", uid)
+        elif len(parts) == 3 and parts[0] == "assistant" and parts[2] == "messages":
+            allowed = parts[1] == uid
+        elif parts == ["research_runs"]:
+            allowed = has("uid", "==", uid)
+        elif len(parts) == 3 and parts[0] == "research_runs" and parts[2] == "events":
+            allowed = (db.collection("research_runs").document(parts[1]).get().to_dict() or {}).get("uid") == uid
+        elif len(parts) == 3 and parts[0] == "users" and parts[2] == "reads":
+            allowed = parts[1] == uid
+        if not allowed:
+            raise HTTPException(403, "Not allowed")
+        ops = {"array-contains": "array_contains"}
+        q = db.collection(parts[0]) if len(parts) == 1 else db.collection(parts[0]).document(parts[1]).collection(parts[2])
+        for field, op, value in body.where:
+            q = q.where(filter=FieldFilter(field, ops.get(op, op), value))
+        if body.order_by:
+            q = q.order_by(body.order_by[0], direction=firestore.Query.DESCENDING if body.order_by[1] == "desc" else firestore.Query.ASCENDING)
+        if body.limit:
+            q = q.limit(body.limit)
+        return [{"id": s.id, **_jsonable(s.to_dict())} for s in q.stream()]
+
+    @app.get("/api/local/settings")
+    def local_settings(user=Depends(current_user)):
+        """The user_settings/{uid} document (own settings only)."""
+        return _jsonable(db.collection("user_settings").document(user["uid"]).get().to_dict() or {})
 
 
 @app.get("/health")
@@ -155,7 +250,7 @@ def mark_seen(uid: str, chat_id: str, ts: datetime | None = None) -> None:
 
 
 def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None,
-                 parent_id: str | None = None) -> str:
+                 parent_id: str | None = None, doc: dict | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
     ts = now()
     body = {"sender": user["uid"], "sender_name": user["name"], "text": text, "ts": ts}
@@ -163,6 +258,8 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
         body["file"] = file
     if mentions:
         body["mentions"] = mentions
+    if doc:
+        body["doc"] = doc  # formatted version (Tiptap JSON); `text` stays the plain text used for search and AI
     col = db.collection("chats").document(chat["id"]).collection("messages")
     if parent_id:
         body["parent_id"] = parent_id
@@ -413,13 +510,16 @@ def set_favorite(chat_id: str, body: FavoriteIn, user=Depends(current_user)):
 @app.post("/api/chats/{chat_id}/messages/{msg_id}/react")
 def react(chat_id: str, msg_id: str, body: ReactIn, user=Depends(current_user)):
     get_chat_for_member(chat_id, user["uid"])
-    if body.reaction not in REACTIONS:
+    if body.reaction not in REACTIONS and not EMOJI_REACTION.match(body.reaction):
         raise HTTPException(400, "Unknown reaction")
     ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
     snap = ref.get()
     if not snap.exists:
         raise HTTPException(404, "Message not found")
-    on = user["uid"] in ((snap.to_dict().get("reactions") or {}).get(body.reaction) or [])
+    existing = snap.to_dict().get("reactions") or {}
+    if body.reaction not in existing and sum(1 for v in existing.values() if v) >= MAX_REACTION_KINDS:
+        raise HTTPException(400, "This message already has the maximum number of different reactions")
+    on = user["uid"] in (existing.get(body.reaction) or [])
     ref.update({f"reactions.{body.reaction}": (firestore.ArrayRemove if on else firestore.ArrayUnion)([user["uid"]])})
     return {"ok": True, "on": not on}
 
@@ -427,6 +527,7 @@ def react(chat_id: str, msg_id: str, body: ReactIn, user=Depends(current_user)):
 class MessageIn(BaseModel):
     text: str
     mentions: list[str] = []  # member uids, or "channel" to notify everyone in a channel
+    doc: dict | None = None  # formatted message (Tiptap JSON); validated by richdoc.clean_doc
     parent_id: str | None = None  # reply in a thread (one level deep)
 
 
@@ -466,7 +567,12 @@ def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depend
     mentioned = [m for m in dict.fromkeys(body.mentions) if m in chat["members"] and m != user["uid"]]
     everyone = "channel" in body.mentions and chat.get("type") == "channel" and (
         user["uid"] in (chat.get("owners") or []) or user.get("org_role") in ("owner", "admin"))
-    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []), parent_id=body.parent_id if root else None)
+    try:
+        doc = richdoc.clean_doc(body.doc) if body.doc else None
+    except richdoc.DocError as e:
+        raise HTTPException(400, str(e))
+    msg_id = post_message(chat, user, text[:4000], mentions=mentioned + (["channel"] if everyone else []), parent_id=body.parent_id if root else None,
+                          doc=doc if doc and len(text) <= 4000 else None)
     after_post(chat, user, text, msg_id, mentioned, everyone, root)
     bg.add_task(ingest.process_message, chat_id, msg_id)
     return {"id": msg_id}
@@ -523,6 +629,9 @@ def summarize_chat(chat_id: str, user=Depends(current_user)):
     col = db.collection("chats").document(chat_id).collection("messages")
     snaps = list(col.order_by("ts", direction=firestore.Query.DESCENDING).limit(60).stream())
     lines = [f"{s.get('sender_name')} ({ai.fmt_ist(s.get('ts'))}): {s.get('text') or ''} {('[file: ' + s.get('file')['name'] + ']') if s.to_dict().get('file') else ''}" for s in reversed(snaps)]
+    if ai.client is None:  # offline: most recent messages as bullets
+        bullets = "\n".join(f"- {ln}" for ln in [x for x in lines if x.strip()][-6:])
+        return {"summary": f"Gemini is not configured, so here are the latest messages instead:\n{bullets}"}
     summary = ai.generate_text(
         f"Summarise this workplace chat '{chat.get('name') or 'direct message'}' for {user['name']} in at most 6 bullets: "
         f"key points, decisions, pending asks with owners and dates. Match the chat's language.\n\n" + "\n".join(lines),

@@ -3,10 +3,8 @@ Run before a demo: uv run python -m seed.reset   (use seed.seed for a full rebui
 import sys
 from pathlib import Path
 
-from google.cloud.firestore_v1.base_query import FieldFilter
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.firebase import bucket, db  # noqa: E402
+from app.firebase import FieldFilter, bucket, db  # noqa: E402
 
 for col in ["tasks", "notifications", "audit_log"]:
     for s in db.collection(col).stream():

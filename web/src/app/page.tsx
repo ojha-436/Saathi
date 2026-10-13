@@ -254,7 +254,7 @@ export default function Landing() {
                 })}
               </div>
             </div>
-            <div className="rounded-3xl bg-ink p-6 text-paper">
+            <div className="rounded-3xl bg-rail p-6 text-paper">
               <DrawingPanel />
             </div>
           </div>
@@ -382,7 +382,7 @@ export default function Landing() {
 
         {/* ---------------- CTA ---------------- */}
         <section data-reveal className="px-5 py-24 lg:px-8">
-          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-ink px-8 py-16 text-paper sm:px-14">
+          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-rail px-8 py-16 text-paper sm:px-14">
             <div className="blueprint-grid absolute inset-0 opacity-60" />
             <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
               <div>
@@ -417,8 +417,7 @@ export default function Landing() {
           </span>
         </div>
         <p className="mx-auto max-w-7xl px-5 pb-6 text-xs text-muted lg:px-8">
-          Icons: <a className="underline" href="https://www.streamlinehq.com/icons/freehand-free">Freehand Line (free)</a> by Streamline, licensed{" "}
-          <a className="underline" href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+          Icons: <a className="underline" href="https://phosphoricons.com">Phosphor Icons</a>, MIT licence.
         </p>
       </footer>
     </div>
@@ -586,18 +585,18 @@ function DrawingPanel() {
         </g>
         <text x="230" y="62" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="11" textAnchor="middle">2470</text>
         <text x="230" y="236" fill="#9fc0ec" fontFamily="var(--font-mono)" fontSize="10" textAnchor="middle">DETAIL A · FILLET 10 mm</text>
-        <circle cx="230" cy="214" r="9" fill="none" stroke="#c8f031" strokeWidth="1.6" />
+        <circle cx="230" cy="214" r="9" fill="none" stroke="#4285f4" strokeWidth="1.6" />
         <g fontFamily="var(--font-mono)" fontSize="10.5">
-          <rect x="250" y="262" width="250" height="88" fill="#171313" stroke="#9fc0ec" />
+          <rect x="250" y="262" width="250" height="88" fill="#174ea6" stroke="#9fc0ec" />
           <path d="M250 284h250M250 306h250M250 328h250M340 262v88" stroke="#9fc0ec" />
           <text x="258" y="277" fill="#9fc0ec">DRG No.</text>
-          <text x="348" y="277" fill="#efeae9">SRC-BF-2041</text>
+          <text x="348" y="277" fill="#f1f3f4">SRC-BF-2041</text>
           <text x="258" y="299" fill="#9fc0ec">REV</text>
-          <text x="348" y="299" fill="#c8f031" fontWeight="700">C · supersedes B</text>
+          <text x="348" y="299" fill="#8ab4f8" fontWeight="700">C · supersedes B</text>
           <text x="258" y="321" fill="#9fc0ec">APPROVED</text>
-          <text x="348" y="321" fill="#efeae9">N. VERMA · 06 OCT</text>
+          <text x="348" y="321" fill="#f1f3f4">N. VERMA · 06 OCT</text>
           <text x="258" y="343" fill="#9fc0ec">READ BY</text>
-          <text x="348" y="343" fill="#efeae9">Saathi · Document AI</text>
+          <text x="348" y="343" fill="#f1f3f4">Saathi · Document AI</text>
         </g>
       </svg>
     </div>

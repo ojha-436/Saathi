@@ -11,13 +11,11 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import ToolContext
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 from google.genai import types
 
 from . import ai, resilience
 from .config import AGENT_MODEL, AGENT_THINKING, COMPANY, TZ
-from .firebase import db, user_profile
+from .firebase import db, FieldFilter, firestore, user_profile
 from .search import search, user_chats
 
 log = logging.getLogger("saathi.agent")
@@ -460,6 +458,17 @@ async def ask(user: dict, text: str, history: list[dict], on_partial=None) -> di
     on_partial(text) receives the answer as it streams (throttled by the caller)."""
     import asyncio
 
+    if ai.client is None:  # local mode without a Gemini key: answer from search results only
+        results = search(user["uid"], text)
+        calls = [{"tool": "search_workspace", "args": {"query": text}}]
+        if not results:
+            return {"text": "I couldn't find anything matching that in your chats or files.", "tool_calls": calls, "proposed_tasks": []}
+        bullets = "\n".join(
+            f"- **{r.get('file_name') or r.get('sender') or 'Message'}** ({r.get('chat') or 'chat'}, {r.get('when')}): {(r.get('text') or '')[:160].strip()} [{r['ref']}]"
+            for r in results[:5]
+        )
+        note = "_Offline mode (no Gemini key): showing the closest matches from your chats and files._"
+        return {"text": f"{note}\n\n{bullets}", "tool_calls": calls, "proposed_tasks": []}
     started = time.monotonic()
     found = await asyncio.to_thread(prefetch, user["uid"], text)
     session = await session_service.create_session(

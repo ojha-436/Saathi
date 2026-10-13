@@ -1,12 +1,11 @@
 "use client";
 
-import { onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Eye, EyeOff, Loader2 } from "@/lib/icons";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/bits";
-import { getFbAuth } from "@/lib/firebase";
+import { onAuth, sendReset, signInWithPassword } from "@/lib/auth";
 import { AuthShell, Divider, GoogleButton, authMessage, inputCls, signInWithGoogle } from "./AuthShell";
 
 const DEMO = [
@@ -37,7 +36,7 @@ export function LoginForm() {
 
   useEffect(
     () =>
-      onAuthStateChanged(getFbAuth(), (u) => {
+      onAuth((u) => {
         if (u) router.replace("/app");
       }),
     [router],
@@ -68,14 +67,14 @@ export function LoginForm() {
     }
     if (mode === "reset") return reset();
     if (!password) return setError({ field: "password", text: "Enter your password." });
-    run("form", () => signInWithEmailAndPassword(getFbAuth(), email.trim(), password));
+    run("form", () => signInWithPassword(email.trim(), password));
   }
 
   async function reset() {
     setBusy("reset");
     setError(null);
     try {
-      await sendPasswordResetEmail(getFbAuth(), email.trim());
+      await sendReset(email.trim());
     } catch (err) {
       const m = authMessage(err);
       if (m?.field === "email" || m?.text.startsWith("Too many")) {
@@ -227,7 +226,7 @@ export function LoginForm() {
               {DEMO.map((u) => (
                 <li key={u.id}>
                   <button
-                    onClick={() => run(u.id, () => signInWithEmailAndPassword(getFbAuth(), `${u.id}@saathi.demo`, DEMO_PASSWORD))}
+                    onClick={() => run(u.id, () => signInWithPassword(`${u.id}@saathi.demo`, DEMO_PASSWORD))}
                     disabled={!!busy}
                     className={`flex min-h-[56px] w-full items-center gap-3 rounded-lg border bg-white px-3 py-2 text-left transition hover:border-brand/50 disabled:opacity-60 ${u.note ? "border-saffron/60" : "border-border"}`}
                   >

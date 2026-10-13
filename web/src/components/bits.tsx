@@ -7,18 +7,19 @@ import { openFile } from "@/lib/api";
 import { knowledgeNames } from "@/lib/knowledgeNames";
 import { STATUS_META, avatarColor, chatTitle, initials, presence } from "@/lib/format";
 import type { Chat } from "@/lib/types";
+import { USER_ICON } from "@/lib/phosphor-icons";
 import { useWs } from "./ctx";
 
-/** Initials on a per-person pastel circle (photos, when present, are shown by UserAvatar). */
+/** One person icon (Phosphor) on the same pastel circle for everyone. */
 export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (
     <span
-      className={clsx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-ink ring-2 ring-white", avatarColor(name))}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
+      className="inline-flex shrink-0 items-center justify-center rounded-full text-ink ring-2 ring-white"
+      style={{ width: size, height: size, background: "#d2e3fc" }}
       role="img"
       aria-label={name}
     >
-      <span aria-hidden>{initials(name)}</span>
+      <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 256 256" fill="currentColor" aria-hidden dangerouslySetInnerHTML={{ __html: USER_ICON }} />
     </span>
   );
 }

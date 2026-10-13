@@ -1,22 +1,22 @@
 import clsx from "clsx";
-import { STREAMLINE } from "./streamline-icons";
+import { PHOSPHOR } from "./phosphor-icons";
 
-// Streamline "Freehand Line - Free" icons (https://www.streamlinehq.com/icons/freehand-free, CC BY 4.0).
-// Names match the lucide-react icons Saathi used before, so call sites only changed their import path.
+// Phosphor Icons, "regular" weight (https://phosphoricons.com, MIT licence). Names match the icons Saathi used
+// before, so call sites only change their import path. To change the weight, regenerate phosphor-icons.ts.
 export type IconProps = { size?: number; strokeWidth?: number; fill?: string; className?: string; "aria-hidden"?: boolean | "true" | "false" };
 
-function make(name: keyof typeof STREAMLINE, opts: { flip?: boolean; extra?: string } = {}) {
+function make(name: keyof typeof PHOSPHOR) {
   return function Icon({ size = 24, className, ...rest }: IconProps) {
     return (
       <svg
         width={size}
         height={size}
-        viewBox="0 0 24 24"
+        viewBox="0 0 256 256"
+        fill="currentColor"
         data-icon={name}
         className={clsx("shrink-0", className)}
-        style={opts.flip ? { transform: "scaleX(-1)" } : undefined}
         aria-hidden={rest["aria-hidden"] ?? true}
-        dangerouslySetInnerHTML={{ __html: STREAMLINE[name] + (opts.extra ?? "") }}
+        dangerouslySetInnerHTML={{ __html: PHOSPHOR[name] }}
       />
     );
   };
@@ -42,15 +42,21 @@ export const Wand2 = AiIcon;
 
 export const AlertTriangle = make("AlertTriangle");
 export const ArrowRight = make("ArrowRight");
+export const ArrowLeft = make("ArrowLeft");
 export const ArrowUp = make("ArrowUp");
 export const AtSign = make("AtSign");
 export const BarChart3 = make("BarChart3");
 export const Bell = make("Bell");
+export const BellOff = make("BellOff");
+export const BellRing = make("BellRing");
 export const Building2 = make("Building2");
 export const CalendarClock = make("CalendarClock");
 export const CalendarDays = make("CalendarDays");
 export const Check = make("Check");
 export const CheckCircle2 = make("CheckCircle2");
+export const ChevronDown = make("ChevronDown");
+export const Circle = make("Circle");
+export const CircleDot = make("CircleDot");
 export const Clock = make("Clock");
 export const Compass = make("Compass");
 export const Copy = make("Copy");
@@ -66,6 +72,9 @@ export const Hand = make("Hand");
 export const Handshake = make("Handshake");
 export const Hash = make("Hash");
 export const History = make("History");
+export const Info = make("Info");
+export const Languages = make("Languages");
+export const ListPlus = make("ListPlus");
 export const ListTodo = make("ListTodo");
 export const Loader2 = make("Loader2");
 export const Lock = make("Lock");
@@ -75,16 +84,25 @@ export const Mail = make("Mail");
 export const MailCheck = make("MailCheck");
 export const MailPlus = make("MailPlus");
 export const MapPin = make("MapPin");
+export const Menu = make("Menu");
 export const MessageSquare = make("MessageSquare");
 export const MessageSquarePlus = make("MessageSquarePlus");
+export const MessageSquareQuote = make("MessageSquareQuote");
+export const MoreHorizontal = make("MoreHorizontal");
+export const NotebookPen = make("NotebookPen");
 export const Octagon = make("Octagon");
+export const Paperclip = make("Paperclip");
 export const Phone = make("Phone");
+export const Plug = make("Plug");
 export const Plus = make("Plus");
 export const Radar = make("Radar");
 export const RefreshCw = make("RefreshCw");
 export const RotateCcw = make("RotateCcw");
+export const ScanText = make("ScanText");
+export const ScrollText = make("ScrollText");
 export const Search = make("Search");
 export const Send = make("Send");
+export const SendHorizontal = make("SendHorizontal");
 export const Settings = make("Settings");
 export const Settings2 = make("Settings2");
 export const ShieldCheck = make("ShieldCheck");
@@ -98,50 +116,31 @@ export const UserPlus = make("UserPlus");
 export const UserRound = make("UserRound");
 export const UserX = make("UserX");
 export const Users = make("Users");
+export const Video = make("Video");
 export const Workflow = make("Workflow");
 export const X = make("X");
-export const ScanText = make("ScanText");
-export const ScrollText = make("ScrollText");
-export const Menu = make("Menu");
-export const Paperclip = make("Paperclip");
-export const Languages = make("Languages");
-export const MessageSquareQuote = make("MessageSquareQuote");
-export const BellRing = make("BellRing");
-export const Info = make("Info");
-export const ListPlus = make("ListPlus");
-export const MoreHorizontal = make("MoreHorizontal");
-export const SendHorizontal = make("SendHorizontal");
+export const TextBold = make("TextBold");
+export const TextItalic = make("TextItalic");
+export const TextUnderline = make("TextUnderline");
+export const TextStrike = make("TextStrike");
+export const ListBullets = make("ListBullets");
+export const ListNumbers = make("ListNumbers");
+export const LinkSimple = make("LinkSimple");
+export const CodeSimple = make("CodeSimple");
+export const TextAa = make("TextAa");
+export const Undo = make("Undo");
+export const Redo = make("Redo");
+export const Indent = make("Indent");
+export const Outdent = make("Outdent");
+export const Highlighter = make("Highlighter");
+export const FontColor = make("FontColor");
+export const CodeBlock = make("CodeBlock");
+export const Heading = make("Heading");
+export const Reply = make("Reply");
+export const MessagesSquare = make("MessagesSquare");
+export const Camera = make("Camera");
 
-// Not in the free set: drawn to match (bold, round-capped).
-export const ArrowLeft = make("ArrowRight", { flip: true });
-export const BellOff = make("Bell", { extra: '<path d="M3 3l18 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/>' });
-export function ChevronDown({ size = 24, className }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" className={clsx("shrink-0", className)} aria-hidden fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 9c3 3.2 5 5 7 6.4 2-1.4 4-3.200 7-6.400" />
-    </svg>
-  );
-}
-/** Empty ring (the free set has no plain circle). */
-export function Circle({ size = 24, className }: IconProps) {
-  return <span className={clsx("inline-block shrink-0 rounded-full border-2 border-current", className)} style={{ width: size * 0.8, height: size * 0.8 }} aria-hidden />;
-}
-export function CircleDot({ size = 24, className }: IconProps) {
-  return (
-    <span className={clsx("inline-flex shrink-0 items-center justify-center rounded-full border-2 border-current", className)} style={{ width: size * 0.8, height: size * 0.8 }} aria-hidden>
-      <span className="h-1/3 w-1/3 rounded-full bg-current" />
-    </span>
-  );
-}
-
-// Added when merging with threads, push and the Google connector: closest glyphs in the free Freehand set.
-export const Reply = make("CornerDownLeft");
-export const MessagesSquare = make("MessageSquareQuote");
-export const Plug = make("Workflow");
-export const Video = make("Phone");
-export const NotebookPen = make("ScrollText");
-
-/** Google Drive (line style, matches the Freehand set's weight). */
+/** Google Drive (line style). */
 export function DriveIcon({ size = 24, className, ...rest }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" className={clsx("shrink-0", className)} aria-hidden={rest["aria-hidden"] ?? true}>
@@ -150,4 +149,3 @@ export function DriveIcon({ size = 24, className, ...rest }: IconProps) {
     </svg>
   );
 }
-export const Camera = make("FileUp");
