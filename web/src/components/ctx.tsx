@@ -51,6 +51,8 @@ export type WorkspaceCtx = {
   showProfile: (uid: string) => void;
   /** Mobile only: go back from a conversation to the chat list. */
   showList: () => void;
+  /** chatId → when the user last opened it */
+  reads: Record<string, import("firebase/firestore").Timestamp>;
 };
 
 export const Ctx = createContext<WorkspaceCtx | null>(null);

@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { rememberKnowledge } from "@/lib/knowledgeNames";
 import { getFbAuth } from "@/lib/firebase";
 import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
-import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useSettings, useTasks, useUsers } from "@/lib/hooks";
+import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useReads, useSettings, useTasks, useUsers } from "@/lib/hooks";
 import type { Account, DriveFile, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
@@ -40,6 +40,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const guest = account.org_role === "guest";
   const userList = useUsers(account.org_id, guest);
   const chatList = useChats(uid);
+  const reads = useReads(uid);
   const fileList = useFiles(uid);
   const tasks = useTasks(uid);
   const notices = useNotices(uid);
@@ -212,7 +213,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
   const unreadAlerts = notices.filter((n) => !n.read).length;
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
-  const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid) && notifyLevel(c, settings) === "all").length;
+  const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid, reads) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
   const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant";
   const admin = isAdmin(account);
@@ -232,7 +233,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     <Ctx.Provider
       value={{
         uid, account, me, users, chats, files, meetings, events, emails, driveFiles, records, register, settings, view, open, openRef, toast, dialog: setDlg,
-        newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true),
+        newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true), reads,
       }}
     >
       <a href="#workspace-main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">

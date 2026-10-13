@@ -14,6 +14,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || (resource.data.org_id == myOrg() && !isGuest()));
     }
+    // Read markers are per person (users/{uid}/reads/{chatId}); only the owner sees them
+    match /users/{uid}/reads/{chatId} {
+      allow read: if signedIn() && request.auth.uid == uid;
+    }
     match /user_settings/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
     }
