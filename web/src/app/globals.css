@@ -520,3 +520,7 @@ aside.blueprint-grid .text-saffron {
 .policy li { line-height: 1.65; margin: 0.35rem 0; }
 .policy code { font-family: var(--font-mono); font-size: 0.85em; background: var(--color-paper-2); padding: 0 4px; border-radius: 4px; }
 .policy a { text-underline-offset: 2px; }
+
+/* Grammar check: our own click-to-fix popover replaces the library's hover tooltip */
+.grammar-tooltip { display: none !important; }
+.tiptap .grammar-error { cursor: pointer; }

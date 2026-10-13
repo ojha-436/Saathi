@@ -60,6 +60,9 @@ import { docToText, needsDoc, type DocNode } from "@/lib/richtext";
 import { RichDoc } from "./RichDoc";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { GrammerCheckContentTipTap } from "opengrammer";
+import "opengrammer/styles";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import Highlight from "@tiptap/extension-highlight";
@@ -723,8 +726,8 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
 
   // The editor must be created once: giving useEditor fresh options on every render (the chat list polls)
   // would reconfigure it and wipe what is being typed. Handlers reach the latest state through `live`.
-  const live = useRef({ detectMention: () => {}, redraw: () => {}, setText: (_t: string) => {}, placeholder, title });
-  live.current = { detectMention, redraw, setText, placeholder, title };
+  const live = useRef({ detectMention: () => {}, redraw: () => {}, setText: (_t: string) => {}, placeholder, title, grammarClick: (_e: MouseEvent) => {} });
+  live.current = { detectMention, redraw, setText, placeholder, title, grammarClick };
   const editorOptions = useMemo(
     () => ({
       immediatelyRender: false, // the page is server-rendered; the editor mounts in the browser
@@ -745,6 +748,7 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
         handleKeyDown: (_v: unknown, e: KeyboardEvent) => keyRef.current(e),
         // pasted images/files are not supported here; plain and rich text paste normally
         handlePaste: (_v: unknown, e: ClipboardEvent) => (e.clipboardData?.files?.length ?? 0) > 0,
+        handleDOMEvents: { click: (_v: unknown, e: Event) => { live.current.grammarClick(e as MouseEvent); return false; } },
       },
       onUpdate: ({ editor: ed }: { editor: Editor }) => {
         live.current.setText(docToText(ed.getJSON() as DocNode));
@@ -756,6 +760,52 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
     [],
   );
   const editor = useEditor(editorOptions);
+
+  // Clicking an underlined word opens the fix popover (the library's own hover tooltip is hidden in globals.css).
+  type GrammarFix = { left: number; bottom: number; from: number; to: number; message: string; suggestions: string[] };
+  const [fix, setFix] = useState<GrammarFix | null>(null);
+  function grammarClick(e: MouseEvent) {
+    const el = (e.target as HTMLElement | null)?.closest?.(".grammar-error") as HTMLElement | null;
+    if (!el || !editor) {
+      setFix(null);
+      return;
+    }
+    let suggestions: string[] = [];
+    try {
+      suggestions = JSON.parse(el.getAttribute("data-suggestions") || "[]");
+    } catch {}
+    const from = editor.view.posAtDOM(el, 0);
+    const r = el.getBoundingClientRect();
+    setFix({ left: Math.min(r.left, window.innerWidth - 280), bottom: window.innerHeight - r.top + 8, from, to: from + (el.textContent ?? "").length, message: el.getAttribute("data-message") || "Check this", suggestions });
+  }
+  function applyFix(text: string) {
+    if (!editor || !fix) return;
+    const was = editor.state.doc.textBetween(fix.from, fix.to);
+    const fixed = was && was[0] !== was[0].toLowerCase() ? text.charAt(0).toUpperCase() + text.slice(1) : text; // keep a leading capital
+    editor.chain().focus().insertContentAt({ from: fix.from, to: fix.to }, fixed).run();
+    setFix(null);
+  }
+  useEffect(() => {
+    if (!fix) return;
+    const close = (e: Event) => {
+      if (!(e.target as HTMLElement | null)?.closest?.("[data-grammar-fix]")) setFix(null);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setFix(null);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [fix]);
+
+  // Rule-based grammar check (OpenGrammer, English only, runs in the browser: no AI, nothing leaves the page).
+  // Mistakes get a blue wavy underline; hovering shows the suggestion.
+  useEffect(() => {
+    if (!editor) return;
+    const checker = GrammerCheckContentTipTap(editor, { decorations: { Decoration, DecorationSet }, debounceMs: 800, autoCheckOnLoad: false, autoCheckOnBlur: true, debug: false, decorationAttributes: { title: "Click to see a suggestion" } });
+    return () => checker?.destroy();
+  }, [editor]);
 
   /** Is an "@name" being typed right before the cursor? */
   function mentionBefore(): { q: string; len: number } | null {
@@ -1077,6 +1127,28 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
           </form>
         )}
         <EditorContent editor={editor} />
+        {fix && (
+          <div
+            data-grammar-fix
+            role="dialog"
+            aria-label="Grammar suggestion"
+            className="ws-pop fixed z-[90] w-64 rounded-xl border border-border bg-surface p-3 shadow-xl"
+            style={{ left: fix.left, bottom: fix.bottom }}
+          >
+            <p className="text-sm text-ink">{fix.message}</p>
+            {fix.suggestions.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {fix.suggestions.map((sg) => (
+                  <button key={sg} onMouseDown={(e) => e.preventDefault()} onClick={() => applyFix(sg)} className="rounded-lg bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand hover:bg-brand hover:text-white">
+                    {sg}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted">No automatic suggestion.</p>
+            )}
+          </div>
+        )}
         {slashItems.length > 0 && candidates.length === 0 && (
           <ul role="listbox" aria-label="Formatting commands" className="ws-pop absolute bottom-full left-2 z-30 mb-2 max-h-72 w-72 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
             <li className="px-2 pb-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted" aria-hidden>Formatting</li>
