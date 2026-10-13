@@ -9,10 +9,12 @@ import { api } from "@/lib/api";
 import { rememberKnowledge } from "@/lib/knowledgeNames";
 import { getFbAuth } from "@/lib/firebase";
 import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
-import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useSettings, useTasks, useUsers } from "@/lib/hooks";
+import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useReads, useSettings, useTasks, useUsers } from "@/lib/hooks";
 import type { Account, DriveFile, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
+import { ResearchView } from "./Research";
+import { VoiceSheet } from "./VoiceSheet";
 import { Menu, UserAvatar } from "./bits";
 import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
@@ -38,6 +40,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const guest = account.org_role === "guest";
   const userList = useUsers(account.org_id, guest);
   const chatList = useChats(uid);
+  const reads = useReads(uid);
   const fileList = useFiles(uid);
   const tasks = useTasks(uid);
   const notices = useNotices(uid);
@@ -106,6 +109,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
       else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
       else if (ref.startsWith("kn:")) open({ kind: "live" });
+      else if (ref.startsWith("research:")) open({ kind: "research", id: ref.slice(9) });
+      else if (ref.startsWith("std:")) open({ kind: "quality", tab: "standards" });
       else if (ref.startsWith("ev:")) open({ kind: "live", eventId: ref.slice(3) });
       else if (ref.startsWith("ho:")) {
         const id = ref.slice(3);
@@ -208,7 +213,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
   const unreadAlerts = notices.filter((n) => !n.read).length;
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
-  const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid) && notifyLevel(c, settings) === "all").length;
+  const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid, reads) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
   const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant";
   const admin = isAdmin(account);
@@ -228,7 +233,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     <Ctx.Provider
       value={{
         uid, account, me, users, chats, files, meetings, events, emails, driveFiles, records, register, settings, view, open, openRef, toast, dialog: setDlg,
-        newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true),
+        newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true), reads,
       }}
     >
       <a href="#workspace-main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">
@@ -303,6 +308,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
           <main id="workspace-main" ref={mainRef} tabIndex={-1} className={clsx("min-w-0 flex-1 flex-col bg-surface outline-none lg:flex", listPane && mobileList ? "hidden" : "flex")}>
             {view.kind === "home" && <MyDayView tasks={tasks} notices={notices} />}
             {view.kind === "assistant" && <AssistantView tasks={tasks} prompt={view.prompt} onPromptUsed={() => setView({ kind: "assistant" })} />}
+            {view.kind === "research" && <ResearchView key={view.id ?? "research"} focusId={view.id} />}
             {view.kind === "insights" && <InsightsView />}
             {view.kind === "tasks" && <TasksView tasks={tasks} />}
             {view.kind === "activity" && <ActivityView notices={notices} />}
@@ -313,7 +319,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "decisions" && <DecisionsView focusId={view.id} />}
             {view.kind === "live" && !guest && <LiveView key={view.eventId ?? view.sessionId ?? "home"} sessionId={view.sessionId} eventId={view.eventId} />}
             {view.kind === "handover" && <HandoverView key={view.chatId} chatId={view.chatId} focusId={view.id} />}
-            {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
+            {view.kind === "quality" && !guest && <QualityView key={view.tab ?? "q"} recordId={view.recordId} records={recordList} register={register} initialTab={view.tab} />}
             {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
             {view.kind === "calendar" && connected.includes("calendar") && <CalendarView />}
             {view.kind === "drive" && connected.includes("drive") && <DriveView />}
@@ -356,6 +362,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       )}
       {dlg === "status" && <StatusDialog onClose={() => setDlg(null)} />}
       {dlg === "report" && <ReportDialog onClose={() => setDlg(null)} />}
+      {dlg === "voice" && <VoiceSheet onClose={() => setDlg(null)} />}
       {(dlg === "meeting-new" || meetingPrefill) && (
         <NewMeetingDialog
           prefill={meetingPrefill ?? {}}

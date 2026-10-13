@@ -14,6 +14,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || (resource.data.org_id == myOrg() && !isGuest()));
     }
+    // Read markers are per person (users/{uid}/reads/{chatId}); only the owner sees them
+    match /users/{uid}/reads/{chatId} {
+      allow read: if signedIn() && request.auth.uid == uid;
+    }
     match /user_settings/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
     }
@@ -49,6 +53,17 @@ service cloud.firestore {
     }
     match /assistant/{uid}/messages/{id} {
       allow read: if signedIn() && request.auth.uid == uid;
+    }
+    // Voice transcripts (text only; audio is never stored): private to the speaker, deleted after 30 days (TTL on expire_at)
+    match /voice_sessions/{id} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+    // Research runs and their live progress: only the person who ran them (shared copies live on chat messages)
+    match /research_runs/{runId} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      match /events/{eventId} {
+        allow read: if signedIn() && get(/databases/$(database)/documents/research_runs/$(runId)).data.uid == request.auth.uid;
+      }
     }
     // invites, connections, chunks, audit_log, and anything else: server only
     match /{document=**} {

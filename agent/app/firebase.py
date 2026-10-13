@@ -157,9 +157,8 @@ def ensure_general(org_id: str, uid: str, name: str) -> None:
     elif uid not in (snap.get("members") or []):
         ref.update({"members": firestore.ArrayUnion([uid]), "last_ts": t, "last_text": f"{name} joined the workspace", "last_sender": ""})
         ref.collection("messages").document().set({"sender": "system", "sender_name": "", "text": f"{name} joined the workspace", "ts": t, "system": True})
-        for col in ("chunks", "files"):  # history becomes searchable/downloadable for the new member
-            for c in db.collection(col).where("chat_id", "==", cid).stream():
-                c.reference.update({"members": firestore.ArrayUnion([uid])})
+        for c in db.collection("files").where("chat_id", "==", cid).stream():  # downloads follow membership; search needs no rewrite
+            c.reference.update({"members": firestore.ArrayUnion([uid])})
 
 
 def _join(decoded: dict) -> None:

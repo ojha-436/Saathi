@@ -35,13 +35,48 @@ def _hash_embed(text: str) -> list[float]:
     return [v / norm for v in vec]
 
 
+def _network_errors() -> tuple:
+    import httpx
+
+    kinds: list = [httpx.TransportError, ConnectionError, TimeoutError]
+    try:
+        from google.auth.exceptions import TransportError as AuthTransportError  # token refresh hit a dropped connection
+
+        kinds.append(AuthTransportError)
+    except ImportError:
+        pass
+    try:
+        import requests
+
+        kinds += [requests.exceptions.ConnectionError, requests.exceptions.Timeout]
+    except ImportError:
+        pass
+    try:
+        from websockets.exceptions import ConnectionClosedError  # Gemini Live sessions run over websockets
+
+        kinds.append(ConnectionClosedError)
+    except ImportError:
+        pass
+    return tuple(kinds)
+
+
+_NETWORK = _network_errors()
+
+
+def transient(e: BaseException) -> bool:
+    """Rate limits, 5xx and dropped connections (HTTP, auth refresh, websockets) are worth retrying; everything else is a real error."""
+    if isinstance(e, genai.errors.APIError):
+        return e.code in (408, 429, 500, 502, 503, 504)
+    return isinstance(e, _NETWORK)
+
+
 def _retry(fn, attempts: int = 6):
-    """Retries rate-limit / transient Vertex errors with exponential backoff."""
+    """Retries rate-limit, transient server and network errors with exponential backoff and jitter."""
     for i in range(attempts):
         try:
             return fn()
-        except genai.errors.APIError as e:
-            if e.code not in (429, 500, 503) or i == attempts - 1:
+        except Exception as e:
+            if not transient(e) or i == attempts - 1:
                 raise
             time.sleep(min(30, 2 ** i) + random.random())
 

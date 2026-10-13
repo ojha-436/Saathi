@@ -155,6 +155,21 @@ def _enrich(user: dict, d: dict) -> dict:
     return out
 
 
+def draft_from_text(user: dict, type: str, text: str, hint: str = "") -> dict:
+    """Text-only draft (voice, Spec Check): same prompt as the photo/voice-note draft, on the fast model."""
+    from .config import FAST_MODEL
+
+    if type not in RECORD_TYPES:
+        raise HTTPException(400, "Unknown record type")
+    kind = {"ncr": "non-conformance report (NCR) for a quality defect", "downtime": "machine downtime record", "safety": "safety near-miss report"}[type]
+    d = ai.generate_json(PROMPT.format(kind=kind, text=text.strip()[:2000] or "(none)", hint=hint.strip()[:100] or "(none)"), RecordDraft, model=FAST_MODEL)
+    fields = _fields_for(type, _clean_fields(d.model_dump()))
+    draft_id = uuid.uuid4().hex[:20]
+    db.collection("record_drafts").document(draft_id).set({"org_id": user["org_id"], "uid": user["uid"], "type": type, "media": [],
+                                                           "fields": fields, "ts": datetime.now(TZ)})
+    return {"draft_id": draft_id, "type": type, "fields": fields, "links": _enrich(user, fields)}
+
+
 @router.post("/api/records/draft")
 async def draft(type: str = Form("ncr"), text: str = Form(""), hint: str = Form(""), photos: list[UploadFile] | None = File(None),
                 audio: UploadFile | None = File(None), user=Depends(current_user)):

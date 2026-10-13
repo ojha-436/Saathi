@@ -12,10 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, knowledge, live, meetings, memory, people, push, records, richdoc
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice
 from .agent import ask
 from .plantdata import refresh as plant_refresh
-from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, TZ
+from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
 from .firebase import auth, audit, bucket, current_user, db, FieldFilter, firestore, get_chat_for_member, require_admin, same_org, user_profile
 
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +32,11 @@ app.include_router(impact.router)
 app.include_router(handover.router)
 app.include_router(knowledge.router)
 app.include_router(live.router)
+app.include_router(research.router)
+app.include_router(specs.router)
+app.include_router(voice.router)
+if SAATHI_ROLE in ("worker", "all"):
+    app.include_router(jobs.router)  # Cloud Tasks targets; the worker service is private
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?" if LOCAL_MODE else None,
@@ -188,6 +193,12 @@ if LOCAL_MODE:
             allowed = has("uid", "==", uid)
         elif len(parts) == 3 and parts[0] == "assistant" and parts[2] == "messages":
             allowed = parts[1] == uid
+        elif parts == ["research_runs"]:
+            allowed = has("uid", "==", uid)
+        elif len(parts) == 3 and parts[0] == "research_runs" and parts[2] == "events":
+            allowed = (db.collection("research_runs").document(parts[1]).get().to_dict() or {}).get("uid") == uid
+        elif len(parts) == 3 and parts[0] == "users" and parts[2] == "reads":
+            allowed = parts[1] == uid
         if not allowed:
             raise HTTPException(403, "Not allowed")
         ops = {"array-contains": "array_contains"}
@@ -232,6 +243,12 @@ def notify(uid: str, kind: str, title: str, body: str, actor: dict | None = None
 
 # ---------------- chats ----------------
 
+def mark_seen(uid: str, chat_id: str, ts: datetime | None = None) -> None:
+    """Read markers live on the reader's own document (users/{uid}/reads/{chatId}), never on the chat document: a busy channel
+    with thousands of members would otherwise turn every "seen" into a write on one hot document."""
+    db.collection("users").document(uid).collection("reads").document(chat_id).set({"at": ts or now(), "chat_id": chat_id})
+
+
 def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None,
                  parent_id: str | None = None, doc: dict | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
@@ -252,9 +269,8 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
         })
     col.document(msg_id).set(body)
     preview = ("↪ " if parent_id else "") + (text or (f"📎 {file['name']}" if file else ""))
-    db.collection("chats").document(chat["id"]).update(
-        {"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"], f"read_at.{user['uid']}": ts}
-    )
+    db.collection("chats").document(chat["id"]).update({"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"]})
+    mark_seen(user["uid"], chat["id"], ts)
     return msg_id
 
 
@@ -264,14 +280,17 @@ def post_system(chat_id: str, text: str, actor: str) -> None:
     db.collection("chats").document(chat_id).collection("messages").document().set(
         {"sender": "system", "sender_name": "", "text": text, "ts": ts, "system": True}
     )
-    db.collection("chats").document(chat_id).update({"last_ts": ts, "last_text": text[:120], "last_sender": "", f"read_at.{actor}": ts})
+    db.collection("chats").document(chat_id).update({"last_ts": ts, "last_text": text[:120], "last_sender": ""})
+    if actor:
+        mark_seen(actor, chat_id, ts)
 
 
 def sync_members(chat_id: str, members: list[str]) -> None:
-    """Keeps search chunks and file permissions in step with chat membership, so the assistant and
-    file downloads immediately follow joins, invites and removals."""
+    """Keeps the member copies on files, decisions and handovers (read directly by browsers through security rules) in step
+    with chat membership. Search chunks are NOT rewritten: search resolves permissions from the caller's current chats at query
+    time, so a join or leave in a 5,000-member channel costs O(files), not O(every message ever indexed)."""
     batch, n = db.batch(), 0
-    for col in ("chunks", "files", "decisions", "handovers"):
+    for col in ("files", "decisions", "handovers"):
         for snap in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
             batch.update(snap.reference, {"members": members})
             n += 1
@@ -335,7 +354,7 @@ def create_channel(body: ChannelIn, user=Depends(current_user)):
     db.collection("chats").document(chat_id).set(
         {"type": "channel", "name": name, "name_key": name.lower(), "description": body.description.strip()[:300],
          "visibility": body.visibility, "members": members, "owners": [user["uid"]], "created_by": user["uid"],
-         "created_at": now(), "last_ts": now(), "last_text": "", "ai_excluded": False, "read_at": {user["uid"]: now()},
+         "created_at": now(), "last_ts": now(), "last_text": "", "ai_excluded": False,
          "org_id": user["org_id"]}
     )
     audit(user, "channel.created", chat_id, name=name, visibility=body.visibility)
@@ -370,7 +389,8 @@ def join_channel(chat_id: str, bg: BackgroundTasks, user=Depends(current_user)):
         raise HTTPException(404, "Channel not found")
     if user["uid"] not in snap.get("members"):
         members = sorted(set(snap.get("members")) | {user["uid"]})
-        update = {"members": members, f"read_at.{user['uid']}": now()}
+        update = {"members": members}
+        mark_seen(user["uid"], chat_id)
         if not snap.to_dict().get("owners"):
             update["owners"] = [user["uid"]]  # an abandoned channel gets its next member as owner
         ref.update(update)
@@ -461,6 +481,8 @@ def delete_chat_everything(chat_id: str) -> None:
                    ("decisions", db.collection("decisions").where(filter=FieldFilter("chat_id", "==", chat_id))),
                    ("handovers", db.collection("handovers").where(filter=FieldFilter("chat_id", "==", chat_id)))):
         for s in q.stream():
+            if col == "files":
+                db.collection("spec_checks").document(s.id).delete()
             if col == "files" and s.to_dict().get("gcs_path"):
                 try:
                     bucket.blob(s.get("gcs_path")).delete()
@@ -473,7 +495,7 @@ def delete_chat_everything(chat_id: str) -> None:
 @app.post("/api/chats/{chat_id}/read")
 def mark_read(chat_id: str, user=Depends(current_user)):
     get_chat_for_member(chat_id, user["uid"])
-    db.collection("chats").document(chat_id).update({f"read_at.{user['uid']}": now()})
+    mark_seen(user["uid"], chat_id)
     return {"ok": True}
 
 
@@ -687,18 +709,29 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
     pending = col.document()
     pending.set({"role": "assistant", "text": "", "pending": True, "ts": now()})
     started = time.monotonic()
+    last = [0.0]
+
+    def on_partial(t: str) -> None:  # stream into the message the browser is already listening to (~4 writes/s max)
+        if time.monotonic() - last[0] >= 0.25:
+            last[0] = time.monotonic()
+            try:
+                pending.update({"text": t})
+            except Exception:
+                logging.warning("partial update failed")
+
     try:
-        result = await ask(user, text, history)
+        result = await ask(user, text, history, on_partial=on_partial)
     except Exception as e:
         logging.exception("assistant failed")
         pending.update({"text": "Sorry, something went wrong while I was working on that. Please try again.", "pending": False, "error": str(e)[:300]})
         raise HTTPException(500, "Assistant failed")
-    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
-                    "charts": result.get("charts") or []})
     latency = int((time.monotonic() - started) * 1000)
+    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
+                    "charts": result.get("charts") or [], "provenance": {"model": result.get("model"), "latency_ms": latency,
+                    "first_token_ms": result.get("first_token_ms"), "prefetched": result.get("prefetched", [])}})
     tools = [c["tool"] for c in result["tool_calls"]]
     db.collection("audit_log").add({"uid": user["uid"], "org_id": user["org_id"], "kind": "assistant", "query": text, "tool_calls": result["tool_calls"],
-                                    "tools": tools, "latency_ms": latency, "ts": now(),
+                                    "tools": tools, "latency_ms": latency, "first_token_ms": result.get("first_token_ms"), "ts": now(),
                                     "cited": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"])))})
     bg.add_task(log_event_bigquery, {
         "uid": user["uid"], "query": text[:1000], "tools": json.dumps(tools), "latency_ms": latency,

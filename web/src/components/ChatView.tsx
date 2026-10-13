@@ -72,6 +72,8 @@ import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } 
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
+import { ReportBody } from "./Research";
+import { SpecBadge } from "./SpecCheck";
 import { notifyLevel } from "./Sidebar";
 
 /** Highlights @Name tokens for people actually mentioned on the message (and @channel). */
@@ -100,7 +102,7 @@ type Panel = null | "about" | "members";
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: string }) {
-  const { uid, users, chats, toast, open, showList, settings } = useWs();
+  const { uid, users, chats, toast, open, showList, settings, reads } = useWs();
   const chat = chats[chatId];
   const messages = useMessages(chatId);
   const [tab, setTab] = useState<Tab>("messages");
@@ -146,7 +148,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
   // Mark the conversation read while it is open.
   const lastTs = chat?.last_ts?.toMillis();
   useEffect(() => {
-    if (chat && isUnread(chat, uid)) api(`/api/chats/${chatId}/read`, { method: "POST" }).catch(() => {});
+    if (chat && isUnread(chat, uid, reads)) api(`/api/chats/${chatId}/read`, { method: "POST" }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, lastTs]);
 
@@ -488,6 +490,17 @@ function MessageRow({
     <>
       {m.text && (m.doc ? <RichDoc doc={m.doc} plain={(t) => withMentions(t, m.mentions, users, uid)} /> : <ChatText text={m.text} plain={(t) => withMentions(t, m.mentions, users, uid)} />)}
       {m.file && <FileCard file={m.file} />}
+      {m.file?.spec && <SpecBadge file={m.file} chatId={chatId} />}
+      {m.research && (
+        <div className="mt-2 w-full max-w-2xl rounded-xl border border-border bg-surface p-3">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-saffron-ink">
+            <Sparkles size={13} aria-hidden /> Saathi Research · shared by {m.research.by}
+            {m.research.removed > 0 && <span className="font-normal text-muted">· {m.research.removed} item(s) left out (sources not visible to everyone here)</span>}
+          </p>
+          <p className="mb-2 text-sm font-semibold">{m.research.report.title}</p>
+          <ReportBody report={m.research.report} compact />
+        </div>
+      )}
       {m.handover_id && (
         <button
           onClick={() => open({ kind: "handover", chatId, id: m.handover_id })}

@@ -399,6 +399,7 @@ function WorkspaceTab() {
   const [creation, setCreation] = useState(account.org.settings.channel_creation ?? "everyone");
   const [ai, setAi] = useState(account.org.settings.ai_enabled ?? true);
   const [google, setGoogle] = useState(account.org.settings.integrations_google ?? true);
+  const [voiceUs, setVoiceUs] = useState(account.org.settings.voice_us ?? false);
   const [qrPublic, setQrPublic] = useState(account.org.settings.qr_public ?? true);
   const [shifts, setShifts] = useState((account.org.settings.shifts ?? [{ name: "A", start: "06:00" }, { name: "B", start: "14:00" }, { name: "C", start: "22:00" }]).map((r) => `${r.name} ${r.start}`).join(", "));
   const [quality, setQuality] = useState<string[]>(account.org.settings.quality_team ?? []);
@@ -409,7 +410,7 @@ function WorkspaceTab() {
     try {
       await api("/api/admin/org", {
         method: "PATCH",
-        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai, integrations_google: google, qr_public: qrPublic, quality_team: quality, shifts },
+        json: { name, domains: domains.split(/[,\s]+/).filter(Boolean), channel_creation: creation, ai_enabled: ai, integrations_google: google, voice_us: voiceUs, qr_public: qrPublic, quality_team: quality, shifts },
       });
       toast("Workspace settings saved. Reload to see them everywhere.");
     } catch (e) {
@@ -459,6 +460,13 @@ function WorkspaceTab() {
             <div className="text-xs text-muted">Members can connect their own Google account (read-only). Turning this off disconnects everyone and deletes synced data.</div>
           </div>
           <Switch on={google} onChange={setGoogle} label="Allow Google connections" />
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <div>
+            <div className="text-sm font-semibold">Saathi Voice (hands-free, Hindi-first)</div>
+            <div className="text-xs text-muted">Uses Gemini Live, which processes voice in the US (us-central1). Audio is never stored; transcripts are private to each person and deleted after 30 days. Everything else stays in Mumbai.</div>
+          </div>
+          <Switch on={voiceUs} onChange={setVoiceUs} label="Allow Saathi Voice" />
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
           <div>

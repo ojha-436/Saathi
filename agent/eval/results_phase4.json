@@ -1,0 +1,193 @@
+{
+  "ran_at": "2026-10-13T11:06:42.392083+05:30",
+  "spec": {
+    "cases": [
+      {
+        "case": "all good, thickness unknown",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "all good, 20 mm",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "C over strict band, unknown thickness",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "C 0.21 allowed at 32 mm",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "C 0.23 over thick band",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "CEV 0.46 at 20 mm",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "P over max",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "S exactly at max",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "yield below 355 at 10 mm",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "yield 340 at 45 mm (min 335)",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "tensile above range",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "tensile below range",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "elongation 21 at 50 mm",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "elongation 21 at 20 mm",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "impact at 0 °C for J2",
+        "want": "incomplete",
+        "got": "incomplete",
+        "pass": true
+      },
+      {
+        "case": "impact 25 J at -20 °C",
+        "want": "fail",
+        "got": "fail",
+        "pass": true
+      },
+      {
+        "case": "impact at -30 °C (colder) passes",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "impact missing",
+        "want": "incomplete",
+        "got": "incomplete",
+        "pass": true
+      },
+      {
+        "case": "residual Cu missing only",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      },
+      {
+        "case": "yield in ksi (52 ksi = 358.5 MPa)",
+        "want": "pass",
+        "got": "pass",
+        "pass": true
+      }
+    ],
+    "extraction": [
+      {
+        "file": "MTC_H-77812_Ladle_Analysis.pdf",
+        "fields_correct": "6/6",
+        "meta_ok": true,
+        "seconds": 8.3,
+        "pass": true
+      },
+      {
+        "file": "MTC_H-78120_SideFrame_Lot2.pdf",
+        "fields_correct": "6/6",
+        "meta_ok": true,
+        "seconds": 7.1,
+        "pass": true
+      }
+    ]
+  },
+  "research": [
+    {
+      "goal": "Are we ready for the RDSO inspection of the BG coach bogie prototype on 20 Oct?",
+      "status": "done",
+      "seconds": 217,
+      "gold_recall": "5/5",
+      "missed": [],
+      "claims_cited": "14/14",
+      "sources": 29,
+      "gaps": 10,
+      "leaks": [],
+      "metrics": {
+        "claims": 14,
+        "dropped_unverified": 0,
+        "duration_ms": 210170,
+        "agents": 7,
+        "sources_cited": 29,
+        "tool_calls": 49,
+        "evidence_seen": 62
+      }
+    },
+    {
+      "goal": "Compare Om Castings and Bharat Foundry for bogie side frame castings",
+      "status": "done",
+      "seconds": 97,
+      "gold_recall": "4/4",
+      "missed": [],
+      "claims_cited": "13/13",
+      "sources": 18,
+      "gaps": 4,
+      "leaks": [],
+      "metrics": {
+        "claims": 13,
+        "dropped_unverified": 0,
+        "duration_ms": 92865,
+        "agents": 6,
+        "sources_cited": 17,
+        "tool_calls": 40,
+        "evidence_seen": 41
+      }
+    }
+  ],
+  "summary": {
+    "spec_comparator": "20/20",
+    "certificate_extraction": "2/2",
+    "research_gold_recall": "5/5, 4/4",
+    "research_claims_cited": "14/14, 13/13",
+    "research_leaks": 0,
+    "research_seconds": "217, 97"
+  }
+}

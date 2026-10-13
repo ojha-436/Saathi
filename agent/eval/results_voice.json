@@ -1,0 +1,189 @@
+{
+  "ran_at": "2026-10-13T11:40:25.886827+05:30",
+  "rows": [
+    {
+      "say": "Bay 2 mein CNC-3 ka kya status hai?",
+      "heard": "Bay 2 में CNC 3 का क्या स्टेटस है?",
+      "answer": "Shift handover ke mutabik, CNC-3 abhi spindle overheat alarm ki wajah se band hai. Suresh Yadav is machine ke owner hain.",
+      "tools": [
+        "shift_handover"
+      ],
+      "sources": [
+        "ho:grp_bay2_2026-10-12_C",
+        "rec:shift_ncr_20261012_B",
+        "rec:hist_dt_2026_0001",
+        "rec:hist_dt_2026_0002"
+      ],
+      "first_audio_s": 2.2,
+      "audio_s": 6.8,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    },
+    {
+      "say": "Drawing SRC-BF-2041 ka current revision kaunsa hai?",
+      "heard": "Drawing SRC BF 2041 का करंट रिवीजन कौन सा है?",
+      "answer": "Drawing register ke hisaab se, SRC-BF-2041 ka current revision Revision C hai.",
+      "tools": [
+        "revision_status"
+      ],
+      "sources": [
+        "file:file006",
+        "file:file001"
+      ],
+      "first_audio_s": 2.09,
+      "audio_s": 5.8,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    },
+    {
+      "say": "Heat H-77812 ka certificate spec mein hai kya?",
+      "heard": "H7781 का सर्टिफिकेट स्पेक में है क्या?",
+      "answer": "Heat H-77812 ka certificate spec mein hai aur iski sabhi limits pass ho gayi hain.",
+      "tools": [
+        "spec_check"
+      ],
+      "sources": [
+        "file:file004",
+        "file:file006",
+        "std:stdc37cab8d226e4992b"
+      ],
+      "first_audio_s": 2.2,
+      "audio_s": 5.3,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    },
+    {
+      "say": "What happened in the last shift in Bay 2?",
+      "heard": "What happened in the last shift in Bay 2?",
+      "answer": "Shift C handover ke hisaab se, CNC-3 spindle overheat ki wajah se down hai aur do side frame castings porosity ki wajah se hold par hain.",
+      "tools": [
+        "shift_handover"
+      ],
+      "sources": [
+        "ho:grp_bay2_2026-10-12_C",
+        "rec:shift_ncr_20261012_B",
+        "rec:hist_dt_2026_0001",
+        "rec:hist_dt_2026_0002"
+      ],
+      "first_audio_s": 1.96,
+      "audio_s": 7.7,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    },
+    {
+      "say": "Mere open tasks kya hain?",
+      "heard": "मेरे ओपन टास्क क्या है?",
+      "answer": "Task list ke hisaab se, aapke teen open tasks hain: boggie modification karna, weld W7 ka UT report share karna, aur lightening holes ke liye FEA summary review karna. Ye sabhi tasks due dates se late ho chuke hain.",
+      "tools": [
+        "my_tasks"
+      ],
+      "sources": [
+        "msg:dm_amit_prince/seed018",
+        "msg:dm_neha_prince/seed011",
+        "msg:dm_amit_prince/1c58adf3177940b28f64"
+      ],
+      "first_audio_s": 1.66,
+      "audio_s": 13.1,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    },
+    {
+      "say": "CNC-9 ka status kya hai?",
+      "heard": "CNC 9 का स्टेटस क्या है?",
+      "answer": "Mujhe CNC-9 ka koi status nahi mila.",
+      "tools": [
+        "search_workspace"
+      ],
+      "sources": [
+        "msg:grp_bay2/shift0220261012_B",
+        "msg:grp_bay2/shift0020261012_B",
+        "msg:grp_bay2/hist03p_bay2",
+        "ho:grp_bay2_2026-10-12_B"
+      ],
+      "first_audio_s": 3.4,
+      "audio_s": 2.7,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    },
+    {
+      "say": "Drawing SRC-XY-9999 ka revision batao",
+      "heard": "Drawing SRC XY 999 का रिवीजन बताओ।",
+      "answer": "Drawing register ke hisaab se, drawing SRC-XY-999 ka record nahi mila.",
+      "tools": [
+        "revision_status"
+      ],
+      "sources": [],
+      "first_audio_s": 1.69,
+      "audio_s": 5.1,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    },
+    {
+      "say": "CNC-3 band ho gaya hai, spindle overheat alarm aa raha hai, downtime report bana do",
+      "heard": "CNC 3 band ho gaya hai, spindle overheat alarm aa raha hai, downtime report bana do.",
+      "answer": "Maine CNC-3 spindle overheat alarm ka downtime report draft kar liya hai. File karun?",
+      "tools": [
+        "draft_report"
+      ],
+      "sources": [],
+      "first_audio_s": 4.61,
+      "audio_s": 4.5,
+      "filed": false,
+      "pass": true,
+      "error": null,
+      "checks": {
+        "tool": true,
+        "answer": true,
+        "no_unconfirmed_filing": true
+      }
+    }
+  ],
+  "summary": {
+    "task_success": "8/8",
+    "grounding_traps_passed": "2/2",
+    "filed_without_yes": 0,
+    "first_audio_median_s": 2.2
+  }
+}

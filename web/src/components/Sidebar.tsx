@@ -18,6 +18,7 @@ function stripMarkers(t?: string): string {
 }
 
 export function railKey(view: View): RailKey {
+  if (view.kind === "research") return "assistant";
   return view.kind === "meeting" ? "home" : view.kind === "chats" || view.kind === "handover" ? "chat" : view.kind;
 }
 
@@ -130,7 +131,7 @@ function useCollapsed() {
 
 /** One list for chats and channels (the Teams "Chat and channels" pattern), with Favorites on top. */
 export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigate?: () => void }) {
-  const { uid, users, view, open, dialog, toast, settings, account } = useWs();
+  const { uid, users, view, open, dialog, toast, settings, account, reads } = useWs();
   const guest = account.org_role === "guest";
   const [filter, setFilter] = useState<Filter>("all");
   const [collapsed, toggle] = useCollapsed();
@@ -143,7 +144,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
   const { favorites, channels, chats } = useMemo(() => {
     const keep = (c: Chat) =>
       filter === "all" ||
-      (filter === "unread" && isUnread(c, uid)) ||
+      (filter === "unread" && isUnread(c, uid, reads)) ||
       (filter === "channels" && c.type === "channel") ||
       (filter === "chats" && c.type !== "channel");
     const rows = chatList.filter(keep);
@@ -164,7 +165,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
     const title = chatTitle(c, uid, users);
     const active = view.kind === "chat" && view.chatId === c.id;
     const level = notifyLevel(c, settings);
-    const unread = !active && isUnread(c, uid) && level !== "off";
+    const unread = !active && isUnread(c, uid, reads) && level !== "off";
     const fav = !!c.favorite_of?.includes(uid);
     const lastText = stripMarkers(c.last_text);
     const preview = c.type !== "dm" && c.last_sender ? `${c.last_sender.split(" ")[0]}: ${lastText}` : lastText;

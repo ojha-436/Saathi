@@ -6,13 +6,14 @@ import type { Account, CalendarEvent, Chat, Drawing, DriveFile, EmailItem, FileD
 export type View =
   | { kind: "home" }
   | { kind: "assistant"; prompt?: string }
+  | { kind: "research"; id?: string }
   | { kind: "insights" }
   | { kind: "tasks" }
   | { kind: "activity" }
   | { kind: "admin" }
   | { kind: "meeting"; id: string }
   | { kind: "chats" }
-  | { kind: "quality"; recordId?: string }
+  | { kind: "quality"; recordId?: string; tab?: "records" | "drawings" | "standards" }
   | { kind: "decisions"; id?: string }
   | { kind: "handover"; chatId: string; id?: string }
   | { kind: "live"; sessionId?: string; eventId?: string }
@@ -21,7 +22,7 @@ export type View =
   | { kind: "drive" }
   | { kind: "chat"; chatId: string; focusMsg?: string };
 
-export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new" | "report";
+export type DialogKind = "new-chat" | "new-channel" | "browse-channels" | "palette" | "profile" | "settings" | "status" | "meeting-new" | "report" | "voice";
 
 export type TaskPrefill = { title?: string; assignee?: string; sourceRef?: string; due?: string };
 export type MeetingPrefill = { title?: string; when?: Date; attendees?: string[] };
@@ -50,6 +51,8 @@ export type WorkspaceCtx = {
   showProfile: (uid: string) => void;
   /** Mobile only: go back from a conversation to the chat list. */
   showList: () => void;
+  /** chatId → when the user last opened it */
+  reads: Record<string, import("firebase/firestore").Timestamp>;
 };
 
 export const Ctx = createContext<WorkspaceCtx | null>(null);

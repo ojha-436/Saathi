@@ -72,10 +72,11 @@ export const DOC_LABEL: Record<string, string> = {
 };
 
 /** Unread when someone else posted after the user last opened the chat. */
-export function isUnread(chat: Chat, me: string) {
+/** Unread when someone posted after the user last opened the chat. Markers live in users/{uid}/reads (legacy: chat.read_at). */
+export function isUnread(chat: Chat, me: string, reads?: Record<string, Timestamp>) {
   if (!chat.last_ts || !chat.last_text) return false;
-  const seen = chat.read_at?.[me];
-  return !seen || chat.last_ts.toMillis() > seen.toMillis() + 500;
+  const seen = Math.max(reads?.[chat.id]?.toMillis() ?? 0, chat.read_at?.[me]?.toMillis() ?? 0);
+  return !seen || chat.last_ts.toMillis() > seen + 500;
 }
 
 export const REACTION_EMOJI: Record<string, string> = { like: "👍", heart: "❤️", laugh: "😄", check: "✅", pray: "🙏", wow: "😮" };

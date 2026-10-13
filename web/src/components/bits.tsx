@@ -59,7 +59,18 @@ export function CiteChip({ refId }: { refId: string }) {
       </a>
     );
   }
-  if (refId.startsWith("kn:")) {
+  if (refId.startsWith("chart:")) {
+    return (
+      <span className="mx-0.5 inline-flex items-center gap-1 rounded-md border border-brand/20 bg-brand-soft px-1.5 py-0.5 align-middle font-mono text-[11px] text-brand" title="Plant data chart (BigQuery)">
+        plant data
+      </span>
+    );
+  }
+  if (refId.startsWith("std:")) {
+    label = "standards library";
+  } else if (refId.startsWith("research:")) {
+    label = "research report";
+  } else if (refId.startsWith("kn:")) {
     label = knowledgeNames[refId.slice(3)] ?? "my knowledge";
   } else if (refId.startsWith("ho:")) {
     label = `shift ${refId.split("_").pop()} handover`;

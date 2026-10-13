@@ -32,7 +32,7 @@ export type Account = {
     id: string;
     name: string;
     domains: string[];
-    settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; quality_team?: string[]; qr_public?: boolean; shifts?: { name: string; start: string }[] };
+    settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; voice_us?: boolean; quality_team?: string[]; qr_public?: boolean; shifts?: { name: string; start: string }[] };
   };
 };
 
@@ -108,6 +108,7 @@ export type Message = {
   last_reply_ts?: Timestamp;
   reply_users?: string[];
   reactions?: Partial<Record<Reaction, string[]>>;
+  research?: { run_id: string; report: ResearchReport; removed: number; goal: string; by: string };
   file?: {
     id: string;
     name: string;
@@ -116,6 +117,7 @@ export type Message = {
     status?: string;
     doc?: DocSummary;
     ocr?: { engine: string; pages: number; confidence: number | null } | null;
+    spec?: SpecSummary;
   };
   decision?: string;
   handover_id?: string;
@@ -169,6 +171,8 @@ export type AssistantMsg = {
   pending?: boolean;
   tasks?: string[];
   charts?: Chart[];
+  tool_calls?: { tool: string; args: Record<string, unknown> }[];
+  provenance?: { model?: string; latency_ms?: number; first_token_ms?: number | null; prefetched?: string[] };
 };
 
 /** A small analytic answer from BigQuery, drawn under the assistant's reply. */
@@ -415,4 +419,116 @@ export type TopicWiki = {
   key_facts: { text: string; refs: string[] }[];
   contradictions: { topic: string; a: { claim: string; ref: string }; b: { claim: string; ref: string } }[];
   open_questions: string[];
+};
+
+// ---------------- Saathi Research ----------------
+
+export type ResearchStep = { question: string; tools: string[]; why: string };
+
+export type ResearchCheck = { item: string; status: "ok" | "risk" | "gap"; detail: string; refs: string[] };
+
+export type ResearchGap = {
+  id: string;
+  title: string;
+  detail: string;
+  owner: string;
+  owner_uid: string | null;
+  owner_name: string;
+  due_at: string | null;
+  severity: "high" | "medium" | "low";
+  refs: string[];
+  task_id: string | null;
+  assignee_uid?: string;
+};
+
+export type ResearchReport = {
+  title: string;
+  readiness: "ready" | "at_risk" | "not_ready" | "not_applicable";
+  verdict: string;
+  checklist: ResearchCheck[];
+  findings: { text: string; refs: string[] }[];
+  gaps: ResearchGap[];
+  unknowns: string[];
+  charts?: (Chart & { ref: string })[];
+};
+
+export type ResearchStatus = "planning" | "awaiting_plan" | "queued" | "running" | "retrying" | "cancelling" | "done" | "cancelled" | "failed";
+
+export type ResearchRun = {
+  id: string;
+  uid: string;
+  goal: string;
+  title?: string;
+  template: string;
+  context?: Record<string, string>;
+  status: ResearchStatus;
+  plan?: { title: string; steps: ResearchStep[] };
+  report?: ResearchReport;
+  notes?: string[];
+  metrics?: { duration_ms?: number; tool_calls?: number; agents?: number; sources_cited?: number; evidence_seen?: number; claims?: number; dropped_unverified?: number };
+  error?: string;
+  created_at?: Timestamp;
+  started_at?: Timestamp;
+  completed_at?: Timestamp;
+  shared_to?: string[];
+};
+
+export type ResearchEvent = { id: string; kind: "phase" | "tool" | "result" | "step_done" | "done" | "error"; text: string; step?: number | null; tool?: string; ts?: Timestamp };
+
+// ---------------- Spec Check / Standards Library ----------------
+
+export type SpecVerdict = "pass" | "fail" | "incomplete" | "no_limits";
+
+export type SpecSummary = { verdict: SpecVerdict; fails: number; missing: number; grade: string; heat_no: string; grade_mismatch: boolean };
+
+export type SpecRow = {
+  property: string;
+  label: string;
+  unit: string;
+  min: number | null;
+  max: number | null;
+  test_temp_c: number | null;
+  value: number | null;
+  status: "pass" | "fail" | "missing" | "info";
+  note: string;
+  source: { standard_id: string; standard?: string; clause?: string; page?: number; ref: string };
+};
+
+export type SpecCheck = {
+  status: "done" | "none";
+  file_id: string;
+  file_name?: string;
+  chat_id?: string;
+  verdict: SpecVerdict;
+  grade: string;
+  certificate_no?: string;
+  heat_no?: string;
+  vendor?: string;
+  po_no?: string;
+  thickness_mm?: number | null;
+  drawing?: { drawing_no: string; rev: string; grade: string | null; ref?: string } | null;
+  grade_mismatch: boolean;
+  rows: SpecRow[];
+  notes?: string[];
+  ts?: string;
+  upload_to_verdict_ms?: number | null;
+};
+
+export type StandardDoc = { id: string; name: string; title?: string; doc_no?: string; status: "processing" | "ready" | "failed"; limits: number; indexed: boolean; uploaded_by_name?: string; ts?: string; error?: string };
+
+export type SpecLimit = {
+  id: string;
+  standard_id: string;
+  standard: string;
+  grade: string;
+  property: string;
+  min: number | null;
+  max: number | null;
+  unit: string;
+  thickness_min_mm: number | null;
+  thickness_max_mm: number | null;
+  test_temp_c: number | null;
+  clause: string;
+  page: number;
+  status: "proposed" | "approved" | "rejected";
 };

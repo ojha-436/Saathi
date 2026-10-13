@@ -1,12 +1,12 @@
 "use client";
 
-import { collection, doc, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, doc, limit, onSnapshot, orderBy, query, where, type Timestamp } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getToken, isLocal } from "./auth";
 import { apiUrl, getDb } from "./firebase";
 import { reviveTs } from "./localts";
-import type { AssistantMsg, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, Task, UserProfile, UserSettings } from "./types";
+import type { AssistantMsg, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, ResearchEvent, ResearchRun, Task, UserProfile, UserSettings } from "./types";
 
 type Spec = { path: string; where?: [string, string, unknown][]; orderBy?: [string, "asc" | "desc"]; limit?: number };
 
@@ -151,4 +151,17 @@ export function useRegister(enabled: boolean, version: number): Drawing[] {
     };
   }, [enabled, version]);
   return rows;
+}
+
+export const useResearchRuns = (uid?: string) =>
+  useLive<ResearchRun>(uid ? { path: "research_runs", where: [["uid", "==", uid]], orderBy: ["created_at", "desc"], limit: 30 } : null, `research:${uid}`);
+
+/** Live progress of one research run (the agents' tool calls and results, in order). */
+export const useResearchEvents = (runId?: string) =>
+  useLive<ResearchEvent>(runId ? { path: `research_runs/${runId}/events`, orderBy: ["ts", "asc"], limit: 400 } : null, `research-events:${runId}`);
+
+/** The user's read markers: chatId → last time they opened it (users/{uid}/reads). */
+export function useReads(uid?: string): Record<string, Timestamp> {
+  const rows = useLive<{ id: string; at?: Timestamp }>(uid ? { path: `users/${uid}/reads` } : null, `reads:${uid}`);
+  return Object.fromEntries(rows.filter((r) => r.at).map((r) => [r.id, r.at as Timestamp]));
 }

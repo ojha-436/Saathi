@@ -15,7 +15,7 @@ from google.cloud.firestore_v1.vector import Vector
 from google.genai import types
 from pydantic import BaseModel
 
-from . import ai
+from . import archive, ai
 from .config import TZ, VISION_MODEL
 from .firebase import audit, bucket, current_user, db
 
@@ -90,10 +90,12 @@ def index_text(uid: str, org_id: str, ref: str, name: str, text: str, source_typ
         wb = db.batch()
         for j in range(start, min(start + 200, len(pieces))):
             h, p = pieces[j]
-            wb.set(db.collection("chunks").document(f"{chunk_prefix}_{j}"), {
+            data = {
                 "text": p, "section": h or None, "position": j, "embedding": Vector(vecs[j]), "members": [uid], "chat_id": f"knowledge_{uid}",
                 "chat_name": "My knowledge", "keywords": ai.keywords(f"{name} {h} {p}"), "org_id": org_id, "source_type": source_type,
-                "file_name": name, "sender_name": "", "ts": ts, "ref": ref})
+                "file_name": name, "sender_name": "", "ts": ts, "ref": ref}
+            wb.set(db.collection("chunks").document(f"{chunk_prefix}_{j}"), data)
+            archive.mirror(f"{chunk_prefix}_{j}", data, org_id)
         wb.commit()
     return len(pieces)
 
