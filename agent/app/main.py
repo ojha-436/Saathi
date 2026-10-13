@@ -14,10 +14,10 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, knowledge, live, meetings, memory, people, push, records
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research
 from .agent import ask
 from .plantdata import refresh as plant_refresh
-from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, TZ
+from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, SAATHI_ROLE, TZ
 from .firebase import audit, bucket, current_user, db, get_chat_for_member, require_admin, same_org, user_profile
 
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +34,9 @@ app.include_router(impact.router)
 app.include_router(handover.router)
 app.include_router(knowledge.router)
 app.include_router(live.router)
+app.include_router(research.router)
+if SAATHI_ROLE in ("worker", "all"):
+    app.include_router(jobs.router)  # Cloud Tasks targets; the worker service is private
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True
 )

@@ -6,6 +6,7 @@ import type { Account, CalendarEvent, Chat, Drawing, DriveFile, EmailItem, FileD
 export type View =
   | { kind: "home" }
   | { kind: "assistant"; prompt?: string }
+  | { kind: "research"; id?: string }
   | { kind: "insights" }
   | { kind: "tasks" }
   | { kind: "activity" }

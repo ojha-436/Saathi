@@ -9,6 +9,7 @@ import { useWs } from "./ctx";
 import { ChartCard } from "./Knowledge";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
+import { SaathiTabs } from "./Research";
 import { ProposedTaskCard } from "./Tasks";
 
 const STARTERS = [
@@ -76,6 +77,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
           <h1 className="text-[15px] font-bold leading-tight">Ask Saathi</h1>
           <p className="hidden truncate text-xs text-muted sm:block">Searches only the chats and files you can access · every answer cites its source</p>
         </div>
+        <SaathiTabs active="ask" />
         {messages.length > 0 && (
           <button
             onClick={() => api("/api/assistant/clear", { method: "POST" })}

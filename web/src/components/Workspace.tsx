@@ -13,6 +13,7 @@ import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, 
 import type { Account, DriveFile, StatusState } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
+import { ResearchView } from "./Research";
 import { Menu, UserAvatar } from "./bits";
 import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
@@ -106,6 +107,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       else if (ref.startsWith("rec:")) open({ kind: "quality", recordId: ref.slice(4) });
       else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
       else if (ref.startsWith("kn:")) open({ kind: "live" });
+      else if (ref.startsWith("research:")) open({ kind: "research", id: ref.slice(9) });
       else if (ref.startsWith("ev:")) open({ kind: "live", eventId: ref.slice(3) });
       else if (ref.startsWith("ho:")) {
         const id = ref.slice(3);
@@ -303,6 +305,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
           <main id="workspace-main" ref={mainRef} tabIndex={-1} className={clsx("min-w-0 flex-1 flex-col bg-surface outline-none lg:flex", listPane && mobileList ? "hidden" : "flex")}>
             {view.kind === "home" && <MyDayView tasks={tasks} notices={notices} />}
             {view.kind === "assistant" && <AssistantView tasks={tasks} prompt={view.prompt} onPromptUsed={() => setView({ kind: "assistant" })} />}
+            {view.kind === "research" && <ResearchView key={view.id ?? "research"} focusId={view.id} />}
             {view.kind === "insights" && <InsightsView />}
             {view.kind === "tasks" && <TasksView tasks={tasks} />}
             {view.kind === "activity" && <ActivityView notices={notices} />}

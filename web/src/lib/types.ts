@@ -106,6 +106,7 @@ export type Message = {
   last_reply_ts?: Timestamp;
   reply_users?: string[];
   reactions?: Partial<Record<Reaction, string[]>>;
+  research?: { run_id: string; report: ResearchReport; removed: number; goal: string; by: string };
   file?: {
     id: string;
     name: string;
@@ -414,3 +415,57 @@ export type TopicWiki = {
   contradictions: { topic: string; a: { claim: string; ref: string }; b: { claim: string; ref: string } }[];
   open_questions: string[];
 };
+
+// ---------------- Saathi Research ----------------
+
+export type ResearchStep = { question: string; tools: string[]; why: string };
+
+export type ResearchCheck = { item: string; status: "ok" | "risk" | "gap"; detail: string; refs: string[] };
+
+export type ResearchGap = {
+  id: string;
+  title: string;
+  detail: string;
+  owner: string;
+  owner_uid: string | null;
+  owner_name: string;
+  due_at: string | null;
+  severity: "high" | "medium" | "low";
+  refs: string[];
+  task_id: string | null;
+  assignee_uid?: string;
+};
+
+export type ResearchReport = {
+  title: string;
+  readiness: "ready" | "at_risk" | "not_ready" | "not_applicable";
+  verdict: string;
+  checklist: ResearchCheck[];
+  findings: { text: string; refs: string[] }[];
+  gaps: ResearchGap[];
+  unknowns: string[];
+  charts?: (Chart & { ref: string })[];
+};
+
+export type ResearchStatus = "planning" | "awaiting_plan" | "queued" | "running" | "retrying" | "cancelling" | "done" | "cancelled" | "failed";
+
+export type ResearchRun = {
+  id: string;
+  uid: string;
+  goal: string;
+  title?: string;
+  template: string;
+  context?: Record<string, string>;
+  status: ResearchStatus;
+  plan?: { title: string; steps: ResearchStep[] };
+  report?: ResearchReport;
+  notes?: string[];
+  metrics?: { duration_ms?: number; tool_calls?: number; agents?: number; sources_cited?: number; evidence_seen?: number; claims?: number; dropped_unverified?: number };
+  error?: string;
+  created_at?: Timestamp;
+  started_at?: Timestamp;
+  completed_at?: Timestamp;
+  shared_to?: string[];
+};
+
+export type ResearchEvent = { id: string; kind: "phase" | "tool" | "result" | "step_done" | "done" | "error"; text: string; step?: number | null; tool?: string; ts?: Timestamp };

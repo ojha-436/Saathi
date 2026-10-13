@@ -11,6 +11,7 @@ import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } 
 import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
+import { ReportBody } from "./Research";
 import { notifyLevel } from "./Sidebar";
 
 /** Highlights @Name tokens for people actually mentioned on the message (and @channel). */
@@ -428,6 +429,16 @@ function MessageRow({
     <>
       {m.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-ink">{withMentions(m.text, m.mentions, users, uid)}</p>}
       {m.file && <FileCard file={m.file} />}
+      {m.research && (
+        <div className="mt-2 w-full max-w-2xl rounded-xl border border-border bg-surface p-3">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-saffron-ink">
+            <Sparkles size={13} aria-hidden /> Saathi Research · shared by {m.research.by}
+            {m.research.removed > 0 && <span className="font-normal text-muted">· {m.research.removed} item(s) left out (sources not visible to everyone here)</span>}
+          </p>
+          <p className="mb-2 text-sm font-semibold">{m.research.report.title}</p>
+          <ReportBody report={m.research.report} compact />
+        </div>
+      )}
       {m.handover_id && (
         <button
           onClick={() => open({ kind: "handover", chatId, id: m.handover_id })}

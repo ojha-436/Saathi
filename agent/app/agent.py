@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from google.adk.agents import Agent
-from google.adk.agents.run_config import RunConfig
+from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -13,7 +13,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.genai import types
 
-from . import ai
+from . import ai, resilience
 from .config import AGENT_MODEL, AGENT_THINKING, COMPANY, TZ
 from .firebase import db, user_profile
 from .search import search, user_chats
@@ -412,17 +412,21 @@ How to work:
 
 agent = Agent(
     name="saathi",
-    model=AGENT_MODEL,
+    model=resilience.model(AGENT_MODEL),
     description="Personal work assistant with permission-aware access to the user's chats, files and tasks.",
     instruction=_instruction,
     tools=TOOLS,
     generate_content_config=types.GenerateContentConfig(
         temperature=0.2, thinking_config=types.ThinkingConfig(thinking_level=AGENT_THINKING) if AGENT_THINKING else None
     ),
+    on_model_error_callback=resilience.on_model_error(
+        "I'm getting a lot of requests right now and couldn't finish that. Please try again in a minute."),
 )
 
 # A normal answer takes 2-5 model calls; cap runaway tool loops (ADK's default allows 500) to bound cost and latency.
-RUN_CONFIG = RunConfig(max_llm_calls=15)
+# Tools are synchronous (Firestore, embeddings, BigQuery): run them in a thread pool so one user's tool call never blocks
+# the event loop that serves every other request on this instance, and parallel function calls really run in parallel.
+RUN_CONFIG = RunConfig(max_llm_calls=15, tool_thread_pool_config=ToolThreadPoolConfig(max_workers=16))
 
 session_service = InMemorySessionService()
 runner = Runner(app_name=APP_NAME, agent=agent, session_service=session_service)
