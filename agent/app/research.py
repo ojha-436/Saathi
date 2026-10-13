@@ -41,8 +41,10 @@ CALLS_PER_RESEARCHER = 7  # tool calls each researcher may make (≈ 40 per run 
 RUN_BUDGET_S = 300
 MAX_RUNNING_PER_ORG = 5
 
+from .specs import spec_check, standards_library  # noqa: E402
+
 TOOLS = {f.__name__: f for f in (search_workspace, lookup_document, revision_status, find_decisions, similar_incidents, promise_record,
-                                 plant_data, shift_handover, who_owes, get_calendar, get_message_context)}
+                                 plant_data, shift_handover, who_owes, get_calendar, get_message_context, spec_check, standards_library)}
 TOOL_HELP = {
     "search_workspace": "chats, files, meetings, records, knowledge hub, email and Drive the user can access (meaning + identifiers)",
     "lookup_document": "drawings, test certificates (MTC), inspection reports and quotes with their extracted fields",
@@ -55,6 +57,8 @@ TOOL_HELP = {
     "who_owes": "open tasks other people owe the user",
     "get_calendar": "the user's calendar (inspection dates, meetings)",
     "get_message_context": "the messages around one chat message",
+    "spec_check": "Spec Check verdicts: whether each mill test certificate (by heat number) meets the approved limits, property by property",
+    "standards_library": "company standards, specifications, procedures and checklists (Agent Search), with page numbers",
 }
 REF_RE = re.compile(r"\b(?:msg|file|meet|dec|rec|ho|kn|mail|drive|std|chart):[A-Za-z0-9_\-/.]*[A-Za-z0-9_\-/]")
 
@@ -64,7 +68,8 @@ TEMPLATES = {
         "hint": "Are we ready for an inspection or audit? Checks drawings, certificates, NCRs, test reports, decisions and promises.",
         "guide": """This is an INSPECTION READINESS review (customer, RDSO or audit). Cover, adapted to the goal:
 1. Drawings: every drawing for the product is at its current released revision; flag any superseded or draft revision still in use.
-2. Material certificates (MTC / test certificates): present for the lots or heats concerned, and any values or concerns mentioned.
+2. Material certificates (MTC / test certificates): present for every lot or heat concerned, and their Spec Check verdicts.
+   Check the company checklist and specifications in the standards library for what the inspection requires.
 3. Open NCRs and defects: status, containment, root cause, closure.
 4. Inspection and test reports (weld, UT, dimensional, first article): complete, pending or missing.
 5. Decisions and deviations that affect the product (and whether any were superseded).
@@ -333,6 +338,8 @@ TOOL_VERB = {
     "who_owes": lambda a: f"Checking what's pending{(' with ' + a['person']) if a.get('person') else ' with others'}",
     "get_calendar": lambda a: "Checking the calendar",
     "get_message_context": lambda a: "Reading the conversation around a message",
+    "spec_check": lambda a: f"Checking certificate {a.get('heat_or_file', '')} against approved limits",
+    "standards_library": lambda a: f"Looking up the standards library: “{a.get('query', '')}”",
 }
 
 

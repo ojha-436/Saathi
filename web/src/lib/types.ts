@@ -115,6 +115,7 @@ export type Message = {
     status?: string;
     doc?: DocSummary;
     ocr?: { engine: string; pages: number; confidence: number | null } | null;
+    spec?: SpecSummary;
   };
   decision?: string;
   handover_id?: string;
@@ -469,3 +470,61 @@ export type ResearchRun = {
 };
 
 export type ResearchEvent = { id: string; kind: "phase" | "tool" | "result" | "step_done" | "done" | "error"; text: string; step?: number | null; tool?: string; ts?: Timestamp };
+
+// ---------------- Spec Check / Standards Library ----------------
+
+export type SpecVerdict = "pass" | "fail" | "incomplete" | "no_limits";
+
+export type SpecSummary = { verdict: SpecVerdict; fails: number; missing: number; grade: string; heat_no: string; grade_mismatch: boolean };
+
+export type SpecRow = {
+  property: string;
+  label: string;
+  unit: string;
+  min: number | null;
+  max: number | null;
+  test_temp_c: number | null;
+  value: number | null;
+  status: "pass" | "fail" | "missing" | "info";
+  note: string;
+  source: { standard_id: string; standard?: string; clause?: string; page?: number; ref: string };
+};
+
+export type SpecCheck = {
+  status: "done" | "none";
+  file_id: string;
+  file_name?: string;
+  chat_id?: string;
+  verdict: SpecVerdict;
+  grade: string;
+  certificate_no?: string;
+  heat_no?: string;
+  vendor?: string;
+  po_no?: string;
+  thickness_mm?: number | null;
+  drawing?: { drawing_no: string; rev: string; grade: string | null; ref?: string } | null;
+  grade_mismatch: boolean;
+  rows: SpecRow[];
+  notes?: string[];
+  ts?: string;
+  upload_to_verdict_ms?: number | null;
+};
+
+export type StandardDoc = { id: string; name: string; title?: string; doc_no?: string; status: "processing" | "ready" | "failed"; limits: number; indexed: boolean; uploaded_by_name?: string; ts?: string; error?: string };
+
+export type SpecLimit = {
+  id: string;
+  standard_id: string;
+  standard: string;
+  grade: string;
+  property: string;
+  min: number | null;
+  max: number | null;
+  unit: string;
+  thickness_min_mm: number | null;
+  thickness_max_mm: number | null;
+  test_temp_c: number | null;
+  clause: string;
+  page: number;
+  status: "proposed" | "approved" | "rejected";
+};

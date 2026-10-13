@@ -14,7 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research
+from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, specs
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, SAATHI_ROLE, TZ
@@ -35,6 +35,7 @@ app.include_router(handover.router)
 app.include_router(knowledge.router)
 app.include_router(live.router)
 app.include_router(research.router)
+app.include_router(specs.router)
 if SAATHI_ROLE in ("worker", "all"):
     app.include_router(jobs.router)  # Cloud Tasks targets; the worker service is private
 app.add_middleware(
@@ -373,6 +374,8 @@ def delete_chat_everything(chat_id: str) -> None:
                    ("decisions", db.collection("decisions").where(filter=FieldFilter("chat_id", "==", chat_id))),
                    ("handovers", db.collection("handovers").where(filter=FieldFilter("chat_id", "==", chat_id)))):
         for s in q.stream():
+            if col == "files":
+                db.collection("spec_checks").document(s.id).delete()
             if col == "files" and s.to_dict().get("gcs_path"):
                 try:
                     bucket.blob(s.get("gcs_path")).delete()

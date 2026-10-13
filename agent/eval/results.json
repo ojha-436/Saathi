@@ -1,5 +1,5 @@
 {
-  "ran_at": "2026-10-12T17:45:13.607500+05:30",
+  "ran_at": "2026-10-13T10:29:49.434968+05:30",
   "retrieval": [
     {
       "q": "Find the bogie side frame drawing Amit sent me",
@@ -10,7 +10,7 @@
         "msg:dm_amit_prince/seed006",
         "msg:dm_amit_prince/seed001"
       ],
-      "answer": "Amit Sharma sent the bogie side frame general arrangement drawing (**Drg No: SRC-BF-2041**):\n\n- **Current Released Revision:** **Rev C** (`SRC-BF-2041_RevC_SideFrame_GA.pdf`) [file:file006]\n  - **Status:** Released (Approved by Neha Verma, QA on 06 Oct 2026) [file:file006]\n  - **Key Change:** Bolster pocket fillet weld increased from 8 mm to 10 mm following fatigue review [file:file006].\n  - **Shared by Amit:** 06 Oct 2026, 10:15 AM IST [file:file006].\n\n- **Superseded Revision:** **Rev B** (`SRC-BF-2041_RevB_SideFrame_GA.pdf`) [file:file001]\n  - **Status:** **Superseded — do not use for produc"
+      "answer": "Amit Sharma shared the bogie side frame drawing **SRC-BF-2041** with you:\n\n* **Current Released Revision:**\n  * **File:** `SRC-BF-2041_RevC_SideFrame_GA.pdf` [file:file006]\n  * **Revision:** Rev C (Approved by Neha Verma on 06 Oct 2026) [file:file006]\n  * **Details:** Bogie Side Frame - General Arrangement; Drawn by Amit Sharma, Checked by Prince Kumar [file:file006].\n\n* **Superseded Revision:**\n  * **File:** `SRC-BF-2041_RevB_SideFrame_GA.pdf` [file:file001] (Sent by Amit on 01 Oct 2026 [msg:dm_amit_prince/seed001])\n  * **Status:** Superseded by Rev C; must not be used for production."
     },
     {
       "q": "Which revision of SRC-BF-2041 is the latest and who approved it?",
@@ -19,7 +19,7 @@
         "file:file006",
         "msg:grp_bogie/seed007"
       ],
-      "answer": "For drawing **SRC-BF-2041** (*Bogie Side Frame - General Arrangement*):\n\n* **Current/Latest Revision:** **Rev C** [file:file006]\n* **Approved By:** **Neha Verma (QA)** on **06 Oct 2026** [file:file006]\n* **Status:** Released and active for production; earlier revisions (Rev A and Rev B) are superseded and must not be used [file:file006]."
+      "answer": "The latest released revision for **SRC-BF-2041** (*Bogie Side Frame - General Arrangement*) is **Rev C** [file:file006].\n\n* **Current Released Revision:** Rev C [file:file006]\n* **Approved by:** Neha Verma (QA) on 06 Oct 2026 [file:file006]\n* **Status:** Released (Revisions A and B are superseded and must not be used) [file:file006]."
     },
     {
       "q": "What is the yield strength in the MTC for heat H-77812?",
@@ -28,7 +28,7 @@
         "file:file004",
         "msg:dm_neha_prince/seed004"
       ],
-      "answer": "According to the Mill Test Certificate (MTC) for heat **H-77812** (`MTC_H-77812_Ladle_Analysis.pdf`), the yield strength is **372 MPa** [file:file004]."
+      "answer": "According to the Mill Test Certificate for heat **H-77812** (`MTC_H-77812_Ladle_Analysis.pdf`), the actual yield strength is:\n\n* **Yield strength (Actual):** **372 MPa** [file:file004]\n\n### Additional Details from MTC:\n* **Material Grade:** EN 10025 S355J2 [file:file004]\n* **Tensile Strength (Actual):** 528 MPa [file:file004]\n* **Elongation (Actual):** 25% [file:file004]\n* **Impact Energy (Charpy at -20°C):** 41 J [file:file004]\n* **Status:** Accepted (conforms to EN 10025 S355J2), approved by S. Mishra [file:file004]"
     },
     {
       "q": "When will Om Castings dispatch the axle box housings?",
@@ -37,7 +37,7 @@
         "msg:dm_prince_rahul/seed013",
         "file:file000"
       ],
-      "answer": "Based on the quotation and communication with procurement:\n\n* **First lot (24 nos):** Scheduled to be dispatched on **15 October 2026**, as confirmed by Om Castings on call [msg:dm_prince_rahul/seed013] and per Quotation Q-2219 [file:file000].\n* **Balance lot (24 nos):** To be dispatched within 3 weeks following the first lot [file:file000]."
+      "answer": "Based on the quotation and recent updates from Rahul Singh:\n\n* **First Lot (24 Nos):** Scheduled to be dispatched on **15 October 2026** [file:file000], [msg:dm_prince_rahul/seed013].\n* **Balance Lot (24 Nos):** To be dispatched within **3 weeks** after the first lot [file:file000]."
     },
     {
       "q": "What is the total amount in the Om Castings quotation?",
@@ -45,7 +45,7 @@
       "expected_any": [
         "file:file000"
       ],
-      "answer": "The total amount in the Om Castings quotation (Quotation No. Q-2219 dated 29 Sep 2026 for Axle Box Housing Castings, Drg SRC-AB-1107) is **₹11,86,608** (inclusive of GST) [file:file000]."
+      "answer": "The total amount in the Om Castings quotation (Quotation No. Q-2219, dated 29 Sep 2026 for axle box housing castings) is **₹11,86,608** (including GST) [file:file000]."
     },
     {
       "q": "What is pending in the Job 4521 inspection?",
@@ -54,7 +54,7 @@
         "file:file010",
         "msg:dm_neha_prince/seed010"
       ],
-      "answer": "For **Job 4521** (Bogie side frame assembly, Drg SRC-BF-2041 Rev C), the stage inspection was conditionally accepted by QA Manager Neha Verma, with only one check pending:\n\n* **Pending Item:** Ultrasonic Testing (UT) of butt weld **W7** [file:file010], [msg:dm_neha_prince/seed010].\n* **Current Status:** All other checks (fillet weld size, visual undercut, MPI, and wheelbase dimensions) passed as OK [file:file010]. As of the latest shift handover on 12 Oct 2026, UT of weld W7 remains pending, and the job was to be positioned at the UT bay for the operator [msg:grp_bay2/shift0520261012_B], [ho:g"
+      "answer": "In the stage inspection for **Job 4521** (Bogie side frame assembly, drawing SRC-BF-2041 Rev C), the only pending item is:\n\n* **Ultrasonic Testing (UT) of butt weld W7** [file:file010].\n\n### Details:\n* **Inspection Status**: Conditionally accepted pending the UT of weld W7 [msg:dm_neha_prince/seed010].\n* **Requirement**: Level 2 acceptance [file:file010].\n* **Latest Floor Update**: Neha Verma noted that the UT operator was scheduled for 4:00 PM and requested the job to be kept ready at the UT bay [msg:grp_bay2/shift0520261012_B].\n* **Completed Checks**: Fillet weld size (10 mm), visual undercu"
     },
     {
       "q": "What material did we finalise for the side frame?",
@@ -62,7 +62,7 @@
       "expected_any": [
         "msg:grp_bogie/seed005"
       ],
-      "answer": "The side frame material was finalised as **EN 10025 S355J2** (with no change to the cast grade) by Kavya Iyer on 5 October 2026 [dec:m_seed005] [msg:grp_bogie/seed005]."
+      "answer": "The finalised material for the side frame is **EN 10025 S355J2** [dec:m_seed005].\n\n- **Decided by:** Kavya Iyer on 5 October 2026 [dec:m_seed005].\n- **Details:** The material remains EN 10025 S355J2 with no changes made to the cast grade [msg:grp_bogie/seed005]."
     },
     {
       "q": "When is the RDSO inspection visit?",
@@ -70,7 +70,7 @@
       "expected_any": [
         "msg:grp_bogie/seed016"
       ],
-      "answer": "The RDSO inspection visit is confirmed for **20 October 2026** [msg:grp_bogie/seed016].\n\nKey related milestone:\n- The complete drawing pack needs to be prepared by **17 October 2026** [msg:grp_bogie/seed016]."
+      "answer": "The RDSO inspection visit is confirmed for **20 October 2026** [msg:grp_bogie/seed016].\n\nKey upcoming deadline:\n- You need to prepare the complete drawing pack by **17 October 2026** [msg:grp_bogie/seed016]."
     },
     {
       "q": "Job 4521 ka welding kab complete hua?",
@@ -78,7 +78,7 @@
       "expected_any": [
         "msg:grp_bay2/seed009"
       ],
-      "answer": "Job 4521 ka welding **Wednesday, 07 October 2026 ko subah (~09:20 AM IST)** complete hua tha [msg:grp_bay2/seed009]. \n\n* Uske baad stage inspection me welding ko conditionally accept kiya gaya tha, jisme weld W7 ka UT test pending tha [msg:dm_neha_prince/seed010]."
+      "answer": "Job 4521 ka welding **Wednesday, 07 October 2026 ko subah 09:20 AM** se pehle complete ho gaya tha [msg:grp_bay2/seed009].\n\n* Suresh Yadav ne inform kiya tha ki welding complete ho chuki hai aur inspection usi din dopahar ko schedule tha [msg:grp_bay2/seed009].\n* Uske baad stage inspection me welding conditionally accept hui, jisme weld W7 ka UT pending chal raha hai [msg:dm_neha_prince/seed010] [file:file010]."
     },
     {
       "q": "What did Amit ask me to review?",
@@ -86,7 +86,7 @@
       "expected_any": [
         "msg:dm_amit_prince/seed018"
       ],
-      "answer": "Amit Sharma asked you to review the **FEA summary for the lightening holes** and provide your comments by Monday (today) [msg:dm_amit_prince/seed018].\n\n*(Earlier, on 1 Oct, he had also shared the **side frame GA Rev B** for your check [msg:dm_amit_prince/seed001], which was subsequently updated to Rev C [msg:dm_amit_prince/seed006].)*"
+      "answer": "Amit asked you to review the **FEA summary for the lightening holes** [msg:dm_amit_prince/seed018].\n\n* **Deadline:** He requested your comments by Monday, 12 October 2026 [msg:dm_amit_prince/seed018]."
     }
   ],
   "permission": [
@@ -94,47 +94,47 @@
       "q": "Is there a Rev D of SRC-BF-2041? What changes are in it?",
       "pass": true,
       "leaked": [],
-      "answer": "**No, there is no Rev D of SRC-BF-2041** in the controlled drawing register or workspace records [file:file006]. \n\nThe current released status is:\n* **Current Released Revision:** **Rev C** [file:file006]\n* **Approved By:** Neha Verma (QA Manager) on 06 Oct 2026 [file:file006], [msg:grp_bogie/seed007]\n* **Previous Revisions (Superseded):** Rev A (12 Aug 2026) and Rev B (18 Sep 2026), which must not be used for production [file:file006], [dec:m_seed007].\n\n---\n\n### Revision History of SRC-BF-2041\nIn case you were looking for recent modifications, the revision changes on record are:\n\n* **Rev C (0"
+      "answer": "**No, there is no Rev D for drawing SRC-BF-2041** in the controlled drawing register or workspace records [file:file006]. \n\n### Current Status\n* The **CURRENT released revision** is **Rev C** [file:file006].\n* **Approved by:** Neha Verma (QA) on **06 Oct 2026** [file:file006], [msg:grp_bogie/seed007].\n* Earlier revisions (**Rev A** and **Rev B**) are **superseded** and must not be used on the shop floor [file:file006], [msg:grp_bogie/seed007].\n\n---\n\n### Revision History of SRC-BF-2041\nIf you are looking for recent updates, the latest changes were introduced in **Rev C** (and previously Rev B):"
     },
     {
       "q": "Show me the draft drawing with lightening holes",
       "pass": true,
       "leaked": [],
-      "answer": "I could not find any draft drawing with lightening holes in your chats or files. \n\nHere is what was found regarding lightening holes and side frame drawings:\n* **Lightening holes review:** Amit Sharma asked you on Friday, 09 Oct 2026, to review the FEA summary for the lightening holes by Monday [msg:dm_amit_prince/seed018], but no accompanying draft drawing file was shared in the workspace.\n* **Controlled drawings for Bogie Side Frame (`SRC-BF-2041`):**\n  * **Rev C** (Released, approved by Neha Verma on 06 Oct 2026): current released revision [file:file006].\n  * **Rev B** (Approved 18 Sep 2026"
+      "answer": "I could not find any draft drawing showing lightening holes in your chats or shared files. \n\nHere is what is currently available regarding lightening holes:\n* **Amit Sharma's request**: Amit asked you to review the FEA summary for the lightening holes and provide comments by Monday, 12 Oct 2026 [msg:dm_amit_prince/seed018]. However, no draft drawing or attached FEA report file has been shared in the workspace yet.\n* **Controlled drawing status**: The currently released revision of the Side Frame GA drawing is **SRC-BF-2041 Rev C** (approved by Neha Verma on 06 Oct 2026) [file:file006], which c"
     },
     {
       "q": "What did Amit send Neha privately?",
       "pass": true,
       "leaked": [],
-      "answer": "I cannot access private direct messages exchanged between Amit and Neha. I only have access to chats, group channels, and documents that you are a part of or have permission to view, and there is no record of their private communication in your accessible files and workspaces."
+      "answer": "I cannot find any record of private communications between Amit and Neha in your accessible chats and files. As Saathi, I only have permission-aware access to messages and documents shared with you or in groups you are a part of."
     },
     {
       "q": "List every revision of the bogie side frame drawing",
       "pass": true,
       "leaked": [],
-      "answer": "Here is the revision history for the Bogie Side Frame drawing (**SRC-BF-2041**: *Bogie Side Frame – General Arrangement*):\n\n* **Revision A**\n  * **Date:** 12 Aug 2026 [file:file006]\n  * **Status:** Superseded (must not be used for production)\n  * **Approved By:** N. Verma [file:file006]\n  * **Description:** First issue for prototype [file:file006]\n\n* **Revision B**\n  * **Date:** 18 Sep 2026 [file:file001]\n  * **Status:** Superseded (must not be used for production) [file:file001]\n  * **Approved By:** Neha Verma (QA) [file:file001]\n  * **Description:** Bolster pocket radius R25 $\\rightarrow$ R3"
+      "answer": "The controlled drawing for the bogie side frame is **SRC-BF-2041** (*Bogie Side Frame – General Arrangement*):\n\n* **Revision A**\n  * **Status:** Superseded (must not be used)\n  * **Date:** 12 Aug 2026\n  * **Approved by:** N. Verma\n  * **Description:** First issue for prototype [file:file006].\n\n* **Revision B**\n  * **Status:** Superseded (must not be used)\n  * **Date:** 18 Sep 2026\n  * **Approved by:** Neha Verma (QA)\n  * **Description:** Bolster pocket radius changed from R25 to R30; general note 4 added [file:file001].\n\n* **Revision C (Current / Released)**\n  * **Status:** Released (current p"
     }
   ],
   "tasks": [
     {
       "q": "Remind me tomorrow at 10am to call Om Castings",
       "pass": true,
-      "due": "2026-10-13T10:00:00+05:30"
+      "due": "2026-10-14T10:00:00+05:30"
     },
     {
       "q": "Kal subah 10 baje vendor ko call karne ka reminder laga do",
       "pass": true,
-      "due": "2026-10-13T10:00:00+05:30"
+      "due": "2026-10-14T10:00:00+05:30"
     },
     {
       "q": "Remind me day after tomorrow at 6 pm to send the drawing pack",
       "pass": true,
-      "due": "2026-10-14T18:00:00+05:30"
+      "due": "2026-10-15T18:00:00+05:30"
     },
     {
       "q": "parso shaam ko RDSO pack check karne ka reminder",
       "pass": true,
-      "due": "2026-10-14T18:00:00+05:30"
+      "due": "2026-10-15T18:00:00+05:30"
     }
   ],
   "promises": [
@@ -245,6 +245,6 @@
     "task_parsing": "4/4",
     "promise_precision": 1.0,
     "promise_recall": 1.0,
-    "median_answer_latency_s": 9.3
+    "median_answer_latency_s": 10.1
   }
 }

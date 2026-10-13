@@ -213,6 +213,13 @@ def process_file(chat_id: str, msg_id: str, file_id: str) -> None:
     data = bucket.blob(f["gcs_path"]).download_as_bytes()
     mime = f.get("mime") or "application/pdf"
     ocr = ocr_document(data, mime)
+    if ocr and ocr.get("text"):
+        try:  # certificates: start Spec Check now, in parallel with the slower full document extraction
+            from .specs import early_check
+
+            early_check(file_id, msg_id, ocr["text"])
+        except Exception:
+            log.exception("early spec check failed to start for %s", file_id)
     try:
         doc = extract_document(data, mime, f.get("name", ""), ocr["text"] if ocr else "")
     except Exception:
@@ -222,7 +229,13 @@ def process_file(chat_id: str, msg_id: str, file_id: str) -> None:
 
     fields = doc.model_dump(exclude={"full_text"})
     ocr_meta = {k: v for k, v in (ocr or {}).items() if k != "text"} or None
-    file_ref.update({"status": "ready", "doc": fields, "extracted_text": doc.full_text[:20000], "ocr": ocr_meta})
+    file_ref.update({"status": "ready", "doc": fields, "extracted_text": doc.full_text[:20000], "ocr": ocr_meta, "msg_id": msg_id})
+    try:
+        from .specs import maybe_check
+
+        maybe_check(file_id, doc.doc_type)
+    except Exception:
+        log.exception("spec check enqueue failed for %s", file_id)
     msg_ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
     msg_ref.update(
         {

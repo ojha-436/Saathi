@@ -108,6 +108,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       else if (ref.startsWith("dec:")) open({ kind: "decisions", id: ref.slice(4) });
       else if (ref.startsWith("kn:")) open({ kind: "live" });
       else if (ref.startsWith("research:")) open({ kind: "research", id: ref.slice(9) });
+      else if (ref.startsWith("std:")) open({ kind: "quality", tab: "standards" });
       else if (ref.startsWith("ev:")) open({ kind: "live", eventId: ref.slice(3) });
       else if (ref.startsWith("ho:")) {
         const id = ref.slice(3);
@@ -316,7 +317,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             {view.kind === "decisions" && <DecisionsView focusId={view.id} />}
             {view.kind === "live" && !guest && <LiveView key={view.eventId ?? view.sessionId ?? "home"} sessionId={view.sessionId} eventId={view.eventId} />}
             {view.kind === "handover" && <HandoverView key={view.chatId} chatId={view.chatId} focusId={view.id} />}
-            {view.kind === "quality" && !guest && <QualityView recordId={view.recordId} records={recordList} register={register} />}
+            {view.kind === "quality" && !guest && <QualityView key={view.tab ?? "q"} recordId={view.recordId} records={recordList} register={register} initialTab={view.tab} />}
             {view.kind === "gmail" && connected.includes("gmail") && <GmailView />}
             {view.kind === "calendar" && connected.includes("calendar") && <CalendarView />}
             {view.kind === "drive" && connected.includes("drive") && <DriveView />}

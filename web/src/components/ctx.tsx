@@ -13,7 +13,7 @@ export type View =
   | { kind: "admin" }
   | { kind: "meeting"; id: string }
   | { kind: "chats" }
-  | { kind: "quality"; recordId?: string }
+  | { kind: "quality"; recordId?: string; tab?: "records" | "drawings" | "standards" }
   | { kind: "decisions"; id?: string }
   | { kind: "handover"; chatId: string; id?: string }
   | { kind: "live"; sessionId?: string; eventId?: string }

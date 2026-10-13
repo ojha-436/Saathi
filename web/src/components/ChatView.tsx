@@ -12,6 +12,7 @@ import { useWs } from "./ctx";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
 import { ReportBody } from "./Research";
+import { SpecBadge } from "./SpecCheck";
 import { notifyLevel } from "./Sidebar";
 
 /** Highlights @Name tokens for people actually mentioned on the message (and @channel). */
@@ -429,6 +430,7 @@ function MessageRow({
     <>
       {m.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-ink">{withMentions(m.text, m.mentions, users, uid)}</p>}
       {m.file && <FileCard file={m.file} />}
+      {m.file?.spec && <SpecBadge file={m.file} chatId={chatId} />}
       {m.research && (
         <div className="mt-2 w-full max-w-2xl rounded-xl border border-border bg-surface p-3">
           <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-saffron-ink">
