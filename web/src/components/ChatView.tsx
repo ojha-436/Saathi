@@ -39,6 +39,7 @@ import {
   ListNumbers,
   MessageSquareQuote,
   TextAa,
+  Heading,
   TextBold,
   TextItalic,
   TextStrike,
@@ -653,6 +654,43 @@ const TEXT_COLORS = ["#202124", "#d93025", "#e37400", "#1e8e3e", "#1a73e8", "#84
 const HIGHLIGHTS = ["#fff3a3", "#ceead6", "#d2e3fc", "#fad2cf", "#fde7c3", "#f3e8fd"];
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28];
 
+/** Slash commands: type "/" in the message box, then a name (/h1, /bold, /red…) and press Enter. */
+type SlashCtx = { editor: Editor; link: () => void; quote: () => void };
+type SlashCmd = { id: string; label: string; hint: string; keys: string; icon: typeof Heading; run: (c: SlashCtx) => void };
+const SLASH: SlashCmd[] = [
+  { id: "text", label: "Normal text", hint: "/text", keys: "text normal paragraph clear plain reset", icon: TextAa, run: ({ editor }) => editor.chain().focus().setParagraph().unsetAllMarks().run() },
+  { id: "h1", label: "Heading 1", hint: "/h1", keys: "h1 heading1 heading title", icon: Heading, run: ({ editor }) => editor.chain().focus().setHeading({ level: 1 }).run() },
+  { id: "h2", label: "Heading 2", hint: "/h2", keys: "h2 heading2 heading subtitle", icon: Heading, run: ({ editor }) => editor.chain().focus().setHeading({ level: 2 }).run() },
+  { id: "h3", label: "Heading 3", hint: "/h3", keys: "h3 heading3 heading", icon: Heading, run: ({ editor }) => editor.chain().focus().setHeading({ level: 3 }).run() },
+  { id: "bold", label: "Bold", hint: "/bold", keys: "bold b strong", icon: TextBold, run: ({ editor }) => editor.chain().focus().toggleBold().run() },
+  { id: "italic", label: "Italic", hint: "/italic", keys: "italic i emphasis", icon: TextItalic, run: ({ editor }) => editor.chain().focus().toggleItalic().run() },
+  { id: "underline", label: "Underline", hint: "/underline", keys: "underline u", icon: TextUnderline, run: ({ editor }) => editor.chain().focus().toggleUnderline().run() },
+  { id: "strike", label: "Strikethrough", hint: "/strike", keys: "strike strikethrough cross delete", icon: TextStrike, run: ({ editor }) => editor.chain().focus().toggleStrike().run() },
+  { id: "highlight", label: "Highlight (yellow)", hint: "/highlight", keys: "highlight yellow marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#fff3a3" }).run() },
+  { id: "highlight-green", label: "Highlight green", hint: "/highlight-green", keys: "highlight green marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#ceead6" }).run() },
+  { id: "highlight-blue", label: "Highlight blue", hint: "/highlight-blue", keys: "highlight blue marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#d2e3fc" }).run() },
+  { id: "highlight-pink", label: "Highlight pink", hint: "/highlight-pink", keys: "highlight pink red marker", icon: Highlighter, run: ({ editor }) => editor.chain().focus().setHighlight({ color: "#fad2cf" }).run() },
+  { id: "nohighlight", label: "Remove highlight", hint: "/nohighlight", keys: "nohighlight remove highlight clear", icon: Highlighter, run: ({ editor }) => editor.chain().focus().unsetHighlight().run() },
+  { id: "red", label: "Red text", hint: "/red", keys: "red color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#d93025").run() },
+  { id: "orange", label: "Orange text", hint: "/orange", keys: "orange color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#e37400").run() },
+  { id: "green", label: "Green text", hint: "/green", keys: "green color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#1e8e3e").run() },
+  { id: "blue", label: "Blue text", hint: "/blue", keys: "blue color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#1a73e8").run() },
+  { id: "purple", label: "Purple text", hint: "/purple", keys: "purple color colour text", icon: FontColor, run: ({ editor }) => editor.chain().focus().setColor("#8430ce").run() },
+  { id: "nocolor", label: "Default text colour", hint: "/nocolor", keys: "nocolor default color colour clear black", icon: FontColor, run: ({ editor }) => editor.chain().focus().unsetColor().run() },
+  { id: "small", label: "Small text", hint: "/small", keys: "small size smaller", icon: TextAa, run: ({ editor }) => editor.chain().focus().setFontSize("12px").run() },
+  { id: "large", label: "Large text", hint: "/large", keys: "large size bigger big", icon: TextAa, run: ({ editor }) => editor.chain().focus().setFontSize("20px").run() },
+  { id: "huge", label: "Huge text", hint: "/huge", keys: "huge size biggest", icon: TextAa, run: ({ editor }) => editor.chain().focus().setFontSize("28px").run() },
+  { id: "normalsize", label: "Default text size", hint: "/normalsize", keys: "normalsize default size reset", icon: TextAa, run: ({ editor }) => editor.chain().focus().unsetFontSize().run() },
+  { id: "bullet", label: "Bulleted list", hint: "/bullet", keys: "bullet bullets list ul unordered", icon: ListBullets, run: ({ editor }) => editor.chain().focus().toggleBulletList().run() },
+  { id: "numbered", label: "Numbered list", hint: "/numbered", keys: "numbered number list ol ordered", icon: ListNumbers, run: ({ editor }) => editor.chain().focus().toggleOrderedList().run() },
+  { id: "indent", label: "Increase indent", hint: "/indent", keys: "indent nest tab", icon: Indent, run: ({ editor }) => editor.chain().focus().sinkListItem("listItem").run() },
+  { id: "outdent", label: "Decrease indent", hint: "/outdent", keys: "outdent unindent", icon: Outdent, run: ({ editor }) => editor.chain().focus().liftListItem("listItem").run() },
+  { id: "quote", label: "Quotation marks", hint: "/quote", keys: "quote quotation marks", icon: MessageSquareQuote, run: ({ quote }) => quote() },
+  { id: "link", label: "Link", hint: "/link", keys: "link url href", icon: LinkSimple, run: ({ link }) => link() },
+  { id: "undo", label: "Undo", hint: "/undo", keys: "undo back", icon: Undo, run: ({ editor }) => editor.chain().focus().undo().run() },
+  { id: "redo", label: "Redo", hint: "/redo", keys: "redo forward", icon: Redo, run: ({ editor }) => editor.chain().focus().redo().run() },
+];
+
 function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat; title: string; parentId?: string; inputId?: string }) {
   const { toast, users, uid, account } = useWs();
   const chatId = chat.id;
@@ -665,6 +703,8 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
   const [emoji, setEmoji] = useState(false);
   const [fmt, setFmt] = useState(false);
   const [palette, setPalette] = useState<null | "color" | "highlight">(null);
+  const [slash, setSlash] = useState<string | null>(null); // text after "/" while the command menu is open
+  const [slashSel, setSlashSel] = useState(0);
   const [linkUrl, setLinkUrl] = useState<string | null>(null); // address being typed in the link bar (null = bar closed)
   const [, redraw] = useReducer((n: number) => n + 1, 0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -726,10 +766,42 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
     const m = /(^|\s)@([\w.]*)$/.exec(before);
     return m ? { q: m[2], len: m[2].length + 1 } : null;
   }
+  /** Is a "/command" being typed right before the cursor (start of a line or after a space)? */
+  function slashBefore(): { q: string; len: number } | null {
+    if (!editor) return null;
+    const { from, empty } = editor.state.selection;
+    if (!empty) return null;
+    const before = editor.state.doc.textBetween(Math.max(0, from - 30), from, "\n", "\n");
+    const m = /(^|\s)\/([a-z0-9-]*)$/i.exec(before);
+    return m ? { q: m[2].toLowerCase(), len: m[2].length + 1 } : null;
+  }
   function detectMention() {
     const m = mentionBefore();
     setQuery(m ? m.q : null);
     setSel(0);
+    const c = m ? null : slashBefore();
+    setSlash(c ? c.q : null);
+    setSlashSel(0);
+  }
+  const slashItems =
+    slash === null
+      ? []
+      : SLASH.map((c, i) => ({ c, i, rank: c.id === slash ? 0 : c.id.startsWith(slash) ? 1 : !slash || c.keys.split(" ").some((k) => k.startsWith(slash)) ? 2 : 3 }))
+          .filter((x) => x.rank < 3)
+          .sort((a, b) => a.rank - b.rank || a.i - b.i) // exact name first, then names that start with it, then keyword matches
+          .map((x) => x.c)
+          .slice(0, 9);
+
+  function runSlash(c: SlashCmd) {
+    if (!editor) return;
+    const m = slashBefore();
+    if (m) {
+      const to = editor.state.selection.from;
+      editor.chain().focus().deleteRange({ from: to - m.len, to }).run();
+    }
+    setSlash(null);
+    if (c.id === "link") setFmt(true);
+    c.run({ editor, link: setLink, quote: quoteMarks });
   }
 
   function pick(c: { id: string; name: string }) {
@@ -866,6 +938,22 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
         return true;
       }
     }
+    if (slashItems.length) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashSel((i) => (i + (e.key === "ArrowDown" ? 1 : slashItems.length - 1)) % slashItems.length);
+        return true;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        runSlash(slashItems[Math.min(slashSel, slashItems.length - 1)]);
+        return true;
+      }
+      if (e.key === "Escape") {
+        setSlash(null);
+        return true;
+      }
+    }
     if (e.key === "Enter" && !e.isComposing) {
       // inside a list, quote or code block Enter adds the next line; Ctrl+Enter always sends
       const inBlock = editor.isActive("listItem") || editor.isActive("blockquote") || editor.isActive("codeBlock");
@@ -989,6 +1077,30 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
           </form>
         )}
         <EditorContent editor={editor} />
+        {slashItems.length > 0 && candidates.length === 0 && (
+          <ul role="listbox" aria-label="Formatting commands" className="ws-pop absolute bottom-full left-2 z-30 mb-2 max-h-72 w-72 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
+            <li className="px-2 pb-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted" aria-hidden>Formatting</li>
+            {slashItems.map((c, i) => {
+              const Ico = c.icon;
+              return (
+                <li key={c.id} role="option" aria-selected={i === slashSel}>
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      runSlash(c);
+                    }}
+                    onMouseEnter={() => setSlashSel(i)}
+                    className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left", i === slashSel && "bg-hover")}
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand"><Ico size={16} /></span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.label}</span>
+                    <span className="shrink-0 text-[11px] text-muted">{c.hint}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {candidates.length > 0 && (
           <ul role="listbox" aria-label="Mention someone" className="ws-pop absolute bottom-full left-2 z-30 mb-2 w-72 rounded-xl border border-border bg-surface p-1 shadow-xl">
             {candidates.map((c, i) => (
