@@ -523,4 +523,11 @@ aside.blueprint-grid .text-saffron {
 
 /* Grammar check: our own click-to-fix popover replaces the library's hover tooltip */
 .grammar-tooltip { display: none !important; }
-.tiptap .grammar-error { cursor: pointer; }
+.tiptap .grammar-error {
+  cursor: pointer;
+  text-decoration: underline wavy #4285f4;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  background: rgba(66, 133, 244, 0.1);
+  border-radius: 2px;
+}

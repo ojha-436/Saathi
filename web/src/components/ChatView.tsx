@@ -60,9 +60,8 @@ import { docToText, needsDoc, type DocNode } from "@/lib/richtext";
 import { RichDoc } from "./RichDoc";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { GrammerCheckContentTipTap } from "opengrammer";
 import "opengrammer/styles";
+import { Grammar } from "@/lib/grammarExtension";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import Highlight from "@tiptap/extension-highlight";
@@ -741,6 +740,7 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
         Color,
         FontSize,
         Highlight.configure({ multicolor: true }),
+        Grammar,
         Placeholder.configure({ placeholder: () => live.current.placeholder }),
       ],
       editorProps: {
@@ -799,13 +799,6 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
     };
   }, [fix]);
 
-  // Rule-based grammar check (OpenGrammer, English only, runs in the browser: no AI, nothing leaves the page).
-  // Mistakes get a blue wavy underline; hovering shows the suggestion.
-  useEffect(() => {
-    if (!editor) return;
-    const checker = GrammerCheckContentTipTap(editor, { decorations: { Decoration, DecorationSet }, debounceMs: 800, autoCheckOnLoad: false, autoCheckOnBlur: true, debug: false, decorationAttributes: { title: "Click to see a suggestion" } });
-    return () => checker?.destroy();
-  }, [editor]);
 
   /** Is an "@name" being typed right before the cursor? */
   function mentionBefore(): { q: string; len: number } | null {
