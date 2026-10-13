@@ -25,7 +25,9 @@ def model(name: str = AGENT_MODEL) -> Gemini:
 
 
 def transient(error: BaseException) -> bool:
-    return isinstance(error, TimeoutError) or (isinstance(error, errors.APIError) and getattr(error, "code", None) in TRANSIENT)
+    from .ai import transient as is_transient
+
+    return is_transient(error)
 
 
 def on_model_error(degrade_text: str | None = None):
@@ -34,16 +36,19 @@ def on_model_error(degrade_text: str | None = None):
     async def callback(callback_context, llm_request, error):
         if not transient(error):
             return None  # genuine bugs still surface
-        log.warning("model %s unavailable (%s); falling back to %s", llm_request.model, getattr(error, "code", error), AGENT_FALLBACK_MODEL)
-        try:
-            llm_request.model = AGENT_FALLBACK_MODEL
-            last = None
-            async for response in model(AGENT_FALLBACK_MODEL).generate_content_async(llm_request, stream=False):
-                last = response
-            if last is not None:
-                return last
-        except Exception:
-            log.exception("fallback model failed too")
+        primary = llm_request.model
+        # a dropped connection usually succeeds on a fresh one: retry the primary once, then the fallback model
+        for name in ([primary] if not isinstance(error, errors.APIError) else []) + [AGENT_FALLBACK_MODEL]:
+            log.warning("model call failed (%s); retrying with %s", getattr(error, "code", type(error).__name__), name)
+            try:
+                llm_request.model = name
+                last = None
+                async for response in model(name).generate_content_async(llm_request, stream=False):
+                    last = response
+                if last is not None:
+                    return last
+            except Exception:
+                log.exception("retry with %s failed", name)
         if degrade_text is None:
             return None
         return LlmResponse(content=types.Content(role="model", parts=[types.Part(text=degrade_text)]))
