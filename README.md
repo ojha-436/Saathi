@@ -13,15 +13,19 @@ Team chat with a personal AI colleague built in. Saathi **finds any chat or file
 | Permission leaks (adversarial questions) | 0 | 0 |
 | Plain-language task parsing (date + hour, English & Hinglish) | 4/4 | — |
 | Promise detection precision / recall (20 labelled messages) | 1.0 / 1.0 | ≥ 0.80 precision |
-| Median answer latency | 7.2 s | < 5 s (not yet met) |
+| Median answer latency (retrieval-first + streaming) | 3.8 s (first words 2.8 s) | ≤ 4 s |
+| Spec Check comparator / certificate extraction | 20/20 · 2/2 | 100% |
+| Saathi Research gold-gap recall · claims with a verified source · leaks | 5/5 + 4/4 · 100% · 0 | ≥ 80% · 100% · 0 |
 
-Re-run with `uv run python -m eval.run_eval`, then `uv run python -m eval.export_web` to refresh the numbers shown on the landing page.
+Re-run with `uv run python -m eval.run_eval` and `uv run python -m eval.phase4_eval`, then `uv run python -m eval.export_web` to refresh the numbers shown on the landing page.
 
 ## Features
 
 | Area | What it does |
 | --- | --- |
-| Ask Saathi | ADK agent (Gemini 3.8 Flash, low thinking level) with 6 permission-scoped tools; every claim cited as a clickable source chip |
+| Ask Saathi | ADK agent (Gemini 3.8 Flash, low thinking level) with permission-scoped tools; retrieval-first (one model turn for most questions), answers stream as they're written; every claim cited as a clickable source chip; "How Saathi got this" under every answer |
+| Saathi Research | Give a goal (e.g. *"Are we ready for the RDSO inspection on 20 Oct?"*): a planner proposes questions you can edit, research agents run in parallel (ADK `ParallelAgent`) over your permission-scoped tools, a verifying agent writes the report and code re-checks every citation; live progress; every gap becomes a task in one click; sharing checks each source against the chat's members. Templates: inspection readiness, vendor comparison, custom |
+| Spec Check & Standards Library | Company specs, procedures and checklists indexed in **Agent Search**; Gemini extracts acceptance limits for QA approval. Every mill test certificate is checked automatically a few seconds after upload: Gemini reads the values, **code decides** pass/fail against the approved limits for the grade on the drawing's current revision (thickness bands, impact test temperature, units); a failure drafts the NCR |
 | Catch-up | “Today / 3 days / This week” brief: decisions, asks for you, files, open promises |
 | Promise capture | Commitments detected in any chat (English/Hinglish) → one-click tracked task → reminder via Cloud Scheduler |
 | Tasks without apps | “Kal subah 10 baje … reminder” → drafted task the user confirms |
@@ -54,8 +58,17 @@ agent/ FastAPI + Google ADK on Cloud Run (saathi-api, asia-south1)
   │          Document AI OCR (asia-south1) + Gemini 3.8 Flash extraction
   ├─ Channels: /api/channels (create, browse, join), /api/chats/{id}/members, PATCH/DELETE /api/chats/{id}
   ├─ /api/insights, /api/chats/{id}/ai-exclude, /api/cron/reminders (Cloud Scheduler, secret from Secret Manager)
+  ├─ Research API (/api/research …) and Spec Check / Standards API (/api/standards, /api/files/{id}/spec-check)
   └─ BigQuery streaming of assistant events
-Data: Firestore + Cloud Storage + Document AI in asia-south1 (Mumbai)
+  │ Cloud Tasks (queues saathi-research, saathi-jobs: retries, rate limits, survives restarts)
+saathi-worker  same image, private (Cloud Run IAM + OIDC), only the /tasks/* job routes:
+  ├─ Saathi Research: ADK SequentialAgent[ ParallelAgent waves of researchers → verifying critic ]; progress → Firestore
+  └─ Spec Check: certificate values (Gemini) vs approved limits (deterministic code); standards → Agent Search + limit extraction
+Resilience: every agent model call retries (backoff + jitter, incl. dropped connections), then falls back to a second model;
+            a research agent that still fails degrades to "unknown" instead of failing the report
+Data: Firestore (hot data + vector index) + Cloud Storage + Document AI in asia-south1 (Mumbai);
+      BigQuery saathi_archive.chunks (every chunk, VECTOR_SEARCH with query-time permissions) for deep research;
+      Agent Search (global) for the workspace Standards Library; Firestore PITR (7 days), delete protection, daily backups (14 days)
 ```
 
 ## Configuration and secrets
@@ -66,7 +79,7 @@ No environment files or secrets are committed (`.env*` is git-ignored; only `web
 | --- | --- |
 | Web (local) | `cp web/.env.example web/.env.local` and fill in the Firebase web config + API URL |
 | Web (Cloud Run) | `gcloud run deploy saathi-web --set-env-vars SAATHI_API_URL=…,FIREBASE_API_KEY=…,…` |
-| API | Env vars on Cloud Run: `DOCAI_PROCESSOR`, `BQ_TABLE`, `ALLOWED_ORIGINS`, `SIGNUP_DOMAINS` (optional), model overrides (`AGENT_MODEL`, `FAST_MODEL`, `VISION_MODEL`, `AGENT_THINKING`) |
+| API | Env vars on Cloud Run: `DOCAI_PROCESSOR`, `BQ_TABLE`, `ALLOWED_ORIGINS`, `SIGNUP_DOMAINS` (optional), model overrides (`AGENT_MODEL`, `AGENT_FALLBACK_MODEL`, `FAST_MODEL`, `VISION_MODEL`, `AGENT_THINKING`); jobs: `SAATHI_ROLE` (api/worker), `TASKS_MODE=cloudtasks`, `WORKER_URL` (set by CI) |
 | Cron secret | Secret Manager `saathi-cron-secret`, mounted as `CRON_SECRET` |
 | Google OAuth client | Secret Manager `saathi-google-oauth` (asia-south1), mounted as `GOOGLE_OAUTH_CLIENT`. Redirect URI `…/api/connectors/google/callback`. Consent screen in Testing: add each user as a test user |
 

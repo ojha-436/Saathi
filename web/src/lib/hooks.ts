@@ -4,7 +4,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query, where, type Query }
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getDb } from "./firebase";
-import type { AssistantMsg, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, Task, UserProfile, UserSettings } from "./types";
+import type { AssistantMsg, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, ResearchEvent, ResearchRun, Task, UserProfile, UserSettings } from "./types";
 
 function useLive<T>(make: () => Query | null, key: string): T[] {
   const [rows, setRows] = useState<T[]>([]);
@@ -115,3 +115,16 @@ export function useRegister(enabled: boolean, version: number): Drawing[] {
   }, [enabled, version]);
   return rows;
 }
+
+export const useResearchRuns = (uid?: string) =>
+  useLive<ResearchRun>(
+    () => (uid ? query(collection(getDb(), "research_runs"), where("uid", "==", uid), orderBy("created_at", "desc"), limit(30)) : null),
+    `research:${uid}`,
+  );
+
+/** Live progress of one research run (the agents' tool calls and results, in order). */
+export const useResearchEvents = (runId?: string) =>
+  useLive<ResearchEvent>(
+    () => (runId ? query(collection(getDb(), "research_runs", runId, "events"), orderBy("ts", "asc"), limit(400)) : null),
+    `research-events:${runId}`,
+  );

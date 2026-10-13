@@ -15,13 +15,22 @@ embed_client = genai.Client(vertexai=True, project=PROJECT, location=EMBED_LOCAT
 _pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="embed")
 
 
+def transient(e: BaseException) -> bool:
+    """Rate limits, 5xx and dropped connections are worth retrying; everything else is a real error."""
+    import httpx
+
+    if isinstance(e, genai.errors.APIError):
+        return e.code in (408, 429, 500, 502, 503, 504)
+    return isinstance(e, (httpx.TransportError, ConnectionError, TimeoutError))
+
+
 def _retry(fn, attempts: int = 6):
-    """Retries rate-limit / transient Vertex errors with exponential backoff."""
+    """Retries rate-limit, transient server and network errors with exponential backoff and jitter."""
     for i in range(attempts):
         try:
             return fn()
-        except genai.errors.APIError as e:
-            if e.code not in (429, 500, 503) or i == attempts - 1:
+        except Exception as e:
+            if not transient(e) or i == attempts - 1:
                 raise
             time.sleep(min(30, 2 ** i) + random.random())
 

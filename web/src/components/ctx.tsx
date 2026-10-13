@@ -6,13 +6,14 @@ import type { Account, CalendarEvent, Chat, Drawing, DriveFile, EmailItem, FileD
 export type View =
   | { kind: "home" }
   | { kind: "assistant"; prompt?: string }
+  | { kind: "research"; id?: string }
   | { kind: "insights" }
   | { kind: "tasks" }
   | { kind: "activity" }
   | { kind: "admin" }
   | { kind: "meeting"; id: string }
   | { kind: "chats" }
-  | { kind: "quality"; recordId?: string }
+  | { kind: "quality"; recordId?: string; tab?: "records" | "drawings" | "standards" }
   | { kind: "decisions"; id?: string }
   | { kind: "handover"; chatId: string; id?: string }
   | { kind: "live"; sessionId?: string; eventId?: string }

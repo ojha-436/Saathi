@@ -7,7 +7,7 @@ from google.cloud.firestore_v1.vector import Vector
 from google.genai import types
 from pydantic import BaseModel
 
-from . import ai
+from . import ai, archive
 from .config import DOCAI_LOCATION, DOCAI_PROCESSOR, PROJECT, TZ, VISION_MODEL
 from .firebase import db, user_profile
 
@@ -64,18 +64,18 @@ class DocExtract(BaseModel):
 def _chunk_doc(chunk_id: str, *, text: str, embed_text: str, members: list[str], chat: dict, extra: dict, recheck: bool = True):
     vec = ai.embed([embed_text])[0]
     ref = db.collection("chunks").document(chunk_id)
-    ref.set(
-        {
-            "text": text,
-            "embedding": Vector(vec),
-            "members": members,
-            "chat_id": chat["id"],
-            "chat_name": chat.get("name", ""),
-            "keywords": ai.keywords(embed_text),
-            "org_id": chat.get("org_id") or extra.get("org_id", ""),
-            **extra,
-        }
-    )
+    data = {
+        "text": text,
+        "embedding": Vector(vec),
+        "members": members,
+        "chat_id": chat["id"],
+        "chat_name": chat.get("name", ""),
+        "keywords": ai.keywords(embed_text),
+        "org_id": chat.get("org_id") or extra.get("org_id", ""),
+        **extra,
+    }
+    ref.set(data)
+    archive.mirror(chunk_id, data, data["org_id"])  # BigQuery archive index for deep research
     if not recheck:
         return
     # Membership or the name may have changed while we were embedding (join, removal, rename). Re-read after the
@@ -213,6 +213,13 @@ def process_file(chat_id: str, msg_id: str, file_id: str) -> None:
     data = bucket.blob(f["gcs_path"]).download_as_bytes()
     mime = f.get("mime") or "application/pdf"
     ocr = ocr_document(data, mime)
+    if ocr and ocr.get("text"):
+        try:  # certificates: start Spec Check now, in parallel with the slower full document extraction
+            from .specs import early_check
+
+            early_check(file_id, msg_id, ocr["text"])
+        except Exception:
+            log.exception("early spec check failed to start for %s", file_id)
     try:
         doc = extract_document(data, mime, f.get("name", ""), ocr["text"] if ocr else "")
     except Exception:
@@ -222,7 +229,13 @@ def process_file(chat_id: str, msg_id: str, file_id: str) -> None:
 
     fields = doc.model_dump(exclude={"full_text"})
     ocr_meta = {k: v for k, v in (ocr or {}).items() if k != "text"} or None
-    file_ref.update({"status": "ready", "doc": fields, "extracted_text": doc.full_text[:20000], "ocr": ocr_meta})
+    file_ref.update({"status": "ready", "doc": fields, "extracted_text": doc.full_text[:20000], "ocr": ocr_meta, "msg_id": msg_id})
+    try:
+        from .specs import maybe_check
+
+        maybe_check(file_id, doc.doc_type)
+    except Exception:
+        log.exception("spec check enqueue failed for %s", file_id)
     msg_ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
     msg_ref.update(
         {

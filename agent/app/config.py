@@ -6,6 +6,8 @@ GENAI_LOCATION = os.getenv("GENAI_LOCATION", "global")
 
 # Models (all overridable per environment)
 AGENT_MODEL = os.getenv("AGENT_MODEL", "gemini-3.8-flash")
+# Used when the primary model is rate-limited or unavailable after retries (see resilience.py)
+AGENT_FALLBACK_MODEL = os.getenv("AGENT_FALLBACK_MODEL", "gemini-3.5-flash")
 FAST_MODEL = os.getenv("FAST_MODEL", "gemini-3.5-flash-lite")
 VISION_MODEL = os.getenv("VISION_MODEL", "gemini-3.8-flash")
 # "low" kept retrieval 10/10 and 0 leaks while answering ~2 s faster than the default (high) in eval
@@ -27,6 +29,15 @@ ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://local
 DOCAI_PROCESSOR = os.getenv("DOCAI_PROCESSOR", "")  # Document AI OCR processor id
 DOCAI_LOCATION = os.getenv("DOCAI_LOCATION", "asia-south1")
 BQ_TABLE = os.getenv("BQ_TABLE", "")  # e.g. aibuildergc.saathi.assistant_events
+
+# Background jobs (research runs, spec checks). "cloudtasks" in production: Cloud Tasks → the private saathi-worker service.
+# "inline" runs jobs in a thread of the same process (local development).
+TASKS_MODE = os.getenv("TASKS_MODE", "inline")
+TASKS_LOCATION = os.getenv("TASKS_LOCATION", "asia-south1")
+TASKS_SA = os.getenv("TASKS_SA", f"saathi-agent@{PROJECT}.iam.gserviceaccount.com")
+WORKER_URL = os.getenv("WORKER_URL", "").rstrip("/")
+# Which routes this instance serves: "api" (public REST + WebSockets), "worker" (job endpoints only), "all" (local dev)
+SAATHI_ROLE = os.getenv("SAATHI_ROLE", "all")
 
 COMPANY = os.getenv("COMPANY_NAME", "Shakti Rail Components")
 # Optional allow-list of email domains for new accounts (comma-separated). Empty = anyone can sign up (demo mode).

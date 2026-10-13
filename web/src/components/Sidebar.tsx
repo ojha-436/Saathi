@@ -12,6 +12,7 @@ import { useWs, type View } from "./ctx";
 export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "quality" | "decisions" | "live" | "insights" | "admin" | "gmail" | "calendar" | "drive";
 
 export function railKey(view: View): RailKey {
+  if (view.kind === "research") return "assistant";
   return view.kind === "meeting" ? "home" : view.kind === "chats" || view.kind === "handover" ? "chat" : view.kind;
 }
 

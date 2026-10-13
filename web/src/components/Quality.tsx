@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
 import { getFbAuth, apiUrl } from "@/lib/firebase";
+import { StandardsTab } from "./SpecCheck";
 import { timeShort } from "@/lib/format";
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, FileText, Gavel, Loader2, Lock, Plus, ScanText, ShieldCheck, Sparkles, X } from "@/lib/icons";
 import type { Drawing, Lesson, PlantRecord, RecordFields, RecordLinks, RecordType } from "@/lib/types";
@@ -79,15 +80,16 @@ function MicGlyph({ size = 17 }: { size?: number }) {
 /* ---------------- Report dialog (snap-to-record) ---------------- */
 
 type Draft = { draft_id: string; type: RecordType; fields: RecordFields; links: RecordLinks; lessons?: Lesson[] };
+export type RecordDraftResult = Draft;
 
-export function ReportDialog({ onClose, initialType = "ncr", chatId }: { onClose: () => void; initialType?: RecordType; chatId?: string }) {
+export function ReportDialog({ onClose, initialType = "ncr", chatId, initialDraft }: { onClose: () => void; initialType?: RecordType; chatId?: string; initialDraft?: Draft }) {
   const { uid, users, account, toast, open } = useWs();
-  const [type, setType] = useState<RecordType>(initialType);
+  const [type, setType] = useState<RecordType>(initialDraft?.type ?? initialType);
   const [text, setText] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [voice, setVoice] = useState<Blob | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [fields, setFields] = useState<RecordFields>({});
+  const [draft, setDraft] = useState<Draft | null>(initialDraft ?? null);
+  const [fields, setFields] = useState<RecordFields>(initialDraft?.fields ?? {});
   const [anonymous, setAnonymous] = useState(false);
   const [owner, setOwner] = useState("");
   const [busy, setBusy] = useState<"draft" | "file" | null>(null);
@@ -298,9 +300,9 @@ export function ReportDialog({ onClose, initialType = "ncr", chatId }: { onClose
 
 /* ---------------- Quality view ---------------- */
 
-export function QualityView({ recordId, records, register }: { recordId?: string; records: PlantRecord[]; register: Drawing[] }) {
+export function QualityView({ recordId, records, register, initialTab }: { recordId?: string; records: PlantRecord[]; register: Drawing[]; initialTab?: "records" | "drawings" | "standards" }) {
   const { open } = useWs();
-  const [tab, setTab] = useState<"records" | "drawings">("records");
+  const [tab, setTab] = useState<"records" | "drawings" | "standards">(initialTab ?? "records");
   const [filter, setFilter] = useState<"open" | "closed" | "all">("open");
   const [type, setType] = useState<RecordType | "all">("all");
   const [report, setReport] = useState(false);
@@ -326,9 +328,9 @@ export function QualityView({ recordId, records, register }: { recordId?: string
         </button>
       </header>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 lg:px-6">
-        {(["records", "drawings"] as const).map((t) => (
+        {(["records", "drawings", "standards"] as const).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={clsx("relative h-11 px-2.5 text-sm font-medium", tab === t ? "text-ink" : "text-muted hover:text-ink")}>
-            {t === "records" ? `Records · ${records.filter((r) => r.status !== "closed").length} open` : `Drawing register · ${register.length}`}
+            {t === "records" ? `Records · ${records.filter((r) => r.status !== "closed").length} open` : t === "drawings" ? `Drawing register · ${register.length}` : "Standards & certificates"}
             {tab === t && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-brand" aria-hidden />}
           </button>
         ))}
@@ -377,8 +379,10 @@ export function QualityView({ recordId, records, register }: { recordId?: string
             )}
           </div>
         </div>
-      ) : (
+      ) : tab === "drawings" ? (
         <DrawingRegister register={register} />
+      ) : (
+        <StandardsTab />
       )}
       {report && <ReportDialog onClose={() => setReport(false)} />}
     </section>

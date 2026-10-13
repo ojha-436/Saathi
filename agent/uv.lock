@@ -529,6 +529,23 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-discoveryengine"
+version = "0.20.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/67/a6/b3fd926fc79b4e02d9bda3ff30b764abe17a100c3a39e934f0d519bbaf76/google_cloud_discoveryengine-0.20.5.tar.gz", hash = "sha256:cd78028180f32a43aa586ab97d0074949f6326ad46b41058a773b2baa9f525d8", size = 3991015, upload-time = "2026-10-01T18:16:16.9Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ea/12/002adb43105aee5c45907a23f09bdac9f4f77b26b43323abc8ac202f901a/google_cloud_discoveryengine-0.20.5-py3-none-any.whl", hash = "sha256:0d4072845f02100e0244ac0c69f6ac5d68f561793d7c3bd5dee2c93d3090a368", size = 3711486, upload-time = "2026-10-01T18:09:56.619Z" },
+]
+
+[[package]]
 name = "google-cloud-documentai"
 version = "3.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -593,6 +610,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/e1/7460613a818ed8d38ee888e672ddb89966f8f92f751ba127c1bf57f4bec2/google_cloud_storage-3.17.0.tar.gz", hash = "sha256:4373aa6328e070c31c97aa236f1600a239dfd3c85e5870cdf3dc2a928dfe0bca", size = 17355535, upload-time = "2026-10-08T18:12:54.643Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/21/c6869b66d723d93d4e63fba0dc4b539debeaf03e8b9af53de906a9910ec7/google_cloud_storage-3.17.0-py3-none-any.whl", hash = "sha256:0b89283fccf84745bae75bbefdbda8393e5323471071a2ba24ab437407141171", size = 345704, upload-time = "2026-10-08T18:12:26.717Z" },
+]
+
+[[package]]
+name = "google-cloud-tasks"
+version = "2.26.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/cc/3ff6a7bfd00ba892a32713dd1d28c0d8287040017e4eadb23338b95c7cda/google_cloud_tasks-2.26.0.tar.gz", hash = "sha256:df33be57411c57bd791461d0bbcd6d04b4e0e55f9c65b68682706cad247c5b06", size = 390489, upload-time = "2026-10-01T18:18:28.118Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/a6/8dda4fbb4f6a2312a4f1e3d3b6f049c55e446993d29e1c80d2caeb9b53f5/google_cloud_tasks-2.26.0-py3-none-any.whl", hash = "sha256:b020be5ca494907accd9ea7372d9963f747cd09e6370458511fc126d3f18525e", size = 325078, upload-time = "2026-10-01T18:12:41.099Z" },
 ]
 
 [[package]]
@@ -1600,9 +1634,11 @@ dependencies = [
     { name = "firebase-admin" },
     { name = "google-adk" },
     { name = "google-cloud-bigquery" },
+    { name = "google-cloud-discoveryengine" },
     { name = "google-cloud-documentai" },
     { name = "google-cloud-kms" },
     { name = "google-cloud-storage" },
+    { name = "google-cloud-tasks" },
     { name = "google-genai" },
     { name = "pydantic" },
     { name = "pypdf" },
@@ -1624,9 +1660,11 @@ requires-dist = [
     { name = "firebase-admin", specifier = ">=7.7.0" },
     { name = "google-adk", specifier = ">=2.11.0" },
     { name = "google-cloud-bigquery", specifier = ">=3.46.1" },
+    { name = "google-cloud-discoveryengine", specifier = ">=0.13.0" },
     { name = "google-cloud-documentai", specifier = ">=3.16.0" },
     { name = "google-cloud-kms", specifier = ">=3.18.0" },
     { name = "google-cloud-storage", specifier = ">=3.17.0" },
+    { name = "google-cloud-tasks", specifier = ">=2.19.0" },
     { name = "google-genai", specifier = ">=2.29.0" },
     { name = "pydantic", specifier = ">=2.14.0" },
     { name = "pypdf", specifier = ">=6.20.0" },
