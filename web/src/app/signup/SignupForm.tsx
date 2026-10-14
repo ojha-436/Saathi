@@ -5,7 +5,7 @@ import { Check, Eye, EyeOff, Loader2 } from "@/lib/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { deleteCurrentUser, onAuth, resendVerification, signOut, signUpWithPassword } from "@/lib/auth";
+import { deleteCurrentUser, onAuth, signOut, signUpWithPassword } from "@/lib/auth";
 import { AuthShell, Divider, GoogleButton, authMessage, inputCls, signInWithGoogle } from "../login/AuthShell";
 
 const RULES = [
@@ -47,11 +47,6 @@ export function SignupForm() {
     creating.current = true;
     try {
       await signUpWithPassword(email.trim(), password, name.trim());
-      try {
-        await resendVerification();
-      } catch (e) {
-        console.error("Verification email failed:", e);
-      }
       await signOut();
       setCreated(true);
     } catch (err) {

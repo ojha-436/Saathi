@@ -167,6 +167,8 @@ def _join(decoded: dict) -> None:
     email = (decoded.get("email") or "").lower()
     domain = email.rsplit("@", 1)[-1]
     verified = bool(decoded.get("email_verified"))
+    if not verified and not email.endswith("@saathi.demo"):
+        raise HTTPException(403, "verify-email: Please verify your email address to access your workspace.")
     if SIGNUP_DOMAINS and domain not in SIGNUP_DOMAINS:
         raise HTTPException(403, "Your organisation hasn't enabled Saathi for this email domain. Sign in with your work account.")
     name = (decoded.get("name") or email.split("@")[0].replace(".", " ").title() or "New colleague").strip()[:80]
@@ -222,6 +224,9 @@ def user_from_token(token: str) -> dict:
         decoded = auth.verify_id_token(token)
     except Exception:
         raise HTTPException(401, "Invalid token")
+    email = (decoded.get("email") or "").lower()
+    if not decoded.get("email_verified") and not email.endswith("@saathi.demo"):
+        raise HTTPException(403, "verify-email: Please verify your email address before accessing the workspace.")
     profile = user_profile(decoded["uid"])
     if not profile["org_id"]:
         if not db.collection("users").document(decoded["uid"]).get().exists:

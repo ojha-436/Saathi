@@ -59,6 +59,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 export function authMessage(err: unknown): { field: "email" | "password" | "name" | "form"; text: string } | null {
   const code = (err as { code?: string }).code ?? "";
   if (code.includes("popup-closed-by-user") || code.includes("cancelled-popup-request")) return null;
+  if (code.includes("unverified-email")) return { field: "form", text: (err as Error).message || "Please verify your email address before signing in." };
   if (code.includes("invalid-email")) return { field: "email", text: "That doesn't look like a valid work email." };
   if (code.includes("email-already-in-use")) return { field: "email", text: "An account already exists for this email. Sign in instead." };
   if (code.includes("weak-password")) return { field: "password", text: "Use at least 8 characters, mixing letters and numbers." };

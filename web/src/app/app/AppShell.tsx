@@ -7,6 +7,7 @@ import { LogoMark } from "@/components/Logo";
 import { Workspace } from "@/components/Workspace";
 import { api } from "@/lib/api";
 import { onAuth, refreshToken, reloadUser, resendVerification, signOut, type AuthUser } from "@/lib/auth";
+import { getFbAuth } from "@/lib/firebase";
 import type { Account } from "@/lib/types";
 
 export function AppShell() {
@@ -61,6 +62,10 @@ export function AppShell() {
         setUser(u);
         setAccount(null);
         if (!u) return router.replace("/login");
+        if (!u.emailVerified && !u.email?.endsWith("@saathi.demo")) {
+          setVerify("Please verify your email address before opening your workspace.");
+          return;
+        }
         load();
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,8 +95,14 @@ export function AppShell() {
           <button
             onClick={async () => {
               await reloadUser();
-              await refreshToken();
-              load();
+              const currentUser = getFbAuth().currentUser;
+              if (currentUser?.emailVerified) {
+                setVerify("");
+                await refreshToken();
+                load();
+              } else {
+                alert("Your email has not been verified yet. Please check your inbox (and spam folder) and click the verification link.");
+              }
             }}
             className="h-10 rounded-lg bg-brand px-4 text-sm font-semibold text-white"
           >

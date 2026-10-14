@@ -16,7 +16,7 @@ import { apiUrl, getFbAuth } from "./firebase";
  * Auth facade. In the cloud it forwards to Firebase Auth; with SAATHI_LOCAL=1 it signs in against the local
  * Saathi API instead ("local:<uid>" tokens), so the app runs with no Firebase project.
  */
-export type AuthUser = { uid: string; email: string | null };
+export type AuthUser = { uid: string; email: string | null; emailVerified?: boolean };
 
 export const isLocal = () => clientConfig().localMode;
 
@@ -31,7 +31,7 @@ function readStored(): Stored | null {
     return null;
   }
 }
-const toUser = (s: Stored | null): AuthUser | null => (s ? { uid: s.uid, email: s.email } : null);
+const toUser = (s: Stored | null): AuthUser | null => (s ? { uid: s.uid, email: s.email, emailVerified: true } : null);
 const emit = () => listeners.forEach((fn) => fn(toUser(readStored())));
 
 const authError = (code: string, message: string) => Object.assign(new Error(message), { code });
@@ -51,7 +51,7 @@ async function localPost(path: string, body: unknown): Promise<Stored> {
 }
 
 export function onAuth(cb: (u: AuthUser | null) => void): () => void {
-  if (!isLocal()) return onAuthStateChanged(getFbAuth(), (u) => cb(u ? { uid: u.uid, email: u.email } : null));
+  if (!isLocal()) return onAuthStateChanged(getFbAuth(), (u) => cb(u ? { uid: u.uid, email: u.email, emailVerified: u.emailVerified } : null));
   listeners.add(cb);
   cb(toUser(readStored()));
   return () => void listeners.delete(cb);
@@ -59,17 +59,36 @@ export function onAuth(cb: (u: AuthUser | null) => void): () => void {
 
 export async function signInWithPassword(email: string, password: string): Promise<void> {
   if (!isLocal()) {
-    await signInWithEmailAndPassword(getFbAuth(), email, password);
+    const cred = await signInWithEmailAndPassword(getFbAuth(), email, password);
+    const isDemo = email.endsWith("@saathi.demo");
+    if (!isDemo && !cred.user.emailVerified) {
+      await fbSignOut(getFbAuth());
+      const err = new Error("Please verify your email address before signing in. Check your inbox (and spam folder) for the verification link.");
+      (err as unknown as { code: string }).code = "auth/unverified-email";
+      throw err;
+    }
     return;
   }
   localStorage.setItem(KEY, JSON.stringify(await localPost("/api/local/login", { email, password })));
   emit();
 }
 
+export async function resendVerificationFor(email: string, password: string): Promise<void> {
+  if (!isLocal()) {
+    const cred = await signInWithEmailAndPassword(getFbAuth(), email, password);
+    try {
+      await sendEmailVerification(cred.user);
+    } finally {
+      await fbSignOut(getFbAuth());
+    }
+  }
+}
+
 export async function signUpWithPassword(email: string, password: string, name: string): Promise<void> {
   if (!isLocal()) {
     const cred = await createUserWithEmailAndPassword(getFbAuth(), email, password);
     await updateProfile(cred.user, { displayName: name });
+    await sendEmailVerification(cred.user);
     return;
   }
   localStorage.setItem(KEY, JSON.stringify(await localPost("/api/local/signup", { email, password, name })));

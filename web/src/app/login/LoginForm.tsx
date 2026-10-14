@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/bits";
-import { onAuth, sendReset, signInWithPassword } from "@/lib/auth";
+import { onAuth, resendVerificationFor, sendReset, signInWithPassword } from "@/lib/auth";
 import { AuthShell, Divider, GoogleButton, authMessage, inputCls, signInWithGoogle } from "./AuthShell";
 
 const DEMO = [
@@ -31,13 +31,15 @@ export function LoginForm() {
   const [error, setError] = useState<Err>(params.get("error") === "domain" ? { field: "form", text: "Your organisation hasn't enabled Saathi for that email domain. Sign in with your work account." } : null);
   const [resetSent, setResetSent] = useState(false);
   const [demoOpen, setDemoOpen] = useState(true);
+  const [resending, setResending] = useState(false);
+  const [resentNotice, setResentNotice] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
   const demoRef = useRef<HTMLDivElement>(null);
 
   useEffect(
     () =>
       onAuth((u) => {
-        if (u) router.replace("/app");
+        if (u && (u.emailVerified || u.email?.endsWith("@saathi.demo"))) router.replace("/app");
       }),
     [router],
   );
@@ -113,9 +115,31 @@ export function LoginForm() {
       )}
 
       {error?.field === "form" && (
-        <p role="alert" className="mt-6 rounded-lg border border-rust/30 bg-rust-soft px-3 py-2.5 text-sm text-rust">
-          {error.text}
-        </p>
+        <div role="alert" className="mt-6 rounded-lg border border-rust/30 bg-rust-soft px-3 py-2.5 text-sm text-rust">
+          <p>{error.text}</p>
+          {error.text.includes("verify your email") && password && (
+            <div className="mt-2.5 pt-2 border-t border-rust/20">
+              <button
+                type="button"
+                disabled={resending || resentNotice}
+                onClick={async () => {
+                  setResending(true);
+                  try {
+                    await resendVerificationFor(email.trim(), password);
+                    setResentNotice(true);
+                  } catch (e) {
+                    alert((e as Error).message);
+                  } finally {
+                    setResending(false);
+                  }
+                }}
+                className="font-semibold underline text-ink hover:text-brand"
+              >
+                {resentNotice ? "Verification email sent! Check inbox & spam" : resending ? "Sending verification email…" : "Resend verification email"}
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {mode === "signin" && (
