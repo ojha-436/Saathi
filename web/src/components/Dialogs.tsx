@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowRight, Check, Compass, CornerDownLeft, FileText, Globe, Hash, Loader2, Lock, MessageSquare, Search, Sparkles, Users, X } from "@/lib/icons";
+import { ArrowRight, Check, Compass, CornerDownLeft, FileSearch, FileText, Gavel, Globe, Hash, Loader2, Lock, MessageSquare, Search, ShieldCheck, Sparkles, Users, X } from "@/lib/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle } from "@/lib/format";
@@ -379,14 +379,28 @@ export function CommandPalette({ chatList, onClose }: { chatList: Chat[]; onClos
       .map((f) => ({ key: `f-${f.id}`, label: f.name, sub: f.doc?.drawing_no ? `${f.doc.drawing_no}${f.doc.revision ? ` · Rev ${f.doc.revision}` : ""}` : "File", kind: "file" as const, id: f.id, chatId: f.chat_id }))
       .filter((f) => t && (f.label.toLowerCase().includes(t) || f.sub.toLowerCase().includes(t)));
     const ask = t ? [{ key: "ask", label: `Ask Saathi: “${q.trim()}”`, sub: "Searches every chat, channel and file you can access", kind: "ask" as const, id: "" }] : [];
+    const allActions = [
+      { key: "a-research", label: "Start Saathi Research", sub: "Action · Multi-agent readiness & vendor reports", kind: "action-research" as const, id: "" },
+      { key: "a-voice", label: "Talk to Saathi (Voice)", sub: "Action · Hands-free Hindi, Hinglish & English", kind: "action-voice" as const, id: "" },
+      { key: "a-report", label: "Report an issue (NCR / Downtime / Safety)", sub: "Action · Snap-to-record from photo or voice", kind: "action-report" as const, id: "" },
+      { key: "a-standards", label: "Standards & Spec Check", sub: "Action · Verify mill test certificates against grade limits", kind: "action-standards" as const, id: "" },
+      { key: "a-task", label: "Create a task", sub: "Action", kind: "action-task" as const, id: "" },
+      { key: "a-meeting", label: "Add meeting notes", sub: "Action · summary + action items", kind: "action-meeting" as const, id: "" },
+      { key: "a-channel", label: "Create a channel", sub: "Action", kind: "action-channel" as const, id: "" },
+      { key: "a-browse", label: "Browse channels", sub: "Action", kind: "action-browse" as const, id: "" },
+    ];
     const actions = !t
-      ? [
-          { key: "a-task", label: "Create a task", sub: "Action", kind: "action-task" as const, id: "" },
-          { key: "a-meeting", label: "Add meeting notes", sub: "Action · summary + action items", kind: "action-meeting" as const, id: "" },
-          { key: "a-channel", label: "Create a channel", sub: "Action", kind: "action-channel" as const, id: "" },
-          { key: "a-browse", label: "Browse channels", sub: "Action", kind: "action-browse" as const, id: "" },
-        ]
-      : [];
+      ? allActions
+      : allActions.filter(
+          (a) =>
+            a.label.toLowerCase().includes(t) ||
+            a.sub.toLowerCase().includes(t) ||
+            (t.includes("ncr") && a.key === "a-report") ||
+            (t.includes("spec") && a.key === "a-standards") ||
+            (t.includes("standard") && a.key === "a-standards") ||
+            (t.includes("voice") && a.key === "a-voice") ||
+            (t.includes("research") && a.key === "a-research"),
+        );
     return [...ask, ...chatItems.slice(0, 7), ...fileItems.slice(0, 5), ...actions];
   }, [q, chatList, files, uid, users]);
 
@@ -396,6 +410,10 @@ export function CommandPalette({ chatList, onClose }: { chatList: Chat[]; onClos
     if (it.kind === "ask") open({ kind: "assistant", prompt: q.trim() });
     else if (it.kind === "chat" || it.kind === "channel") open({ kind: "chat", chatId: it.id });
     else if (it.kind === "file") open({ kind: "chat", chatId: (it as { chatId: string }).chatId });
+    else if (it.kind === "action-research") return open({ kind: "research" });
+    else if (it.kind === "action-voice") return dialog("voice");
+    else if (it.kind === "action-report") return dialog("report");
+    else if (it.kind === "action-standards") return open({ kind: "quality", tab: "standards" });
     else if (it.kind === "action-channel") return dialog("new-channel");
     else if (it.kind === "action-meeting") return dialog("meeting-new");
     else if (it.kind === "action-task") {
@@ -408,7 +426,17 @@ export function CommandPalette({ chatList, onClose }: { chatList: Chat[]; onClos
   }
 
   const icon = (k: (typeof items)[number]["kind"]) =>
-    k === "ask" ? <Sparkles size={15} /> : k === "file" ? <FileText size={15} /> : k === "channel" || k === "action-channel" ? <Hash size={15} /> : k === "action-browse" ? <Compass size={15} /> : k === "action-task" ? <Check size={15} /> : k === "action-meeting" ? <Users size={15} /> : <MessageSquare size={15} />;
+    k === "ask" ? <Sparkles size={15} /> :
+    k === "action-research" ? <FileSearch size={15} /> :
+    k === "action-voice" ? <Sparkles size={15} /> :
+    k === "action-report" ? <Gavel size={15} /> :
+    k === "action-standards" ? <ShieldCheck size={15} /> :
+    k === "file" ? <FileText size={15} /> :
+    k === "channel" || k === "action-channel" ? <Hash size={15} /> :
+    k === "action-browse" ? <Compass size={15} /> :
+    k === "action-task" ? <Check size={15} /> :
+    k === "action-meeting" ? <Users size={15} /> :
+    <MessageSquare size={15} />;
 
   return (
     <Modal title="Search or ask" onClose={onClose} wide>

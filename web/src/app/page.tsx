@@ -74,20 +74,18 @@ export default function Landing() {
           <div className="glow pointer-events-none absolute inset-0" />
           <div className="relative mx-auto grid max-w-7xl gap-14 px-5 pb-20 pt-20 lg:grid-cols-[1.02fr_1fr] lg:gap-10 lg:px-8 lg:pb-28 lg:pt-24">
             <div>
-              <p className="rise inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/50 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted backdrop-blur">
-                <span className="h-1.5 w-1.5 rounded-full bg-saffron" /> Future of Work · Gemini on Google Cloud
-              </p>
-              <h1 className="rise mt-6 font-display text-[46px] leading-[1] text-ink sm:text-[60px] lg:text-[74px]" style={{ animationDelay: "80ms" }}>
+              <h1 className="rise font-display text-[46px] leading-[1] text-ink sm:text-[60px] lg:text-[74px]">
                 Your company talks all day.
                 <br />
                 <span className="text-ink/45">Saathi makes it count.</span>
               </h1>
-              <p className="rise mt-6 max-w-xl text-lg leading-relaxed text-muted" style={{ animationDelay: "160ms" }}>
-                Saathi is the AI workspace that turns what people say, in chats, meetings, photos and voice notes, into{" "}
-                <span className="font-medium text-ink">knowledge you can find, decisions you can trust and work that gets done.</span> It listens in your
-                meetings and answers questions as they&rsquo;re asked. It reads your drawings and remembers why every decision was made. It works in English, Hindi and Hinglish.
+              <p className="rise mt-6 max-w-xl text-lg leading-relaxed text-muted" style={{ animationDelay: "120ms" }}>
+                Saathi is the AI workspace that turns what people say and make into{" "}
+                <span className="font-medium text-ink">knowledge you can find, decisions you can trust and work that gets done.</span> From multi-agent
+                inspection research and automatic mill test certificate verification to hands-free shop-floor voice and real-time meeting intelligence, Saathi
+                connects frontline operations with engineering precision in English, Hindi, and Hinglish.
               </p>
-              <div className="rise mt-9 flex flex-wrap items-center gap-3" style={{ animationDelay: "240ms" }}>
+              <div className="rise mt-9 flex flex-wrap items-center gap-3" style={{ animationDelay: "200ms" }}>
                 <Link href="/login?demo=1" className="group inline-flex items-center gap-2 rounded-full bg-saffron px-7 py-4 text-[15px] font-semibold text-ink transition hover:brightness-95">
                   Try the live workspace <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
@@ -95,13 +93,6 @@ export default function Landing() {
                   See Saathi Live
                 </a>
               </div>
-              <dl className="rise mt-12 grid max-w-xl grid-cols-2 gap-6 border-t border-line pt-6 sm:grid-cols-4" style={{ animationDelay: "320ms" }}>
-                <Stat value={`${LIVE.heardToAnswer}s`} label="from a question asked in a meeting to the answer on screen" />
-                <Stat value={`${LIVE.lineFinal}s`} label="for a spoken line to be transcribed and final" />
-                <Stat value={`${EVAL.retrieval}`} label="questions answered with the right source" />
-                <Stat value={`${EVAL.leaks}`} label="permission leaks in adversarial tests" />
-              </dl>
-              <p className="mt-3 font-mono text-[10.5px] uppercase tracking-wider text-muted/80">Measured on production and Saathi&rsquo;s open evaluation suite · Oct 2026</p>
             </div>
 
             <HeroLive />
@@ -181,10 +172,10 @@ export default function Landing() {
               title="Access knowledge"
               lead="Ask in plain words and get the answer, with the source."
               items={[
-                ["Recall search with citations", "Messages, PDFs, drawings, certificates, emails and Drive files, by meaning and by identifier."],
+                ["Saathi Research (multi-agent ADK)", "Ask 'Are we ready for the RDSO inspection?' Parallel researcher agents check drawings, certificates, NCRs and promises, verify every claim, and write a cited readiness report."],
+                ["Recall search with provenance", "Messages, PDFs, drawings, certificates and Drive files. Every answer shows 'How Saathi got this' with tool calls, latency and citations."],
                 ["Personal knowledge hub", "Your PDFs, notes, images and recordings, private to you, indexed section by section."],
-                ["Plant memory", "“This happened before”: similar past defects with the root cause and the fix that worked."],
-                ["Ask your data", "“NCRs by vendor this year” becomes a BigQuery chart in the answer."],
+                ["Plant memory & BigQuery", "“This happened before” matches past defects and fixes; “NCRs by vendor this year” plots live charts."],
               ]}
             />
             <Pillar
@@ -205,10 +196,10 @@ export default function Landing() {
               title="Make decisions"
               lead="Every decision kept with its reasons, and briefs for the next one."
               items={[
+                ["Spec Check & Standards Library", "Mill test certificates are verified automatically against approved grade limits on Agent Search; Gemini extracts values, deterministic code decides pass/fail."],
                 ["Decision log", "Captured from chats and meetings: what was decided, why, what was rejected, who decided. Superseded ones are linked."],
                 ["Decision briefs", "“Should we keep Om Castings?” gathers past decisions, incident history, the vendor’s promise record and the numbers."],
                 ["Revision Guard", "Superseded drawings are flagged wherever they appear; Saathi always points to the current revision."],
-                ["Topic wikis", "One overview per label, with contradictions between documents called out."],
               ]}
             />
             <Pillar
@@ -218,9 +209,9 @@ export default function Landing() {
               lead="What people say becomes tracked work, and the day starts with what needs you."
               items={[
                 ["Needs you", "One ranked queue: overdue tasks, handovers to read, records you own, mentions and email promises."],
-                ["Promise capture", "“I’ll send it by Friday” in any chat or email becomes a one-tap tracked task."],
+                ["Promise capture & Gaps → Tasks", "“I’ll send it by Friday” becomes a tracked task. Inspection gaps convert into assigned tasks in one click."],
                 ["Snap-to-record", "A photo or a Hindi voice note becomes a drafted defect, downtime or safety report."],
-                ["Voice everywhere", "Dictate in chat, in Saathi and in reports. “Kal subah 10 baje” sets a real reminder."],
+                ["Saathi Voice (Gemini 3.8 Live)", "Hands-free Hindi, Hinglish and English voice assistant for the shop floor, plus one-click task drafting from research gaps."],
               ]}
             />
           </div>
@@ -237,11 +228,13 @@ export default function Landing() {
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
                 {[
                   [ScrollText, "Drawing register & Revision Guard", "Rev C supersedes Rev B, who approved it, when. Drafts stay private."],
-                  [ShieldCheck, "QR controlled copies", "Scan a printed drawing: CURRENT or DO NOT USE, no login and no content shown."],
+                  [ShieldCheck, "Spec Check & Standards Library", "Automatic MTC pass/fail against the current drawing's grade limits; 1-click NCR draft on failure."],
+                  [FileSearch, "Saathi Research Dossiers", "Inspection readiness & vendor comparison reports assembled in minutes, not days."],
                   [Camera, "Snap-to-record", "NCR, downtime and near-miss reports from a photo or voice note, numbered and tracked to closure."],
                   [History, "Plant memory", "Repeat porosity from the same foundry? Saathi shows the last two NCRs and what fixed them."],
                   [RefreshCw, "Shift handover", "Machines, quality, safety, open items and watch-outs, every line cited, in Hinglish if you like."],
                   [BarChart3, "Plant data on BigQuery", "Downtime hours by machine, NCRs by vendor, promise on-time rate, in one question."],
+                  [Radar, "QR controlled copies", "Scan a printed drawing: CURRENT or DO NOT USE, no login and no content shown."],
                 ].map(([Icon, t, d]) => {
                   const I = Icon as typeof Lock;
                   return (
@@ -295,7 +288,25 @@ export default function Landing() {
                   Mumbai.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-1.5">
-                  {["Gemini 3.8 Flash", "Gemini 3.5 Flash-Lite", "Gemini 3.5 Transcribe Live", "Gemini TTS", "gemini-embedding", "ADK", "Document AI", "Firestore vector search", "BigQuery", "Cloud Run", "Cloud Scheduler", "Cloud KMS"].map((t) => (
+                  {[
+                    "Gemini 3.8 Flash",
+                    "Gemini 3.8 Live",
+                    "Gemini 3.5 Flash-Lite",
+                    "Gemini 3.5 Transcribe Live",
+                    "Gemini TTS",
+                    "gemini-embedding",
+                    "ADK",
+                    "Vertex AI Agent Search",
+                    "Document AI",
+                    "Firestore vector search",
+                    "BigQuery",
+                    "Cloud Run",
+                    "Cloud Tasks",
+                    "Pub/Sub",
+                    "Cloud Trace",
+                    "Cloud Scheduler",
+                    "Cloud KMS",
+                  ].map((t) => (
                     <span key={t} className="rounded-md border border-blueprint/20 bg-blueprint-soft px-2 py-1 font-mono text-[11px] text-blueprint">
                       {t}
                     </span>
@@ -424,16 +435,6 @@ export default function Landing() {
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <dt className="sr-only">{label}</dt>
-      <dd className="font-display text-4xl leading-none text-ink">{value}</dd>
-      <dd className="mt-2 text-xs leading-snug text-muted">{label}</dd>
-    </div>
-  );
-}
-
 function Pillar({ n, icon: Icon, title, lead, items }: { n: string; icon: typeof Lock; title: string; lead: string; items: [string, string][] }) {
   return (
     <article className="lift rounded-2xl border border-line bg-paper p-7 hover:border-ink/25">
@@ -512,8 +513,8 @@ function HeroLive() {
       <div className="mt-4 grid grid-cols-3 gap-3">
         {[
           [Workflow, "Decision logged", "Stay with Om Castings, audit by 30 Sep"],
-          [History, "This happened before", "NCR-0001 · wet sand · fixed"],
-          [RefreshCw, "Handover signed", "Shift B · acknowledged"],
+          [History, "Plant memory", "NCR-0001 · wet sand · fixed"],
+          [ShieldCheck, "Spec Check passed", "Heat H-78120 · S355J2 limits OK"],
         ].map(([Icon, t, d]) => {
           const I = Icon as typeof Lock;
           return (

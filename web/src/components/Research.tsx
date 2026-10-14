@@ -82,10 +82,10 @@ const TOOL_LABEL: Record<string, { label: string; icon: typeof Search }> = {
 
 const STATUS: Record<ResearchRun["status"], { label: string; cls: string }> = {
   planning: { label: "Planning", cls: "bg-brand-soft text-brand" },
-  awaiting_plan: { label: "Review plan", cls: "bg-saffron-soft text-saffron-ink" },
+  awaiting_plan: { label: "Review plan", cls: "bg-warn-soft text-warn-ink" },
   queued: { label: "Queued", cls: "bg-brand-soft text-brand" },
   running: { label: "Researching", cls: "bg-brand-soft text-brand" },
-  retrying: { label: "Retrying", cls: "bg-saffron-soft text-saffron-ink" },
+  retrying: { label: "Retrying", cls: "bg-warn-soft text-warn-ink" },
   cancelling: { label: "Stopping", cls: "bg-canvas text-muted" },
   done: { label: "Report ready", cls: "bg-moss-soft text-moss" },
   cancelled: { label: "Stopped", cls: "bg-canvas text-muted" },
@@ -94,7 +94,7 @@ const STATUS: Record<ResearchRun["status"], { label: string; cls: string }> = {
 
 const READINESS: Record<ResearchReport["readiness"], { label: string; cls: string; icon: typeof Check } | null> = {
   ready: { label: "Ready", cls: "bg-moss-soft text-moss border-moss/30", icon: CheckCircle2 },
-  at_risk: { label: "At risk", cls: "bg-saffron-soft text-saffron-ink border-saffron/40", icon: AlertTriangle },
+  at_risk: { label: "At risk", cls: "bg-warn-soft text-warn-ink border-warn-border/40", icon: AlertTriangle },
   not_ready: { label: "Not ready", cls: "bg-rust-soft text-rust border-rust/30", icon: Octagon },
   not_applicable: null,
 };
@@ -145,7 +145,7 @@ export function ResearchView({ focusId }: { focusId?: string }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-surface" aria-label="Saathi Research">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-saffron to-[#d4691a] text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-rail text-white">
           <Sparkles size={18} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
@@ -578,7 +578,7 @@ function Chips({ refs }: { refs: string[] }) {
 
 const CHECK_ICON = {
   ok: <CheckCircle2 size={17} className="text-moss" aria-label="OK" />,
-  risk: <AlertTriangle size={17} className="text-saffron-ink" aria-label="At risk" />,
+  risk: <AlertTriangle size={17} className="text-warn" aria-label="At risk" />,
   gap: <Octagon size={17} className="text-rust" aria-label="Gap" />,
 };
 
@@ -688,7 +688,7 @@ function GapsToTasks({ run, gaps }: { run: ResearchRun; gaps: ResearchGap[] }) {
     }
   }
 
-  const sev = { high: "bg-rust", medium: "bg-saffron", low: "bg-[#9aa3af]" };
+  const sev = { high: "bg-rust", medium: "bg-warn-border", low: "bg-[#9aa3af]" };
   return (
     <section className="mt-6" aria-label="Gaps to close">
       <div className="mb-2 flex items-center gap-2">

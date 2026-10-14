@@ -1,13 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { signOut } from "@/lib/auth";
-import { BarChart3, LogOut, Search, Settings, ShieldCheck, Smile, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
+import { signInWithPassword, signOut } from "@/lib/auth";
+import { BarChart3, ChevronDown, FileSearch, LogOut, Search, Settings, ShieldCheck, Smile, Sparkles, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { rememberKnowledge } from "@/lib/knowledgeNames";
-import { getFbAuth } from "@/lib/firebase";
 import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
 import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useReads, useSettings, useTasks, useUsers } from "@/lib/hooks";
 import type { Account, DriveFile, StatusState } from "@/lib/types";
@@ -15,7 +14,16 @@ import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { ResearchView } from "./Research";
 import { VoiceSheet } from "./VoiceSheet";
-import { Menu, UserAvatar } from "./bits";
+import { Menu, type MenuItem, UserAvatar } from "./bits";
+
+const DEMO_PERSONAS = [
+  { id: "prince", name: "Prince Kumar", role: "Design Engineer", note: "Design Engineer · Best place to start" },
+  { id: "neha", name: "Neha Verma", role: "QA Manager", note: "QA Manager · Spec Check, Standards & NCRs" },
+  { id: "suresh", name: "Suresh Yadav", role: "Shop Floor Supervisor", note: "Shop Floor Supervisor · Voice, Bay 2 & Handovers" },
+  { id: "rahul", name: "Rahul Singh", role: "Procurement Lead", note: "Procurement Lead · Vendor Promises & Quotes" },
+  { id: "kavya", name: "Kavya Iyer", role: "Project Manager", note: "Project Manager · Research & Decisions" },
+  { id: "amit", name: "Amit Sharma", role: "Senior Design Engineer", note: "Senior Design Engineer · Private Rev D Draft" },
+];
 import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
 import { Ctx, isAdmin, type DialogKind, type MeetingPrefill, type TaskPrefill, type View } from "./ctx";
@@ -219,6 +227,56 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const admin = isAdmin(account);
   const myState = presence(me);
 
+  const isDemo = account.email?.endsWith("@saathi.demo") || account.org_id === "shakti-rail";
+
+  const demoPersonaItems: MenuItem[] = DEMO_PERSONAS.map((p) => ({
+    label: `${p.name} (${p.role})`,
+    hint: p.id === uid ? "Current" : p.note.split("·")[1]?.trim(),
+    onSelect: async () => {
+      if (p.id === uid) return;
+      try {
+        toast(`Switching to ${p.name}…`);
+        await signInWithPassword(`${p.id}@saathi.demo`, "Saathi@2026");
+        window.location.reload();
+      } catch (e) {
+        toast((e as Error).message);
+      }
+    },
+  }));
+
+  const demoGuideItems: MenuItem[] = [
+    {
+      label: "1. Ask Saathi + Provenance",
+      icon: Sparkles,
+      hint: "Revision & approval",
+      onSelect: () => open({ kind: "assistant", prompt: "Which revision of SRC-BF-2041 is latest and who approved it?" }),
+    },
+    {
+      label: "2. Saathi Research (Multi-Agent)",
+      icon: FileSearch,
+      hint: "Readiness & tasks",
+      onSelect: () => open({ kind: "research" }),
+    },
+    {
+      label: "3. Spec Check & Standards Library",
+      icon: ShieldCheck,
+      hint: "MTC limits & NCR",
+      onSelect: () => open({ kind: "quality", tab: "standards" }),
+    },
+    {
+      label: "4. Saathi Live (Meeting Copilot)",
+      icon: Radar,
+      hint: "Real-time HUD",
+      onSelect: () => open({ kind: "live" }),
+    },
+    {
+      label: "5. Saathi Voice (Shop Floor)",
+      icon: Sparkles,
+      hint: "Hands-free audio",
+      onSelect: () => setDlg("voice"),
+    },
+  ];
+
   function selectRail(k: ReturnType<typeof railKey>) {
     if (k === "chat") {
       // Desktop: reopen the most recent conversation (or the chat home when there is none). Phones: show the list.
@@ -241,8 +299,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       </a>
       <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-ink">
         {/* Title bar: workspace, global search, status + profile */}
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-canvas px-3 text-ink lg:pl-[18px]">
-          <span className="flex min-w-0 items-center gap-2.5 lg:w-[calc(68px+20rem-18px)]">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-canvas px-3 text-ink sm:gap-3 lg:pl-[18px]">
+          <span className="flex min-w-0 shrink-0 items-center gap-2 lg:w-[calc(68px+20rem-18px)]">
             <LogoMark size={28} />
             <span className="text-[15px] font-semibold tracking-tight">Saathi</span>
             <span className="hidden truncate text-xs text-muted sm:inline">{account.org.name}</span>
@@ -250,13 +308,44 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
           </span>
           <button
             onClick={() => setDlg("palette")}
-            className="ml-auto flex h-8 min-w-0 items-center gap-2 rounded-lg border border-border bg-white px-3 text-left text-[13px] text-muted transition hover:border-brand hover:text-ink sm:ml-0 sm:w-full sm:max-w-xl"
+            className="flex h-8 min-w-0 flex-1 max-w-xs items-center gap-2 rounded-lg border border-border bg-white px-2.5 text-left text-[13px] text-muted transition hover:border-brand hover:text-ink sm:max-w-md lg:max-w-xl"
             aria-label="Search or ask Saathi"
           >
             <Search size={15} aria-hidden /> <span className="hidden flex-1 truncate sm:inline">Search chats, channels and files, or ask Saathi</span>
             <kbd className="hidden rounded border border-border px-1.5 font-mono text-[10px] sm:inline">⌘K</kbd>
           </button>
-          <div className="sm:ml-auto">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {isDemo && (
+              <>
+                <Menu
+                  label="Try Demo Flows"
+                  align="right"
+                  trigger={
+                    <span className="flex h-8 items-center gap-1.5 rounded-lg border border-brand/40 bg-brand-soft px-2 text-xs font-semibold text-brand transition hover:bg-brand hover:text-white">
+                      <Sparkles size={13} aria-hidden />
+                      <span className="hidden md:inline">Demo guide</span>
+                    </span>
+                  }
+                  items={demoGuideItems}
+                />
+                <Menu
+                  label="Switch demo persona"
+                  align="right"
+                  trigger={
+                    <span className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2 text-xs font-medium text-ink shadow-2xs transition hover:border-brand">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-moss" aria-hidden />
+                      <span className="hidden font-semibold text-ink sm:inline">Demo:</span>
+                      <span className="max-w-[72px] truncate sm:max-w-[130px]">
+                        {me?.name ? me.name.split(" ")[0] : "Demo"}
+                        <span className="hidden font-normal text-muted lg:inline"> ({me?.role?.split(",")[0] || "Team"})</span>
+                      </span>
+                      <ChevronDown size={12} className="shrink-0 text-muted" aria-hidden />
+                    </span>
+                  }
+                  items={demoPersonaItems}
+                />
+              </>
+            )}
             <Menu
               label="Your profile and status"
               className="flex items-center gap-2 rounded-full p-0.5 transition hover:bg-black/5"

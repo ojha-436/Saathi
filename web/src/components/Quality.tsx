@@ -23,7 +23,7 @@ const FLOW: Record<RecordType, string[]> = {
 const STATUS_LABEL: Record<string, string> = {
   open: "Open", contained: "Contained", root_cause: "Root cause", corrective_action: "Corrective action", verified: "Verified", closed: "Closed", action: "Action",
 };
-const SEV_CLS: Record<string, string> = { minor: "bg-canvas text-ink/70", major: "bg-saffron-soft text-saffron-ink", critical: "bg-rust-soft text-rust" };
+const SEV_CLS: Record<string, string> = { minor: "bg-canvas text-ink/70", major: "bg-warn-soft text-warn-ink", critical: "bg-rust-soft text-rust" };
 
 /* ---------------- Mic (dictation) ---------------- */
 
@@ -233,7 +233,7 @@ export function ReportDialog({ onClose, initialType = "ncr", chatId, initialDraf
             {fieldList.map(([k, label]) => (
               <label key={k} className="block text-sm font-medium">
                 {label}
-                <input value={(fields[k] as string) ?? ""} onChange={set(k)} placeholder="Not stated" className={clsx("mt-1 h-10 w-full rounded-lg border px-3 text-sm outline-none focus:border-brand", fields[k] ? "border-border" : "border-dashed border-saffron/60 bg-saffron-soft/20")} />
+                <input value={(fields[k] as string) ?? ""} onChange={set(k)} placeholder="Not stated" className={clsx("mt-1 h-10 w-full rounded-lg border px-3 text-sm outline-none focus:border-brand", fields[k] ? "border-border" : "border-dashed border-warn-border/60 bg-warn-soft/30")} />
               </label>
             ))}
             {type !== "downtime" && (
@@ -327,13 +327,32 @@ export function QualityView({ recordId, records, register, initialTab }: { recor
           <Plus size={15} /> Report issue
         </button>
       </header>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 lg:px-6">
-        {(["records", "drawings", "standards"] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={clsx("relative h-11 px-2.5 text-sm font-medium", tab === t ? "text-ink" : "text-muted hover:text-ink")}>
-            {t === "records" ? `Records · ${records.filter((r) => r.status !== "closed").length} open` : t === "drawings" ? `Drawing register · ${register.length}` : "Standards & certificates"}
-            {tab === t && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-brand" aria-hidden />}
-          </button>
-        ))}
+      <div className="sticky top-0 z-10 border-b border-border bg-surface/95 p-2 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl rounded-xl bg-canvas p-1" role="tablist" aria-label="Quality sections">
+          {(["records", "drawings", "standards"] as const).map((t) => {
+            const active = tab === t;
+            const label =
+              t === "records"
+                ? `Records · ${records.filter((r) => r.status !== "closed").length} open`
+                : t === "drawings"
+                ? `Drawings · ${register.length}`
+                : "Standards & MTCs";
+            return (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t)}
+                className={clsx(
+                  "flex-1 rounded-lg py-2 text-center text-xs font-semibold transition sm:text-sm",
+                  active ? "bg-surface text-ink shadow-xs" : "text-muted hover:text-ink",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
       {tab === "records" ? (
         <div className="scrollbar-thin flex-1 overflow-y-auto bg-canvas/50 px-4 py-4 lg:px-8">

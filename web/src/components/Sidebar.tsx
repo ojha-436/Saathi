@@ -56,8 +56,11 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
     { key: "insights", label: "Insights", icon: BarChart3 },
     ...(admin ? [{ key: "admin" as const, label: "Admin", icon: ShieldCheck }] : []),
   ];
-  // Phones: five most-used destinations; Insights and Admin are in the profile menu.
-  const items = mobile ? all.filter((i) => !["insights", "admin", "gmail", "calendar", "drive", "quality", "decisions", "live"].includes(i.key)) : all;
+  // Phones: five core shop-floor destinations (My Day, Chat, Quality, Live, Tasks); others live in the profile menu.
+  const mobileKeys: RailKey[] = !guest
+    ? ["home", "chat", "quality", "live", "tasks"]
+    : ["home", "activity", "chat", "assistant", "tasks"];
+  const items = mobile ? mobileKeys.map((k) => all.find((i) => i.key === k)!).filter(Boolean) : all;
   return (
     <nav
       aria-label="Apps"

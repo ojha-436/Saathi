@@ -165,10 +165,20 @@ export function VoiceSheet({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const downAt = useRef<number>(0);
+  const isToggled = useRef<boolean>(false);
+
   function press() {
-    if (phase === "connecting" || phase === "error" || talking.current) return;
+    if (phase === "connecting" || phase === "error") return;
+    if (isToggled.current) {
+      isToggled.current = false;
+      release();
+      return;
+    }
+    if (talking.current) return;
     stopPlayback(); // barge-in
     talking.current = true;
+    downAt.current = Date.now();
     setHeard("");
     setReply("");
     setSources([]);
@@ -176,9 +186,23 @@ export function VoiceSheet({ onClose }: { onClose: () => void }) {
     ws.current?.send(JSON.stringify({ type: "start" }));
   }
 
+  function handlePointerUp() {
+    if (!talking.current) return;
+    const dur = Date.now() - downAt.current;
+    if (dur < 250) {
+      // Short tap: keep listening active in toggle mode until tapped again
+      isToggled.current = true;
+    } else {
+      // Hold-to-talk release
+      isToggled.current = false;
+      release();
+    }
+  }
+
   function release() {
     if (!talking.current) return;
     talking.current = false;
+    isToggled.current = false;
     setPhase("thinking");
     ws.current?.send(JSON.stringify({ type: "end" }));
   }
@@ -194,8 +218,8 @@ export function VoiceSheet({ onClose }: { onClose: () => void }) {
 
   const status = {
     connecting: "Connecting…",
-    idle: "Hold the button and speak",
-    listening: "Listening… release when you're done",
+    idle: "Tap or hold to talk",
+    listening: isToggled.current ? "Listening… tap to finish" : "Listening… release when done",
     thinking: tool || "Thinking…",
     speaking: "Saathi is speaking · press to interrupt",
     error: error,
@@ -221,6 +245,37 @@ export function VoiceSheet({ onClose }: { onClose: () => void }) {
         <div className="scrollbar-thin flex-1 overflow-y-auto px-5 pb-2 pt-3" aria-live="polite">
           {heard && <p className="text-sm text-white/60">“{heard}”</p>}
           <p className={clsx("mt-2 min-h-[3.5rem] text-xl font-medium leading-snug", !reply && "text-white/40")}>{reply || (phase === "idle" ? "Puchiye: “Bay 2 mein CNC-3 ka kya status hai?”" : "")}</p>
+          {!heard && !reply && (
+            <div className="mt-4 space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-white/50">Shop floor prompt hints</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  "Bogie prototype inspection readiness check",
+                  "Heat H-78120 limits check karo",
+                  "Bay 2 welding crack NCR draft karo",
+                ].map((hint) => (
+                  <button
+                    key={hint}
+                    type="button"
+                    onClick={() => {
+                      press();
+                      setHeard(hint);
+                      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                        try {
+                          const u = new SpeechSynthesisUtterance(hint);
+                          u.lang = hint.includes("karo") ? "hi-IN" : "en-IN";
+                          window.speechSynthesis.speak(u);
+                        } catch {}
+                      }
+                    }}
+                    className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-left text-xs text-white/80 transition hover:border-brand hover:bg-white/10 hover:text-white"
+                  >
+                    “{hint}”
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {sources.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-1 rounded-xl bg-white p-2">
               <span className="mr-1 text-[11px] font-medium text-muted">Sources</span>
@@ -294,7 +349,7 @@ export function VoiceSheet({ onClose }: { onClose: () => void }) {
               e.currentTarget.setPointerCapture(e.pointerId);
               press();
             }}
-            onPointerUp={release}
+            onPointerUp={handlePointerUp}
             onPointerCancel={release}
             onKeyDown={(e) => {
               if ((e.key === " " || e.key === "Enter") && !e.repeat) {
@@ -302,15 +357,15 @@ export function VoiceSheet({ onClose }: { onClose: () => void }) {
                 press();
               }
             }}
-            onKeyUp={(e) => (e.key === " " || e.key === "Enter") && release()}
+            onKeyUp={(e) => (e.key === " " || e.key === "Enter") && handlePointerUp()}
             disabled={phase === "connecting" || phase === "error"}
-            aria-label="Hold to talk"
+            aria-label={isToggled.current ? "Tap to stop talking" : "Tap or hold to talk"}
             className={clsx(
-              "relative flex h-24 w-24 touch-none select-none items-center justify-center rounded-full text-ink transition",
-              phase === "listening" ? "bg-saffron" : "bg-white hover:bg-white/90",
+              "relative flex h-24 w-24 touch-none select-none items-center justify-center rounded-full transition",
+              phase === "listening" ? "bg-brand text-white" : "bg-white text-ink hover:bg-white/90",
               (phase === "connecting" || phase === "error") && "opacity-40",
             )}
-            style={{ boxShadow: phase === "listening" ? `0 0 0 ${8 + level * 26}px rgba(232,137,28,0.25)` : undefined }}
+            style={{ boxShadow: phase === "listening" ? `0 0 0 ${8 + level * 26}px rgba(66,133,244,0.35)` : undefined }}
           >
             <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <rect x="9" y="3" width="6" height="11" rx="3" />

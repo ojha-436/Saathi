@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowUp, BarChart3, FileSearch, Handshake, History, Loader2, Radar, RotateCcw, Sparkles, Timer, Workflow } from "@/lib/icons";
+import clsx from "clsx";
+import { ArrowRight, ArrowUp, BarChart3, ChevronDown, FileSearch, Handshake, History, Loader2, Radar, RotateCcw, ShieldCheck, Sparkles, Timer, Workflow } from "@/lib/icons";
 import { LogoMark } from "./Logo";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -15,6 +16,7 @@ import { ProposedTaskCard } from "./Tasks";
 
 const STARTERS = [
   { icon: FileSearch, text: "Which revision of SRC-BF-2041 is latest and who approved it?" },
+  { icon: ShieldCheck, text: "Is heat H-77812 within spec for drawing SRC-BF-2041?" },
   { icon: History, text: "Side frame casting me porosity aa rahi hai, pehle hua hai kya?" },
   { icon: Workflow, text: "Should we keep Om Castings for side frame castings?" },
   { icon: BarChart3, text: "NCRs by vendor this year" },
@@ -29,7 +31,7 @@ const RANGES = [
 ];
 
 export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; prompt?: string; onPromptUsed: () => void }) {
-  const { uid, me, toast, dialog, account } = useWs();
+  const { uid, me, toast, dialog, account, open } = useWs();
   const messages = useAssistant(uid);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -104,28 +106,46 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
               Namaste {firstName}. <em className="text-muted">What can I find for you?</em>
             </h2>
 
-            {/* catch-up card */}
-            <div className="rise relative mt-8 overflow-hidden rounded-2xl bg-rail p-6 text-paper" style={{ animationDelay: "120ms" }}>
-              <div className="blueprint-grid absolute inset-0 opacity-70" aria-hidden />
-              <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-                <div>
+            {/* catch-up and research cards */}
+            <div className="rise mt-8 grid gap-4 lg:grid-cols-2" style={{ animationDelay: "120ms" }}>
+              <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl bg-rail p-6 text-paper">
+                <div className="blueprint-grid absolute inset-0 opacity-70" aria-hidden />
+                <div className="relative">
                   <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-saffron">
                     <Radar size={14} /> Catch up
                   </p>
-                  <p className="mt-2 font-display text-3xl leading-tight">Been away? Get the brief.</p>
-                  <p className="mt-1 max-w-md text-sm text-paper/70">Decisions, asks for you, files shared and open promises from every chat and channel, each line with its source.</p>
+                  <p className="mt-2 font-display text-2xl leading-tight">Been away? Get the brief.</p>
+                  <p className="mt-1 text-xs text-paper/70">Decisions, asks for you, files shared and open promises from every chat and channel, each line with its source.</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="relative mt-4 flex flex-wrap gap-2">
                   {RANGES.map((r) => (
                     <button
                       key={r.hours}
                       onClick={() => ask(`What did I miss in the last ${r.hours} hours?`)}
                       disabled={busy}
-                      className="h-10 rounded-lg border border-paper/20 bg-paper/5 px-3.5 text-sm font-medium transition hover:border-saffron hover:bg-saffron hover:text-ink disabled:opacity-50"
+                      className="h-8 rounded-lg border border-paper/20 bg-paper/5 px-2.5 text-xs font-medium transition hover:border-saffron hover:bg-saffron hover:text-ink disabled:opacity-50"
                     >
                       {r.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-white via-surface to-canvas p-6 text-ink shadow-xs">
+                <div>
+                  <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-brand">
+                    <Sparkles size={14} /> Saathi Research
+                  </p>
+                  <p className="mt-2 font-display text-2xl leading-tight">Need an inspection dossier or vendor comparison?</p>
+                  <p className="mt-1 text-xs text-muted">Parallel research agents check drawings, certificates, NCRs and promises, verify every claim, and turn gaps into tasks.</p>
+                </div>
+                <div className="mt-4">
+                  <button
+                    onClick={() => open({ kind: "research" })}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-xs font-semibold text-white transition hover:bg-brand-strong"
+                  >
+                    Open Saathi Research <ArrowRight size={13} />
+                  </button>
                 </div>
               </div>
             </div>
@@ -244,32 +264,88 @@ function AnswerProvenance({ m }: { m: AssistantMsg }) {
   const cited = Array.from(new Set(m.text.match(/\[((?:msg|file|meet|mail|drive|rec|dec|ho|kn|std):[^\]]+)\]/g) ?? [])).length;
   const p = m.provenance;
   const steps = m.tool_calls ?? [];
+  const uniqueTools = Array.from(new Set(steps.map((c) => TOOL_NAME[c.tool] ?? c.tool)));
+
   return (
-    <div className="mt-3 border-t border-border pt-2">
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex items-center gap-1.5 text-xs text-muted hover:text-ink">
-        <Workflow size={12} aria-hidden /> How Saathi got this
-        <span>
-          · {steps.length + (p?.prefetched?.length ? 1 : 0)} step{steps.length + (p?.prefetched?.length ? 1 : 0) === 1 ? "" : "s"} · {cited} source{cited === 1 ? "" : "s"} cited
-          {p?.latency_ms ? ` · ${(p.latency_ms / 1000).toFixed(1)}s` : ""}
+    <div className="mt-3 border-t border-border pt-2.5">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="group flex flex-wrap items-center gap-1.5 rounded-lg border border-border/80 bg-canvas/60 px-2.5 py-1.5 text-left text-xs transition hover:border-brand/40 hover:bg-canvas"
+      >
+        <span className="flex items-center gap-1 font-semibold text-ink">
+          <Workflow size={13} className="shrink-0 text-brand" aria-hidden />
+          How Saathi got this
         </span>
+
+        <span className="text-muted/60">·</span>
+
+        <span className="rounded bg-surface px-1.5 py-0.5 font-medium text-muted">
+          {steps.length + (p?.prefetched?.length ? 1 : 0)} step{steps.length + (p?.prefetched?.length ? 1 : 0) === 1 ? "" : "s"}
+        </span>
+
+        {cited > 0 && (
+          <span className="flex items-center gap-1 rounded bg-moss-soft px-1.5 py-0.5 font-medium text-moss">
+            <ShieldCheck size={12} className="shrink-0" />
+            {cited} cited
+          </span>
+        )}
+
+        {p?.latency_ms ? (
+          <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-muted">
+            ⚡ {(p.latency_ms / 1000).toFixed(1)}s
+          </span>
+        ) : null}
+
+        <ChevronDown size={13} className={clsx("ml-auto shrink-0 text-muted transition", open && "rotate-180")} aria-hidden />
       </button>
+
       {open && (
-        <ol className="mt-2 space-y-1 text-xs text-muted">
-          {!!p?.prefetched?.length && <li>1. Searched your chats and files for the question ({p.prefetched.length} results)</li>}
-          {steps.map((c, i) => {
-            const arg = Object.values(c.args ?? {}).filter((v) => typeof v === "string" && v).join(" · ");
-            return (
-              <li key={i}>
-                {i + 1 + (p?.prefetched?.length ? 1 : 0)}. {TOOL_NAME[c.tool] ?? c.tool}
-                {arg ? `: “${String(arg).slice(0, 80)}”` : ""}
+        <div className="mt-2.5 space-y-2 rounded-xl border border-border bg-canvas/40 p-3 text-xs">
+          {uniqueTools.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 pb-1">
+              <span className="text-[11px] font-medium text-muted">Tools executed:</span>
+              {uniqueTools.map((t) => (
+                <span key={t} className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] font-medium text-ink">
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <ol className="space-y-1.5">
+            {!!p?.prefetched?.length && (
+              <li className="flex items-start gap-2 rounded-lg border border-border/70 bg-surface px-2.5 py-1.5">
+                <span className="font-mono text-[11px] font-semibold text-muted">01</span>
+                <div>
+                  <span className="font-medium text-ink">Workspace retrieval:</span>
+                  <span className="ml-1 text-muted">Searched permission-filtered chats and files ({p.prefetched.length} matching fragments)</span>
+                </div>
               </li>
-            );
-          })}
-          <li className="pt-1">
-            Searched only the chats and files you can access{p?.model ? ` · ${p.model}` : ""}
-            {p?.first_token_ms ? ` · first words after ${(p.first_token_ms / 1000).toFixed(1)}s` : ""}. Text inside documents is treated as data, not instructions.
-          </li>
-        </ol>
+            )}
+
+            {steps.map((c, i) => {
+              const arg = Object.values(c.args ?? {}).filter((v) => typeof v === "string" && v).join(" · ");
+              const stepNum = String(i + 1 + (p?.prefetched?.length ? 1 : 0)).padStart(2, "0");
+              return (
+                <li key={i} className="flex items-start gap-2 rounded-lg border border-border/70 bg-surface px-2.5 py-1.5">
+                  <span className="font-mono text-[11px] font-semibold text-muted">{stepNum}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-semibold text-ink">{TOOL_NAME[c.tool] ?? c.tool}</span>
+                    {arg ? <p className="truncate text-[11px] text-muted">“{String(arg).slice(0, 80)}”</p> : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="border-t border-border/60 pt-2 text-[11px] text-muted">
+            Searched only chats and files you can access
+            {p?.model ? ` · ${p.model}` : ""}
+            {p?.first_token_ms ? ` · first token ${(p.first_token_ms / 1000).toFixed(1)}s` : ""}.
+            {" "}Grounding invariants enforced: text inside files is treated strictly as passive data.
+          </div>
+        </div>
       )}
     </div>
   );

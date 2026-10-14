@@ -12,7 +12,7 @@ import { ReportDialog, type RecordDraftResult } from "./Quality";
 const VERDICT: Record<SpecVerdict, { label: string; cls: string; icon: typeof Octagon }> = {
   pass: { label: "Spec check passed", cls: "border-moss/30 bg-moss-soft text-moss", icon: CheckCircle2 },
   fail: { label: "Spec check failed", cls: "border-rust/30 bg-rust-soft text-rust", icon: Octagon },
-  incomplete: { label: "Spec check incomplete", cls: "border-saffron/40 bg-saffron-soft text-saffron-ink", icon: AlertTriangle },
+  incomplete: { label: "Spec check incomplete", cls: "border-warn-border/40 bg-warn-soft text-warn-ink", icon: AlertTriangle },
   no_limits: { label: "No approved limits", cls: "border-border bg-canvas text-muted", icon: Info },
 };
 
@@ -63,12 +63,13 @@ function limitText(r: SpecRow) {
 const ROW_ICON = {
   pass: <CheckCircle2 size={15} className="text-moss" aria-label="Pass" />,
   fail: <Octagon size={15} className="text-rust" aria-label="Fail" />,
-  missing: <AlertTriangle size={15} className="text-saffron-ink" aria-label="Missing" />,
+  missing: <AlertTriangle size={15} className="text-warn" aria-label="Missing" />,
   info: <Info size={15} className="text-muted" aria-label="Note" />,
 };
 
 export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; chatId?: string; onClose: () => void }) {
-  const { toast } = useWs();
+  const { toast, account } = useWs();
+  const canEditRecords = account.org_role !== "guest";
   const [check, setCheck] = useState<SpecCheck | null>(null);
   const [busy, setBusy] = useState<"ncr" | "rerun" | null>(null);
   const [draft, setDraft] = useState<RecordDraftResult | null>(null);
@@ -133,6 +134,7 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
   if (draft) return <ReportDialog onClose={onClose} initialDraft={draft} chatId={chatId} />;
 
   const v = check?.status === "done" ? VERDICT[check.verdict] : null;
+  const failedRows = check?.rows.filter((r) => r.status === "fail") ?? [];
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-ink/45 px-4 py-[6vh]" onMouseDown={onClose}>
       <div role="dialog" aria-modal="true" aria-label="Spec check" onMouseDown={(e) => e.stopPropagation()} className="ws-pop w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
@@ -154,14 +156,41 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
           <div className="p-6 text-sm text-muted">This certificate hasn&rsquo;t been checked yet.</div>
         ) : (
           <div className="max-h-[70vh] overflow-y-auto p-5">
-            <div className={clsx("flex items-start gap-2.5 rounded-xl border p-3.5", v?.cls)}>
-              {v && <v.icon size={18} className="mt-0.5 shrink-0" aria-hidden />}
-              <div className="text-sm">
-                <p className="font-bold">{v?.label}</p>
-                <p className="mt-0.5 opacity-90">
-                  Heat <b>{check.heat_no || "?"}</b> · {check.vendor || "vendor unknown"} · certificate {check.certificate_no || "—"} · grade <b>{check.grade || "?"}</b>
-                  {check.thickness_mm ? ` · ${check.thickness_mm} mm` : ""}
-                </p>
+            <div className={clsx("rounded-xl border p-4 shadow-2xs", v?.cls)}>
+              <div className="flex items-start gap-3">
+                {v && <v.icon size={20} className="mt-0.5 shrink-0" aria-hidden />}
+                <div className="min-w-0 flex-1 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-bold text-base">{v?.label}</p>
+                    {canEditRecords && (check.verdict === "fail" || check.verdict === "incomplete") && (
+                      <button
+                        onClick={draftNcr}
+                        disabled={busy !== null}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-rust px-3 text-xs font-semibold text-white shadow-xs transition hover:brightness-110 disabled:opacity-50"
+                      >
+                        {busy === "ncr" ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />}
+                        Draft NCR for Heat {check.heat_no || "?"}
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 opacity-90">
+                    Heat <b>{check.heat_no || "?"}</b> · {check.vendor || "vendor unknown"} · certificate {check.certificate_no || "—"} · grade <b>{check.grade || "?"}</b>
+                    {check.thickness_mm ? ` · ${check.thickness_mm} mm` : ""}
+                  </p>
+                  {failedRows.length > 0 && (
+                    <div className="mt-2.5 rounded-lg border border-rust/30 bg-surface/80 p-2.5 text-xs text-ink">
+                      <p className="font-semibold text-rust">Non-conforming properties:</p>
+                      <ul className="mt-1 space-y-0.5 font-mono text-[11.5px]">
+                        {failedRows.map((fr) => (
+                          <li key={fr.property} className="flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rust" />
+                            <span className="font-bold">{fr.label}</span>: {fmt(fr.value, fr.unit)} (limit: {limitText(fr)})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             {check.drawing && (
@@ -307,7 +336,7 @@ export function StandardsTab() {
                 return (
                   <li key={c.file_id}>
                     <button onClick={() => setOpenCheck(c.file_id)} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-hover">
-                      <v.icon size={16} className={clsx("shrink-0", c.verdict === "pass" ? "text-moss" : c.verdict === "fail" ? "text-rust" : c.verdict === "incomplete" ? "text-saffron-ink" : "text-muted")} aria-hidden />
+                      <v.icon size={16} className={clsx("shrink-0", c.verdict === "pass" ? "text-moss" : c.verdict === "fail" ? "text-rust" : c.verdict === "incomplete" ? "text-warn" : "text-muted")} aria-hidden />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">
                           Heat {c.heat_no || "?"} · {c.grade} · {c.vendor}
@@ -397,36 +426,62 @@ function LimitsTable({ limits }: { limits: SpecLimit[] }) {
   const band = (l: SpecLimit) =>
     l.thickness_min_mm === null && l.thickness_max_mm === null ? "all" : `${l.thickness_min_mm ?? 0} < t ≤ ${l.thickness_max_mm ?? "∞"} mm`;
   return (
-    <div className="overflow-x-auto border-t border-border">
-      <table className="w-full min-w-[560px] text-xs">
-        <thead>
-          <tr className="text-left text-muted">
-            {["Grade", "Property", "Min", "Max", "Thickness", "Clause", "Status"].map((h) => (
-              <th key={h} className="px-3 py-1.5 font-medium">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((l) => (
-            <tr key={l.id} className="border-t border-border">
-              <td className="px-3 py-1.5 font-mono">{l.grade}</td>
-              <td className="px-3 py-1.5">
-                {l.property}
+    <div className="border-t border-border">
+      {/* Mobile card stack (< sm) */}
+      <div className="divide-y divide-border sm:hidden">
+        {sorted.map((l) => (
+          <div key={l.id} className="space-y-1.5 bg-surface p-3 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono font-bold text-ink">
+                {l.grade} · {l.property}
                 {l.test_temp_c !== null ? ` @ ${l.test_temp_c} °C` : ""}
-              </td>
-              <td className="px-3 py-1.5 font-mono">{l.min ?? "—"}</td>
-              <td className="px-3 py-1.5 font-mono">{l.max ?? "—"}</td>
-              <td className="px-3 py-1.5">{band(l)}</td>
-              <td className="px-3 py-1.5 text-muted">{l.clause}</td>
-              <td className="px-3 py-1.5">
-                <span className={clsx("rounded-full px-1.5 py-px font-semibold", l.status === "approved" ? "bg-moss-soft text-moss" : l.status === "rejected" ? "bg-rust-soft text-rust" : "bg-saffron-soft text-saffron-ink")}>{l.status}</span>
-              </td>
+              </span>
+              <span className={clsx("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", l.status === "approved" ? "bg-moss-soft text-moss" : l.status === "rejected" ? "bg-rust-soft text-rust" : "bg-warn-soft text-warn-ink")}>
+                {l.status}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1 pt-0.5 text-muted">
+              <div>Min: <span className="font-mono font-medium text-ink">{l.min ?? "—"}</span></div>
+              <div>Max: <span className="font-mono font-medium text-ink">{l.max ?? "—"}</span></div>
+              <div>t: <span className="text-ink">{band(l)}</span></div>
+            </div>
+            {l.clause && <p className="text-[11px] text-muted">{l.clause}</p>}
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop scrollable table (sm+) */}
+      <div className="hidden sm:block overflow-x-auto touch-pan-x">
+        <table className="w-full min-w-[560px] text-xs">
+          <thead>
+            <tr className="text-left text-muted">
+              {["Grade", "Property", "Min", "Max", "Thickness", "Clause", "Status"].map((h) => (
+                <th key={h} className="px-3 py-1.5 font-medium">
+                  {h}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.map((l) => (
+              <tr key={l.id} className="border-t border-border">
+                <td className="px-3 py-1.5 font-mono">{l.grade}</td>
+                <td className="px-3 py-1.5">
+                  {l.property}
+                  {l.test_temp_c !== null ? ` @ ${l.test_temp_c} °C` : ""}
+                </td>
+                <td className="px-3 py-1.5 font-mono">{l.min ?? "—"}</td>
+                <td className="px-3 py-1.5 font-mono">{l.max ?? "—"}</td>
+                <td className="px-3 py-1.5">{band(l)}</td>
+                <td className="px-3 py-1.5 text-muted">{l.clause}</td>
+                <td className="px-3 py-1.5">
+                  <span className={clsx("rounded-full px-1.5 py-px font-semibold", l.status === "approved" ? "bg-moss-soft text-moss" : l.status === "rejected" ? "bg-rust-soft text-rust" : "bg-warn-soft text-warn-ink")}>{l.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

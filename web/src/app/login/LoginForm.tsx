@@ -9,12 +9,12 @@ import { onAuth, sendReset, signInWithPassword } from "@/lib/auth";
 import { AuthShell, Divider, GoogleButton, authMessage, inputCls, signInWithGoogle } from "./AuthShell";
 
 const DEMO = [
-  { id: "prince", name: "Prince Kumar", role: "Design Engineer", note: "Best place to start" },
-  { id: "amit", name: "Amit Sharma", role: "Senior Design Engineer" },
-  { id: "neha", name: "Neha Verma", role: "QA Manager" },
-  { id: "rahul", name: "Rahul Singh", role: "Procurement Lead" },
-  { id: "suresh", name: "Suresh Yadav", role: "Shop Floor Supervisor" },
-  { id: "kavya", name: "Kavya Iyer", role: "Project Manager" },
+  { id: "prince", name: "Prince Kumar", role: "Design Engineer", note: "Design Engineer · Best place to start" },
+  { id: "neha", name: "Neha Verma", role: "QA Manager", note: "QA Manager · Spec Check, Standards & NCRs" },
+  { id: "suresh", name: "Suresh Yadav", role: "Shop Floor Supervisor", note: "Shop Floor Supervisor · Voice, Bay 2 & Handovers" },
+  { id: "rahul", name: "Rahul Singh", role: "Procurement Lead", note: "Procurement Lead · Vendor Promises & Quotes" },
+  { id: "kavya", name: "Kavya Iyer", role: "Project Manager", note: "Project Manager · Research & Decisions" },
+  { id: "amit", name: "Amit Sharma", role: "Senior Design Engineer", note: "Senior Design Engineer · Private Rev D Draft" },
 ];
 const DEMO_PASSWORD = "Saathi@2026";
 
@@ -30,7 +30,7 @@ export function LoginForm() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<Err>(params.get("error") === "domain" ? { field: "form", text: "Your organisation hasn't enabled Saathi for that email domain. Sign in with your work account." } : null);
   const [resetSent, setResetSent] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(!!params.get("demo"));
+  const [demoOpen, setDemoOpen] = useState(true);
   const emailRef = useRef<HTMLInputElement>(null);
   const demoRef = useRef<HTMLDivElement>(null);
 
