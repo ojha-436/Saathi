@@ -227,7 +227,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const admin = isAdmin(account);
   const myState = presence(me);
 
-  const isDemo = account.email?.endsWith("@saathi.demo") || account.org_id === "shakti-rail";
+  const isDemo = Boolean(account.email?.endsWith("@saathi.demo") || me?.email?.endsWith("@saathi.demo"));
 
   const demoPersonaItems: MenuItem[] = DEMO_PERSONAS.map((p) => ({
     label: `${p.name} (${p.role})`,
