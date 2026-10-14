@@ -5,8 +5,7 @@ import { Check, Eye, EyeOff, Loader2 } from "@/lib/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
-import { deleteCurrentUser, onAuth, signUpWithPassword } from "@/lib/auth";
+import { deleteCurrentUser, onAuth, resendVerification, signOut, signUpWithPassword } from "@/lib/auth";
 import { AuthShell, Divider, GoogleButton, authMessage, inputCls, signInWithGoogle } from "../login/AuthShell";
 
 const RULES = [
@@ -24,15 +23,16 @@ export function SignupForm() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<ReturnType<typeof authMessage>>(null);
+  const [created, setCreated] = useState(false);
   const creating = useRef(false);
 
   // Already signed in? Go straight to the workspace (but not while this form is creating the account).
   useEffect(
     () =>
       onAuth((u) => {
-        if (u && !creating.current) router.replace("/app");
+        if (u && !creating.current && !created) router.replace("/app");
       }),
-    [router],
+    [router, created],
   );
 
   const passed = RULES.filter((r) => r.test(password)).length;
@@ -47,16 +47,21 @@ export function SignupForm() {
     creating.current = true;
     try {
       await signUpWithPassword(email.trim(), password, name.trim());
-      await api("/api/me/profile", { json: { name: name.trim(), role: role.trim() } });
-      router.replace("/app");
+      try {
+        await resendVerification();
+      } catch (e) {
+        console.error("Verification email failed:", e);
+      }
+      await signOut();
+      setCreated(true);
     } catch (err) {
       creating.current = false;
       const msg = (err as Error).message;
-      // The API refuses email domains outside the organisation's allow-list
       if (msg.includes("organisation")) {
         await deleteCurrentUser().catch(() => {});
         setError({ field: "email", text: msg });
       } else setError(authMessage(err));
+    } finally {
       setBusy(null);
     }
   }
@@ -74,6 +79,33 @@ export function SignupForm() {
   }
 
   const field = (f: "name" | "email" | "password") => (error?.field === f ? error.text : null);
+
+  if (created) {
+    return (
+      <AuthShell>
+        <div className="text-center py-6">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-moss/10 text-moss">
+            <Check size={24} />
+          </div>
+          <h2 className="text-[24px] font-bold tracking-tight">Verify your email</h2>
+          <p className="mt-2 text-sm text-muted">
+            We&apos;ve sent a verification link to <span className="font-semibold text-ink">{email}</span>.
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Please check your inbox (and spam folder) and verify your email address to activate your account.
+          </p>
+          <div className="mt-8">
+            <Link
+              href="/login"
+              className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-brand text-[15px] font-semibold text-white transition hover:bg-brand-strong"
+            >
+              Back to Sign in
+            </Link>
+          </div>
+        </div>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell>

@@ -86,6 +86,7 @@ class SettingsIn(BaseModel):
     snooze: dict | None = None  # {"key": "task:abc", "until": ISO time or null to unsnooze}
     live_prompt: bool | None = None  # offer Saathi Live when a synced calendar meeting starts
     live_announce: bool | None = None  # play the spoken recording notice when Saathi Live starts listening
+    walkthrough: bool | None = None
 
 
 @router.post("/settings")
@@ -93,6 +94,8 @@ def update_settings(body: SettingsIn, user=Depends(current_user)):
     """Private per-user preferences (never stored on shared chat documents)."""
     ref = db.collection("user_settings").document(user["uid"])
     update: dict = {"org_id": user["org_id"], "updated_at": datetime.now(TZ)}
+    if body.walkthrough is not None:
+        update["walkthrough"] = body.walkthrough
     if body.chat_id:
         if body.level not in NOTIFY_LEVELS:
             raise HTTPException(400, "Level must be all, mentions or off")

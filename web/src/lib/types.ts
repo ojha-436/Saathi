@@ -45,6 +45,7 @@ export type UserSettings = {
   snoozed?: Record<string, string>; // Needs-you item key -> ISO time
   live_prompt?: boolean; // offer Saathi Live when a calendar meeting starts
   live_announce?: boolean; // play the spoken recording notice
+  walkthrough?: boolean;
 };
 
 export type Meeting = {

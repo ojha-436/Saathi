@@ -1,6 +1,6 @@
 "use client";
 
-import { MailCheck } from "@/lib/icons";
+import { Building2, Loader2, MailCheck } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogoMark } from "@/components/Logo";
@@ -16,6 +16,9 @@ export function AppShell() {
   const [verify, setVerify] = useState("");
   const [failed, setFailed] = useState("");
   const [sent, setSent] = useState(false);
+  const [orgName, setOrgName] = useState("");
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [orgDone, setOrgDone] = useState(false);
 
   async function load() {
     setFailed("");
@@ -32,6 +35,23 @@ export function AppShell() {
         await signOut();
         router.replace(`/login?error=${msg.includes("deactivated") ? "deactivated" : "domain"}`);
       } else setFailed(msg);
+    }
+  }
+
+  async function submitOrg(e: React.FormEvent) {
+    e.preventDefault();
+    if (!orgName.trim() || savingOrg) return;
+    setSavingOrg(true);
+    try {
+      await api("/api/admin/org", { method: "PATCH", json: { name: orgName.trim() } });
+      if (account) {
+        setAccount({ ...account, org: { ...account.org, name: orgName.trim() } });
+      }
+      setOrgDone(true);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSavingOrg(false);
     }
   }
 
@@ -102,5 +122,43 @@ export function AppShell() {
         <span className="font-mono text-xs uppercase tracking-widest text-muted">Opening workspace</span>
       </div>
     );
+
+  if (account.org_role === "owner" && account.org.name.endsWith(" workspace") && !orgDone) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center p-6 bg-canvas">
+        <div className="w-full max-w-md bg-surface border border-border p-8 rounded-2xl shadow-xl text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10 text-brand">
+            <Building2 size={24} />
+          </div>
+          <h1 className="text-xl font-bold tracking-tight">Name your organization</h1>
+          <p className="mt-1.5 text-sm text-muted">
+            You&apos;re setting up a new workspace. What is the name of your company or organization?
+          </p>
+          <form onSubmit={submitOrg} className="mt-6 text-left">
+            <label htmlFor="org" className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2">
+              Organization Name
+            </label>
+            <input
+              id="org"
+              autoFocus
+              required
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              placeholder="e.g. Acme Components"
+              className="w-full h-11 px-3 border border-border rounded-lg text-sm bg-surface outline-none focus:border-brand text-ink"
+            />
+            <button
+              type="submit"
+              disabled={savingOrg || orgName.trim().length < 2}
+              className="mt-5 w-full h-11 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand-strong transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {savingOrg ? <Loader2 size={16} className="animate-spin" /> : "Continue to Workspace"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return <Workspace key={user.uid} uid={user.uid} account={account} />;
 }

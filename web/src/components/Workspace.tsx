@@ -14,6 +14,7 @@ import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { ResearchView } from "./Research";
 import { VoiceSheet } from "./VoiceSheet";
+import { ProductTour } from "./ProductTour";
 import { Menu, type MenuItem, UserAvatar } from "./bits";
 
 const DEMO_PERSONAS = [
@@ -179,6 +180,15 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       return () => clearTimeout(t);
     }
   }, [view, chats, chatList.length]);
+
+  const [showTour, setShowTour] = useState(false);
+
+  // Automatically offer the product tour on first login if not completed
+  useEffect(() => {
+    if (settings && settings.walkthrough !== true && !account.email?.endsWith("@saathi.demo")) {
+      setShowTour(true);
+    }
+  }, [settings, account.email]);
 
   // ⌘K / Ctrl+K opens the command palette
   useEffect(() => {
@@ -361,6 +371,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                 })),
                 { label: statusText(me) ? `“${statusText(me)}”` : "Set a status message…", icon: Smile, onSelect: () => setDlg("status") },
                 "sep",
+                { label: "Product tour", icon: Sparkles, onSelect: () => setShowTour(true) },
                 { label: "Settings", icon: Settings, onSelect: () => setDlg("settings") },
                 ...(admin ? [{ label: "Workspace admin", icon: ShieldCheck, onSelect: () => open({ kind: "admin" }) }] : []),
                 { label: "My insights", icon: BarChart3, onSelect: () => open({ kind: "insights" }) },
@@ -464,6 +475,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       {taskPrefill && <TaskDialog prefill={taskPrefill} onClose={() => setTaskPrefill(null)} />}
       {profileOf && <ProfileCard uid={profileOf} onClose={() => setProfileOf(null)} />}
       {welcome && !dlg && <ProfileDialog welcome onClose={() => setWelcomeDone(true)} />}
+      {showTour && <ProductTour onClose={() => setShowTour(false)} />}
     </Ctx.Provider>
   );
 }
