@@ -418,7 +418,7 @@ How to work:
 
 agent = Agent(
     name="saathi",
-    model=resilience.model(AGENT_MODEL),
+    model=resilience.interactive_model(AGENT_MODEL),
     description="Personal work assistant with permission-aware access to the user's chats, files and tasks.",
     instruction=_instruction,
     tools=TOOLS,
@@ -426,7 +426,7 @@ agent = Agent(
         temperature=0.2, thinking_config=types.ThinkingConfig(thinking_level=AGENT_THINKING) if AGENT_THINKING else None
     ),
     on_model_error_callback=resilience.on_model_error(
-        "I'm getting a lot of requests right now and couldn't finish that. Please try again in a minute."),
+        "I'm getting a lot of requests right now and couldn't finish that. Please try again in a minute.", interactive=True),
 )
 
 # A normal answer takes 2-5 model calls; cap runaway tool loops (ADK's default allows 500) to bound cost and latency.
@@ -508,10 +508,14 @@ async def ask(user: dict, text: str, history: list[dict], on_partial=None) -> di
                     on_partial(streamed)
         elif event.is_final_response() and event.content and event.content.parts:
             reply = "".join(p.text or "" for p in event.content.parts if not getattr(p, "thought", False))
+            if reply and first_token_ms is None:  # a fallback answer arrives whole, not streamed
+                first_token_ms = int((time.monotonic() - started) * 1000)
 
     final = await session_service.get_session(app_name=APP_NAME, user_id=user["uid"], session_id=session.id)
     proposed = list((final.state if final else {}).get("proposed_tasks", []))
     charts = list((final.state if final else {}).get("charts", []))[:3]
+    fallback = (final.state if final else {}).get("fallback_model")
     await session_service.delete_session(app_name=APP_NAME, user_id=user["uid"], session_id=session.id)
     return {"text": (reply or streamed).strip() or "Sorry, I couldn't produce an answer.", "tool_calls": tool_calls, "proposed_tasks": proposed,
-            "charts": charts, "prefetched": [r["ref"] for r in found], "first_token_ms": first_token_ms, "model": AGENT_MODEL}
+            "charts": charts, "prefetched": [r["ref"] for r in found], "first_token_ms": first_token_ms,
+            "model": f"{AGENT_MODEL}, fell back to {fallback}" if fallback else AGENT_MODEL}
