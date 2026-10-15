@@ -95,6 +95,30 @@ export async function signUpWithPassword(email: string, password: string, name: 
   emit();
 }
 
+/**
+ * Invite links: the link reached the invited mailbox, so the server marks the email verified when the invite is accepted.
+ * These skip Firebase's own verification email and the "verify first" check that /login applies.
+ */
+export async function createAccountForInvite(email: string, password: string, name: string): Promise<void> {
+  if (!isLocal()) {
+    const cred = await createUserWithEmailAndPassword(getFbAuth(), email, password);
+    await updateProfile(cred.user, { displayName: name });
+    await cred.user.getIdToken(true); // the name claim rides on the token the invite is accepted with
+    return;
+  }
+  localStorage.setItem(KEY, JSON.stringify(await localPost("/api/local/signup", { email, password, name })));
+  emit();
+}
+
+export async function signInForInvite(email: string, password: string): Promise<void> {
+  if (!isLocal()) {
+    await signInWithEmailAndPassword(getFbAuth(), email, password);
+    return;
+  }
+  localStorage.setItem(KEY, JSON.stringify(await localPost("/api/local/login", { email, password })));
+  emit();
+}
+
 export async function signOut(): Promise<void> {
   if (!isLocal()) return fbSignOut(getFbAuth());
   localStorage.removeItem(KEY);

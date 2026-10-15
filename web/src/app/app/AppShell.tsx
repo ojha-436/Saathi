@@ -32,6 +32,7 @@ export function AppShell() {
     } catch (e) {
       const msg = (e as Error).message;
       if (msg.startsWith("verify-email:")) setVerify(msg.slice(13).trim());
+      else if (msg.startsWith("invite-expired:")) setFailed(msg.slice(15).trim());
       else if (msg.includes("organisation") || msg.includes("deactivated")) {
         await signOut();
         router.replace(`/login?error=${msg.includes("deactivated") ? "deactivated" : "domain"}`);
@@ -123,6 +124,9 @@ export function AppShell() {
         <p className="text-sm text-muted">{failed}</p>
         <button onClick={() => location.reload()} className="mt-2 h-10 rounded-lg bg-brand px-4 text-sm font-semibold text-white">
           Try again
+        </button>
+        <button onClick={() => signOut()} className="text-sm text-muted hover:underline">
+          Use a different account
         </button>
       </div>
     );

@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from . import invites as inv, mailer
 from .config import TZ
 from .firebase import audit, auth, current_user, db, FieldFilter, forget_profile, ORG_ROLES, PUBLIC_DOMAINS, require_admin, set_claims, user_profile
 
@@ -94,6 +95,11 @@ class InviteIn(BaseModel):
     email: str
     org_role: str = "member"
     channel_ids: list[str] = []
+    send_email: bool = True
+
+
+def _delivery(d: dict | None) -> dict | None:
+    return {**d, "at": _ts(d.get("at"))} if d else None
 
 
 @router.get("/invites")
@@ -101,10 +107,25 @@ def invites(admin=Depends(admin_user)):
     rows = []
     for s in db.collection("invites").where(filter=FieldFilter("org_id", "==", admin["org_id"])).stream():
         d = s.to_dict()
-        rows.append({"email": s.id, "org_role": d.get("org_role"), "status": d.get("status"), "invited_by": d.get("invited_by_name"),
-                     "channels": d.get("channel_names", []), "created_at": _ts(d.get("created_at"))})
-    rows.sort(key=lambda r: (r["status"] != "pending", r["created_at"] or ""), reverse=False)
-    return rows
+        state = inv.state_of(d)
+        if state == "revoked":
+            continue
+        rows.append({"id": s.id, "email": inv.email_of(s), "org_role": d.get("org_role"), "status": "pending" if state == "valid" else state,
+                     "invited_by": d.get("invited_by_name"), "channels": d.get("channel_names", []), "created_at": _ts(d.get("created_at")),
+                     "expires_at": _ts(d.get("expires_at")), "accepted_at": _ts(d.get("accepted_at")), "delivery": _delivery(d.get("delivery"))})
+    open_ = sorted((r for r in rows if r["status"] != "accepted"), key=lambda r: r["created_at"] or "", reverse=True)
+    done = sorted((r for r in rows if r["status"] == "accepted"), key=lambda r: r["accepted_at"] or "", reverse=True)
+    return {"mail": mailer.enabled(), "invites": open_ + done}
+
+
+def _move_to_link_invite(snap):
+    """Invites from before personal links are stored under the email; links need the inv_ id, so give it one."""
+    if snap.id.startswith("inv_"):
+        return snap.reference
+    ref = db.collection("invites").document(inv.new_id())
+    ref.set({**snap.to_dict(), "email": snap.id, "email_norm": inv.norm_email(snap.id)})
+    snap.reference.delete()
+    return ref
 
 
 @router.post("/invites")
@@ -116,31 +137,93 @@ def invite(body: InviteIn, admin=Depends(admin_user)):
         raise HTTPException(400, "Invite as admin, member or guest")
     if body.org_role == "guest" and not body.channel_ids:
         raise HTTPException(400, "Pick at least one channel for a guest")
+    note = ""
     existing = db.collection("users").where(filter=FieldFilter("email", "==", email)).limit(1).get()
     if existing:
-        raise HTTPException(409, "That person already has a Saathi account" + ("" if existing[0].get("org_id") == admin["org_id"] else " in another workspace"))
+        u = existing[0].to_dict()
+        if u.get("org_id") == admin["org_id"]:
+            if u.get("deactivated"):
+                raise HTTPException(409, f"{u.get('name') or email} was deactivated in this workspace. Reactivate them in Members instead.")
+            raise HTTPException(409, f"{u.get('name') or email} is already in this workspace. Change their role in Members, or add them to a channel from the channel itself.")
+        if inv.has_others(u.get("org_id", ""), existing[0].id):
+            raise HTTPException(409, f"{email} already uses Saathi with another organisation. A Saathi account belongs to one workspace, "
+                                     "so invite a different address for them (for example their work email).")
+        note = "They already have a Saathi account that nobody else uses. When they accept, Saathi asks them to move it here."
     names = []
     for cid in body.channel_ids:
         snap = db.collection("chats").document(cid).get()
-        if not snap.exists or snap.get("org_id") != admin["org_id"] or snap.get("type") != "channel":
+        c = snap.to_dict() or {}
+        if not snap.exists or c.get("org_id") != admin["org_id"] or c.get("type") != "channel":
             raise HTTPException(400, "Unknown channel")
-        names.append(snap.get("name"))
-    db.collection("invites").document(email).set(
-        {"org_id": admin["org_id"], "org_role": body.org_role, "channel_ids": body.channel_ids, "channel_names": names, "status": "pending",
-         "invited_by": admin["uid"], "invited_by_name": admin["name"], "created_at": datetime.now(TZ)}
-    )
-    audit(admin, "member.invited", email, org_role=body.org_role, channels=names)
-    return {"ok": True}
+        if body.org_role == "guest" and c.get("default"):
+            raise HTTPException(400, f"Guests can't join #{c.get('name')}: it's company-wide. Pick a project or supplier channel.")
+        names.append(c.get("name"))
+
+    # Inviting the same person again updates their pending invite (role, channels) instead of starting a second one
+    ref = None
+    for s in db.collection("invites").where(filter=FieldFilter("email_norm", "==", inv.norm_email(email))).stream():
+        if s.to_dict().get("org_id") == admin["org_id"] and s.to_dict().get("status") == "pending":
+            ref = s.reference
+    legacy = db.collection("invites").document(email).get()
+    if legacy.exists and legacy.to_dict().get("org_id") == admin["org_id"] and legacy.to_dict().get("status") == "pending":
+        if ref:
+            legacy.reference.delete()
+        else:
+            ref = _move_to_link_invite(legacy)
+    data = {"email": email, "email_norm": inv.norm_email(email), "org_id": admin["org_id"], "org_role": body.org_role,
+            "channel_ids": body.channel_ids, "channel_names": names, "status": "pending", "invited_by": admin["uid"],
+            "invited_by_name": admin["name"], "invited_by_email": admin.get("email", "")}
+    again = ref is not None
+    if again:
+        if body.send_email and inv.recently_emailed(ref.get().to_dict()):
+            raise HTTPException(429, "An invite email just went to this address. Give it a minute before sending again.")
+        ref.update(data)
+    else:
+        ref = db.collection("invites").document(inv.new_id())
+        ref.set({**data, "created_at": datetime.now(TZ)})
+    path = inv.new_link(ref)
+    org_name = (db.collection("orgs").document(admin["org_id"]).get().to_dict() or {}).get("name", "")
+    delivery = inv.deliver(ref, org_name, path) if body.send_email else None
+    audit(admin, "member.reinvited" if again else "member.invited", email, org_role=body.org_role, channels=names,
+          email=(delivery or {}).get("status", "link"))
+    return {"ok": True, "id": ref.id, "path": path, "again": again, "note": note, "delivery": _delivery(delivery)}
 
 
-@router.delete("/invites/{email}")
-def revoke_invite(email: str, admin=Depends(admin_user)):
-    ref = db.collection("invites").document(email.lower())
-    snap = ref.get()
-    if not snap.exists or snap.get("org_id") != admin["org_id"]:
+class LinkIn(BaseModel):
+    send_email: bool = False
+
+
+def _own_invite(invite_id: str, admin: dict):
+    snap = db.collection("invites").document(invite_id).get()
+    if not snap.exists or snap.to_dict().get("org_id") != admin["org_id"] or snap.to_dict().get("status") == "revoked":
         raise HTTPException(404, "Invite not found")
-    ref.delete()
-    audit(admin, "member.invite_revoked", email)
+    return snap
+
+
+@router.post("/invites/{invite_id}/link")
+def invite_link(invite_id: str, body: LinkIn, admin=Depends(admin_user)):
+    """A fresh personal link (optionally emailed). Renews an expired invite; links already sent keep working."""
+    snap = _own_invite(invite_id, admin)
+    d = snap.to_dict()
+    if d.get("status") == "accepted":
+        raise HTTPException(400, f"{inv.email_of(snap)} has already joined")
+    if body.send_email and inv.recently_emailed(d):
+        raise HTTPException(429, "An invite email just went to this address. Give it a minute before sending again.")
+    ref = _move_to_link_invite(snap)
+    path = inv.new_link(ref)
+    org_name = (db.collection("orgs").document(admin["org_id"]).get().to_dict() or {}).get("name", "")
+    delivery = inv.deliver(ref, org_name, path) if body.send_email else None
+    audit(admin, "member.invite_resent" if body.send_email else "member.invite_link", inv.email_of(snap), email=(delivery or {}).get("status", "link"))
+    return {"ok": True, "id": ref.id, "path": path, "delivery": _delivery(delivery)}
+
+
+@router.delete("/invites/{invite_id}")
+def revoke_invite(invite_id: str, admin=Depends(admin_user)):
+    snap = _own_invite(invite_id, admin)
+    if snap.to_dict().get("status") == "accepted":
+        raise HTTPException(400, "This invite was already accepted. Deactivate the person in Members instead.")
+    snap.reference.update({"status": "revoked", "revoked_by": admin["uid"], "revoked_at": datetime.now(TZ)})  # kept so the link says "withdrawn"
+    audit(admin, "member.invite_revoked", inv.email_of(snap))
     return {"ok": True}
 
 

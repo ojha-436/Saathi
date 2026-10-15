@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import Header, HTTPException
 
-from .config import FILES_BUCKET, LOCAL_MODE, PROJECT, SIGNUP_DOMAINS
+from .config import FILES_BUCKET, LOCAL_MODE, PROJECT
 
 if LOCAL_MODE:
     from .localdb import DistanceMeasure, FieldFilter, LocalBucket, LocalDB, Vector, firestore  # noqa: F401
@@ -82,6 +82,11 @@ if LOCAL_MODE:
             if not rec:
                 raise self.UserNotFoundError(uid)
             return type("U", (), {"uid": uid, "email": rec["email"], "display_name": rec.get("name", "")})()
+
+        def get_user_by_email(self, email: str):
+            for s in db.collection("_auth").where("email", "==", email.strip().lower()).limit(1).stream():
+                return self.get_user(s.id)
+            raise self.UserNotFoundError(email)
 
         def create_user(self, uid: str | None = None, email: str = "", password: str = "", display_name: str = "", **_):
             uid = uid or "u_" + uuid.uuid4().hex[:16]
@@ -206,60 +211,6 @@ def ensure_general(org_id: str, uid: str, name: str) -> None:
             c.reference.update({"members": firestore.ArrayUnion([uid])})
 
 
-def _join(decoded: dict) -> None:
-    """First sign-in. Order: a pending invite, then a workspace that claimed this verified domain, else a new workspace."""
-    uid = decoded["uid"]
-    email = (decoded.get("email") or "").lower()
-    domain = email.rsplit("@", 1)[-1]
-    verified = bool(decoded.get("email_verified"))
-    if not verified and not email.endswith("@saathi.demo"):
-        raise HTTPException(403, "verify-email: Please verify your email address to access your workspace.")
-    if SIGNUP_DOMAINS and domain not in SIGNUP_DOMAINS:
-        raise HTTPException(403, "Your organisation hasn't enabled Saathi for this email domain. Sign in with your work account.")
-    name = (decoded.get("name") or email.split("@")[0].replace(".", " ").title() or "New colleague").strip()[:80]
-
-    org_id, org_role, channels = "", "member", []
-    invite_ref = db.collection("invites").document(email) if email else None
-    invite = invite_ref.get() if invite_ref else None
-    if invite is not None and invite.exists and invite.get("status") == "pending":
-        if not verified:
-            raise HTTPException(403, "verify-email: Verify your email address to accept your invitation.")
-        inv = invite.to_dict()
-        org_id, org_role, channels = inv["org_id"], inv.get("org_role", "member"), inv.get("channel_ids") or []
-    elif domain and domain not in PUBLIC_DOMAINS:
-        hit = db.collection("orgs").where("domains", "array_contains", domain).limit(1).get()
-        if hit:
-            if not verified:
-                raise HTTPException(403, "verify-email: Verify your email address to join your organisation's workspace.")
-            org_id = hit[0].id
-    if not org_id:
-        org_id, org_role = "org_" + uuid.uuid4().hex[:16], "owner"
-        db.collection("orgs").document(org_id).set(
-            {"name": _workspace_name(email, name), "domains": [], "created_by": uid, "created_at": firestore.SERVER_TIMESTAMP,
-             "settings": {"channel_creation": "everyone", "ai_enabled": True}}
-        )
-
-    db.collection("users").document(uid).set(
-        {"name": name, "role": "", "email": email, "photo": decoded.get("picture", ""), "org_id": org_id, "org_role": org_role,
-         "provider": (decoded.get("firebase") or {}).get("sign_in_provider", ""), "created_at": firestore.SERVER_TIMESTAMP}
-    )
-    set_claims(uid, org_id, org_role)
-    forget_profile(uid)
-    if invite is not None and invite.exists and org_id == invite.get("org_id"):
-        invite_ref.update({"status": "accepted", "accepted_uid": uid, "accepted_at": firestore.SERVER_TIMESTAMP})
-        for cid in channels:  # guests (and members) invited straight into channels
-            ref = db.collection("chats").document(cid)
-            snap = ref.get()
-            if snap.exists and snap.get("org_id") == org_id:
-                ref.update({"members": firestore.ArrayUnion([uid])})
-                for col in ("files", "decisions", "handovers"):
-                    for c in db.collection(col).where("chat_id", "==", cid).stream():
-                        c.reference.update({"members": firestore.ArrayUnion([uid])})
-    if org_role != "guest":
-        ensure_general(org_id, uid, name)
-    audit({"uid": uid, "name": name, "org_id": org_id}, "user.joined", org_id, org_role=org_role, via="invite" if channels or org_role != "owner" else "signup")
-
-
 # A missing IAM role once turned every request into "Invalid token" (2026-10-15): only real token problems are a 401.
 _BAD_TOKEN = (ValueError,) if LOCAL_MODE else (ValueError, auth.InvalidIdTokenError, auth.UserDisabledError)
 
@@ -270,23 +221,30 @@ async def current_user(authorization: str = Header(default="")) -> dict:
     return user_from_token(authorization[7:])
 
 
-def user_from_token(token: str) -> dict:
-    """Verifies a Firebase ID token and returns the caller's profile (also used by WebSockets, which can't send headers)."""
+def decode_token(token: str) -> dict:
+    """Verifies a Firebase ID token (signature, expiry, revocation, disabled account). Email verification is the caller's check."""
     try:
-        decoded = auth.verify_id_token(token, check_revoked=True)
+        return auth.verify_id_token(token, check_revoked=True)
     except _BAD_TOKEN as e:  # malformed, expired, revoked or disabled: the caller has to sign in again
         log.info("token rejected: %s", type(e).__name__)
         raise HTTPException(401, "Invalid token")
     except Exception as e:  # our side failed (IAM, network, key fetch): log it loudly and don't tell the client to sign out
         log.error("token verification failed: %s: %s", type(e).__name__, str(e)[:300])
         raise HTTPException(503, "Couldn't verify your sign-in right now. Please try again in a moment.")
+
+
+def user_from_token(token: str) -> dict:
+    """Verifies a Firebase ID token and returns the caller's profile (also used by WebSockets, which can't send headers)."""
+    decoded = decode_token(token)
     email = (decoded.get("email") or "").lower()
     if not decoded.get("email_verified") and not email.endswith("@saathi.demo"):
         raise HTTPException(403, "verify-email: Please verify your email address before accessing the workspace.")
     profile = user_profile(decoded["uid"])
     if not profile["org_id"]:
         if not db.collection("users").document(decoded["uid"]).get().exists:
-            _join(decoded)
+            from .invites import join  # first sign-in: invite, verified domain, or a new workspace
+
+            join(decoded)
             profile = user_profile(decoded["uid"])
         else:
             raise HTTPException(403, "Your account isn't part of a workspace yet. Ask your admin for an invite.")

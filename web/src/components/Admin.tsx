@@ -9,7 +9,7 @@ import { Avatar, ROLE_LABEL, Switch } from "./bits";
 import { useWs } from "./ctx";
 
 type Member = { id: string; name: string; email: string; title: string; org_role: OrgRole; deactivated: boolean; provider: string; last_active: string | null; created_at: string | null };
-type Invite = { email: string; org_role: OrgRole; status: string; invited_by: string; channels: string[]; created_at: string | null };
+type Invite = { id: string; email: string; org_role: OrgRole; status: "pending" | "expired" | "accepted"; invited_by: string; channels: string[]; created_at: string | null; expires_at: string | null; accepted_at: string | null; delivery: Delivery };
 type ChannelRow = { id: string; name: string; visibility: string; members: number; owners: string[]; created_by: string; last_activity: string | null; ai_excluded: boolean };
 type AuditRow = { ts: string | null; actor: string; action: string; target: string; meta: Record<string, unknown> };
 type Tab = "impact" | "members" | "invites" | "channels" | "workspace" | "audit";
@@ -25,8 +25,12 @@ const ago = (iso: string | null) => {
 
 const ACTION_LABEL: Record<string, string> = {
   "user.joined": "joined the workspace",
+  "user.left": "moved out of the workspace",
   "member.invited": "invited",
-  "member.invite_revoked": "revoked invite for",
+  "member.reinvited": "updated the invite for",
+  "member.invite_resent": "emailed the invite again to",
+  "member.invite_link": "made a new invite link for",
+  "member.invite_revoked": "withdrew the invite for",
   "member.role_changed": "changed role of",
   "member.deactivated": "deactivated",
   "member.reactivated": "reactivated",
@@ -220,74 +224,141 @@ function MembersTab() {
   );
 }
 
+type Delivery = { status: "sent" | "failed" | "off"; at: string | null; error?: string } | null;
+type IssuedLink = { email: string; url: string; delivery: Delivery; note?: string };
+
+/** Common slips in consumer domains: an invite to gmial.com never arrives and no bounce comes back to Saathi. */
+const DOMAIN_TYPOS: Record<string, string> = {
+  "gmial.com": "gmail.com", "gamil.com": "gmail.com", "gmai.com": "gmail.com", "gmail.co": "gmail.com", "gmail.con": "gmail.com", "gnail.com": "gmail.com",
+  "yaho.com": "yahoo.com", "yahoo.co": "yahoo.com", "yahoo.con": "yahoo.com", "hotmial.com": "hotmail.com", "hotmail.co": "hotmail.com",
+  "outlok.com": "outlook.com", "outlook.co": "outlook.com", "rediffmail.co": "rediffmail.com", "rediff.com": "rediffmail.com",
+};
+
+function deliveryText(d: Delivery) {
+  if (!d) return "Link only";
+  if (d.status === "sent") return `Emailed ${ago(d.at)}`;
+  if (d.status === "failed") return "Email failed";
+  return "Link only";
+}
+
 function InvitesTab() {
   const { chats, toast } = useWs();
-  const [rows, reload] = useLoad<Invite[]>("/api/admin/invites");
+  const [data, reload] = useLoad<{ mail: boolean; invites: Invite[] }>("/api/admin/invites");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgRole>("member");
   const [channels, setChannels] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const myChannels = Object.values(chats).filter((c) => c.type === "channel");
-  const url = typeof window !== "undefined" ? `${location.origin}/signup` : "/signup";
+  const [busy, setBusy] = useState<string | null>(null);
+  const [issued, setIssued] = useState<IssuedLink | null>(null);
+  const mail = data?.mail ?? false;
+  const rows = data?.invites;
+  // Guests never see #General (company-wide), so it isn't offered for them
+  const myChannels = Object.values(chats).filter((c) => c.type === "channel" && !(role === "guest" && c.default));
+  const typo = (() => {
+    const d = email.trim().toLowerCase().split("@")[1];
+    return d && DOMAIN_TYPOS[d] ? email.trim().replace(/@.*/, `@${DOMAIN_TYPOS[d]}`) : "";
+  })();
+  const picked = myChannels.filter((c) => channels.includes(c.id));
+  const crowded = role === "guest" && picked.some((c) => c.visibility !== "private" || c.members.length > 12);
 
-  async function send() {
-    setBusy(true);
+  async function send(sendEmail: boolean) {
+    setBusy(sendEmail ? "send" : "link");
     try {
-      await api("/api/admin/invites", { json: { email, org_role: role, channel_ids: channels } });
-      toast(`Invite created for ${email}.`);
+      const r = await api<{ path: string; again: boolean; note: string; delivery: Delivery }>("/api/admin/invites", {
+        json: { email, org_role: role, channel_ids: channels.filter((id) => myChannels.some((c) => c.id === id)), send_email: sendEmail },
+      });
+      setIssued({ email: email.trim().toLowerCase(), url: location.origin + r.path, delivery: r.delivery, note: r.note });
+      toast(r.delivery?.status === "sent" ? `Invite emailed to ${email.trim()}.` : r.again ? "Invite updated." : "Invite created. Share the link below.");
       setEmail("");
       setChannels([]);
       reload();
     } catch (e) {
       toast((e as Error).message);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
+  async function newLink(i: Invite, sendEmail: boolean) {
+    setBusy(`${sendEmail ? "resend" : "copy"}:${i.id}`);
+    try {
+      const r = await api<{ path: string; delivery: Delivery }>(`/api/admin/invites/${encodeURIComponent(i.id)}/link`, { json: { send_email: sendEmail } });
+      const url = location.origin + r.path;
+      setIssued({ email: i.email, url, delivery: r.delivery });
+      if (sendEmail) toast(r.delivery?.status === "sent" ? `Invite emailed again to ${i.email}.` : r.delivery?.error || "Email is off. Share the link below.");
+      else await navigator.clipboard?.writeText(url).then(() => toast("Invite link copied."), () => toast("Link ready below."));
+      reload();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const ready = email.includes("@") && !(role === "guest" && !channels.length);
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-      <section className="rounded-xl border border-border bg-surface p-4">
-        <h2 className="font-semibold">Invite someone</h2>
-        <p className="mt-0.5 text-sm text-muted">They join this workspace when they sign up or sign in with this email (verified).</p>
-        <div className="mt-3 space-y-3">
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" aria-label="Email" className="h-10 w-full rounded-lg border border-border px-3 text-sm outline-none focus:border-brand" />
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Role">
-            {(["member", "guest", "admin"] as const).map((r) => (
-              <button key={r} role="radio" aria-checked={role === r} onClick={() => setRole(r)} className={clsx("h-9 rounded-lg border text-sm", role === r ? "border-brand bg-brand-soft font-semibold text-brand" : "border-border hover:bg-hover")}>
-                {ROLE_LABEL[r]}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-muted">
-            {role === "guest" ? "Guests (vendors, contractors) see only the channels below. Pick at least one." : role === "admin" ? "Admins can manage people, invites and channels." : "Members can find public channels and chat with anyone in the workspace."}
+      <section className="min-w-0 space-y-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h2 className="font-semibold">Invite someone</h2>
+          <p className="mt-0.5 text-sm text-muted">
+            {mail ? "Saathi emails them a personal link." : "You get a personal link to send them (email is off on this server)."} Only this email address can use it.
           </p>
-          {(role === "guest" || myChannels.length > 0) && (
+          <div className="mt-3 space-y-3">
             <div>
-              <p className="text-sm font-medium">Add to channels {role !== "guest" && <span className="font-normal text-muted">(optional)</span>}</p>
-              <div className="mt-1 max-h-40 space-y-1 overflow-y-auto">
-                {myChannels.length === 0 && <p className="text-xs text-muted">You aren&rsquo;t in any channels yet.</p>}
-                {myChannels.map((c) => (
-                  <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-hover">
-                    <input type="checkbox" checked={channels.includes(c.id)} onChange={(e) => setChannels((s) => (e.target.checked ? [...s, c.id] : s.filter((x) => x !== c.id)))} />
-                    {c.visibility === "private" ? <Lock size={13} className="text-muted" /> : <Hash size={13} className="text-muted" />} {c.name}
-                  </label>
-                ))}
-              </div>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" aria-label="Email" className="h-10 w-full rounded-lg border border-border px-3 text-sm outline-none focus:border-brand" />
+              {typo && (
+                <button onClick={() => setEmail(typo)} className="mt-1 text-xs text-saffron-ink hover:underline">
+                  Did you mean <b>{typo}</b>?
+                </button>
+              )}
             </div>
-          )}
-          <button onClick={send} disabled={busy || !email.includes("@") || (role === "guest" && !channels.length)} className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-brand text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-40">
-            {busy && <Loader2 size={14} className="animate-spin" />} Create invite
-          </button>
-          <div className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
-            <span className="min-w-0 flex-1 truncate">Share: {url}</span>
-            <button onClick={() => navigator.clipboard?.writeText(url).then(() => toast("Link copied."))} className="flex items-center gap-1 font-semibold text-brand">
-              <Copy size={12} /> Copy
-            </button>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Role">
+              {(["member", "guest", "admin"] as const).map((r) => (
+                <button key={r} role="radio" aria-checked={role === r} onClick={() => setRole(r)} className={clsx("h-9 rounded-lg border text-sm", role === r ? "border-brand bg-brand-soft font-semibold text-brand" : "border-border hover:bg-hover")}>
+                  {ROLE_LABEL[r]}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted">
+              {role === "guest" ? "Guests (vendors, contractors) see only the channels below, including everything already posted in them. Pick at least one." : role === "admin" ? "Admins can manage people, invites and channels." : "Members can find public channels and chat with anyone in the workspace."}
+            </p>
+            {(role === "guest" || myChannels.length > 0) && (
+              <div>
+                <p className="text-sm font-medium">Add to channels {role !== "guest" && <span className="font-normal text-muted">(optional)</span>}</p>
+                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto">
+                  {myChannels.length === 0 && <p className="text-xs text-muted">You aren&rsquo;t in any channels a guest can join yet. Create a private channel for this vendor first.</p>}
+                  {myChannels.map((c) => (
+                    <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-hover">
+                      <input type="checkbox" checked={channels.includes(c.id)} onChange={(e) => setChannels((s) => (e.target.checked ? [...s, c.id] : s.filter((x) => x !== c.id)))} />
+                      {c.visibility === "private" ? <Lock size={13} className="text-muted" /> : <Hash size={13} className="text-muted" />} <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                      <span className="text-xs text-muted">{c.members.length}</span>
+                    </label>
+                  ))}
+                </div>
+                {crowded && (
+                  <p className="mt-2 rounded-lg bg-saffron-soft px-2.5 py-2 text-xs text-saffron-ink">
+                    A guest will read this channel&rsquo;s whole history. For a vendor, a private channel with just the people who work with them is safer.
+                  </p>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => send(true)} disabled={!!busy || !ready} className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-brand text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-40">
+                {busy === "send" && <Loader2 size={14} className="animate-spin" />} {mail ? "Send invite" : "Create invite link"}
+              </button>
+              {mail && (
+                <button onClick={() => send(false)} disabled={!!busy || !ready} title="Create the invite without emailing it, and copy the link yourself" className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold hover:bg-hover disabled:opacity-40">
+                  {busy === "link" ? <Loader2 size={14} className="animate-spin" /> : <Copy size={13} />} Link only
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {issued && <IssuedCard link={issued} onClose={() => setIssued(null)} />}
       </section>
-      <section className="rounded-xl border border-border bg-surface">
+
+      <section className="min-w-0 self-start rounded-xl border border-border bg-surface">
         <h2 className="border-b border-border px-4 py-3 font-semibold">Invites</h2>
         {!rows ? (
           <Loading />
@@ -296,32 +367,93 @@ function InvitesTab() {
         ) : (
           <ul>
             {rows.map((i) => (
-              <li key={i.email} className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-b-0">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{i.email}</div>
-                  <div className="truncate text-xs text-muted">
-                    {ROLE_LABEL[i.org_role]} · by {i.invited_by}
-                    {i.channels.length > 0 && ` · ${i.channels.join(", ")}`}
+              <li key={i.id} className="border-b border-border px-4 py-2.5 text-sm last:border-b-0">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{i.email}</div>
+                    <div className="truncate text-xs text-muted">
+                      {ROLE_LABEL[i.org_role]} · by {i.invited_by}
+                      {i.channels.length > 0 && ` · ${i.channels.join(", ")}`}
+                    </div>
                   </div>
+                  <span className={clsx("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", i.status === "accepted" ? "bg-moss-soft text-moss" : i.status === "expired" ? "bg-rust-soft text-rust" : "bg-saffron-soft text-saffron-ink")}>
+                    {i.status === "accepted" ? "joined" : i.status}
+                  </span>
+                  {i.status !== "accepted" && (
+                    <button
+                      onClick={async () => {
+                        await api(`/api/admin/invites/${encodeURIComponent(i.id)}`, { method: "DELETE" }).catch((e) => toast((e as Error).message));
+                        reload();
+                      }}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-rust-soft hover:text-rust"
+                      aria-label={`Withdraw invite for ${i.email}`}
+                      title="Withdraw invite (links stop working)"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
-                <span className={clsx("rounded-full px-2 py-0.5 text-[11px] font-semibold", i.status === "pending" ? "bg-saffron-soft text-saffron-ink" : "bg-moss-soft text-moss")}>{i.status}</span>
-                {i.status === "pending" && (
-                  <button
-                    onClick={async () => {
-                      await api(`/api/admin/invites/${encodeURIComponent(i.email)}`, { method: "DELETE" }).catch((e) => toast((e as Error).message));
-                      reload();
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-rust-soft hover:text-rust"
-                    aria-label={`Revoke invite for ${i.email}`}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                {i.status !== "accepted" && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className={clsx(i.delivery?.status === "failed" ? "text-rust" : "text-muted")} title={i.delivery?.error}>
+                      {deliveryText(i.delivery)}
+                      {i.delivery?.status === "failed" && i.delivery.error ? `: ${i.delivery.error}` : ""}
+                    </span>
+                    <span className="text-muted">{i.status === "expired" ? `expired ${ago(i.expires_at)}` : i.expires_at ? `until ${new Date(i.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}</span>
+                    <span className="flex-1" />
+                    {mail && (
+                      <button onClick={() => newLink(i, true)} disabled={!!busy} className="flex items-center gap-1 font-semibold text-brand hover:underline disabled:opacity-50">
+                        {busy === `resend:${i.id}` ? <Loader2 size={12} className="animate-spin" /> : <MailPlus size={12} />} {i.status === "expired" ? "Renew & email" : "Email again"}
+                      </button>
+                    )}
+                    <button onClick={() => newLink(i, false)} disabled={!!busy} className="flex items-center gap-1 font-semibold text-brand hover:underline disabled:opacity-50" title="A fresh link; links already sent keep working">
+                      {busy === `copy:${i.id}` ? <Loader2 size={12} className="animate-spin" /> : <Copy size={12} />} {i.status === "expired" ? "Renew & copy link" : "Copy link"}
+                    </button>
+                  </div>
                 )}
               </li>
             ))}
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+/** The link just issued: copy it, or hand it over on WhatsApp (how many vendors actually get messages). */
+function IssuedCard({ link, onClose }: { link: IssuedLink; onClose: () => void }) {
+  const { toast } = useWs();
+  const d = link.delivery;
+  const wa = `https://wa.me/?text=${encodeURIComponent(`You're invited to our Saathi workspace. Open this link and sign in with ${link.email}:\n${link.url}`)}`;
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4" role="status">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">
+            {d?.status === "sent" ? `Emailed to ${link.email}` : d?.status === "failed" ? `Couldn't email ${link.email}` : `Invite link for ${link.email}`}
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            {d?.status === "sent"
+              ? "If it doesn't arrive in a few minutes, ask them to check spam, or send them this link."
+              : d?.status === "failed"
+                ? `${d.error ?? "The email didn't go out."} Send them this link instead.`
+                : "Send them this link. It only works for this email address."}
+          </p>
+          {link.note && <p className="mt-1.5 text-xs text-saffron-ink">{link.note}</p>}
+        </div>
+        <button onClick={onClose} className="text-xs text-muted hover:text-ink" aria-label="Dismiss">
+          ✕
+        </button>
+      </div>
+      <div className="mt-3 flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-xs">
+        <span className="min-w-0 flex-1 truncate font-mono text-muted">{link.url}</span>
+        <button onClick={() => navigator.clipboard?.writeText(link.url).then(() => toast("Link copied."))} className="flex items-center gap-1 font-semibold text-brand">
+          <Copy size={12} /> Copy
+        </button>
+        <a href={wa} target="_blank" rel="noopener noreferrer" className="font-semibold text-moss hover:underline">
+          WhatsApp
+        </a>
+      </div>
     </div>
   );
 }

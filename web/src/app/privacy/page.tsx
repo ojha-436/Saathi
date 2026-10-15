@@ -109,7 +109,11 @@ export default async function PrivacyPage() {
               <li>Name, email address and sign-in method. If you sign in with Google we receive your name, email address and profile photo from Google.</li>
               <li>Passwords are handled by Firebase Authentication (Google). Saathi never sees or stores your password.</li>
               <li>Profile details you choose to add: job title, department, phone, location, time zone and a profile photo (resized to 256 px; visible to your workspace).</li>
-              <li>Your workspace and role (owner, admin, member or guest), and invitations sent to your email address.</li>
+              <li>
+                Your workspace and role (owner, admin, member or guest), and invitations sent to your email address. When an admin invites you, Saathi emails you a
+                personal link (from your workspace&rsquo;s mail provider, with replies going to the admin who invited you) and records whether the email was sent. Invite
+                links expire after 14 days and only work for the invited address.
+              </li>
             </ul>
             <h3>What you and your colleagues create</h3>
             <ul>
