@@ -26,8 +26,9 @@ should be showable as a scene in the 3-minute video. Prefer depth and polish ove
   `web/AGENTS.md` and `node_modules/next/dist/docs/` before writing Next code.
 - `agent/` — FastAPI + Google ADK + Gemini on Vertex AI (Cloud Run `saathi-api`, asia-south1). `uv` for Python.
 - `agent/eval/` — evaluation suite (`uv run python -m eval.run_eval`); numbers feed the landing page via `eval.export_web`.
-- `docs/` — Phase 2, 3 and 4 PRDs. **Current work: `docs/PRD-phase-4-agents-voice.md`** (Saathi Research, Spec Check,
-  provenance in Phase 1; Saathi Voice and the enterprise-scale platform in Phase 2; both before 18 Oct).
+- `docs/` — Phase 2–5 PRDs. **Current work: `docs/PRD-phase-5-close-the-loop.md`** (Inspection Dossier, "Who knows?",
+  Supplier self-check; before 18 Oct). Phase 4 (`docs/PRD-phase-4-agents-voice.md`: Research, Spec Check, Voice) is
+  shipped; its platform epics E5/E6/E9/E10 moved to the roadmap.
 - See `README.md` for architecture, local run and deploy commands.
 
 ## Ground rules
