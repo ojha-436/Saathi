@@ -20,7 +20,8 @@ self.addEventListener("push", (event) => {
         tag: d.tag || "saathi",
         renotify: true,
         icon: "/icon-192.png",
-        badge: "/saathi-ai.svg",
+        // Android draws the badge from its alpha channel only, so this is the logo glyph in white on transparent.
+        badge: "/badge-96.png",
         data: { url: d.url || "/app" },
       });
     }),
