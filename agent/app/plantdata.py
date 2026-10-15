@@ -210,6 +210,8 @@ def build(spec: PlantQuery, user: dict, privileged: bool) -> tuple[str, list]:
 
 
 def is_privileged(user: dict) -> bool:
+    if user.get("org_role") == "guest":  # even if listed in an old quality_team
+        return False
     if user.get("org_role") in ("owner", "admin"):
         return True
     org = db.collection("orgs").document(user["org_id"]).get().to_dict() or {}
