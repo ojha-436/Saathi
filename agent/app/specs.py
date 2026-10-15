@@ -429,6 +429,8 @@ def maybe_check(file_id: str, doc_type: str | None) -> None:
 # ---------------- API ----------------
 
 def _can_manage(user: dict) -> bool:
+    if user.get("org_role") == "guest":  # even if listed in an old quality_team
+        return False
     if user.get("org_role") in ("owner", "admin"):
         return True
     org = db.collection("orgs").document(user["org_id"]).get().to_dict() or {}
@@ -548,6 +550,57 @@ def _file_for(file_id: str, user: dict) -> dict:
     return f
 
 
+def _limit_text(r: dict) -> str:
+    unit = r.get("unit") or ""
+    temp = f" at {r['test_temp_c']} °C" if r.get("test_temp_c") is not None else ""
+    if r.get("min") is not None and r.get("max") is not None:
+        return f"{r['min']}–{r['max']} {unit}{temp}".strip()
+    if r.get("max") is not None:
+        return f"≤ {r['max']} {unit}{temp}".strip()
+    if r.get("min") is not None:
+        return f"≥ {r['min']} {unit}{temp}".strip()
+    return "the required value"
+
+
+def _guest_notes(c: dict) -> list[str]:
+    """Plain-language next steps for the vendor, written from the rows only (never our internal notes)."""
+    dwg = c.get("drawing") or {}
+    out = []
+    if c.get("grade_mismatch") and dwg.get("grade"):
+        out.append(f"The certificate's grade doesn't match drawing {dwg.get('drawing_no')} Rev {dwg.get('rev')}, which requires {dwg['grade']}.")
+    for r in c.get("rows", []):
+        if r.get("status") == "fail":
+            value = f"{r.get('value')} {r.get('unit') or ''}".strip()
+            out.append(f"{r.get('label')}: {value} is outside the required {_limit_text(r)}.")
+        elif r.get("status") == "missing":
+            temp = f" at {r['test_temp_c']} °C" if r.get("test_temp_c") is not None else ""
+            out.append(f"{r.get('label')}: not reported{temp}.")
+    if c.get("verdict") == "no_limits":
+        out.append("This certificate can't be checked automatically yet. The buyer's Quality team will review it.")
+    elif c.get("verdict") == "pass":
+        out.append("All reported values meet the requirements.")
+    elif out:
+        out.append("Correct the certificate or re-test, then upload the new certificate in this channel.")
+    return out
+
+
+# What a guest (a vendor) may see of a check: enough to fix their own certificate, nothing about our standards library,
+# internal drawings, other grades or the workspace. Limits are shown only for the rows of this certificate (Phase 5, S0).
+_GUEST_ROW = ("property", "label", "unit", "value", "min", "max", "test_temp_c", "status")
+
+
+def guest_view(c: dict) -> dict:
+    dwg = c.get("drawing") or {}
+    return {
+        "file_id": c.get("file_id"), "file_name": c.get("file_name"), "verdict": c.get("verdict"), "grade": c.get("grade"),
+        "certificate_no": c.get("certificate_no"), "heat_no": c.get("heat_no"), "vendor": c.get("vendor"), "po_no": c.get("po_no"),
+        "thickness_mm": c.get("thickness_mm"), "grade_mismatch": bool(c.get("grade_mismatch")),
+        "drawing": {"drawing_no": dwg.get("drawing_no"), "rev": dwg.get("rev"), "grade": dwg.get("grade")} if dwg.get("drawing_no") else None,
+        "rows": [{**{k: r.get(k) for k in _GUEST_ROW}, "note": None, "source": {}} for r in c.get("rows", [])],
+        "notes": _guest_notes(c),
+    }
+
+
 @router.get("/api/files/{file_id}/spec-check")
 def get_check(file_id: str, user=Depends(current_user)):
     _file_for(file_id, user)
@@ -555,12 +608,17 @@ def get_check(file_id: str, user=Depends(current_user)):
     if not snap.exists:
         return {"status": "none"}
     c = snap.to_dict()
-    c["ts"] = c["ts"].isoformat() if c.get("ts") else None
+    ts = c["ts"].isoformat() if c.get("ts") else None
+    if user.get("org_role") == "guest":
+        return {"status": "done", **guest_view(c), "ts": ts}
+    c["ts"] = ts
     return {"status": "done", **c}
 
 
 @router.post("/api/files/{file_id}/spec-check")
 def rerun_check(file_id: str, user=Depends(current_user)):
+    if user.get("org_role") == "guest":
+        raise HTTPException(403, "Upload a corrected certificate instead; the buyer's Quality team re-checks existing ones.")
     f = _file_for(file_id, user)
     if (f.get("doc") or {}).get("doc_type") != "test_certificate":
         raise HTTPException(400, "Only test certificates can be spec-checked")
@@ -603,10 +661,18 @@ def spec_check(heat_or_file: str, tool_context: ToolContext) -> dict:
     user = user_profile(uid)
     chats = set(user_chats(uid))
     q = heat_or_file.strip().lower()
+    guest = user.get("org_role") == "guest"
     hits = []
     for s in db.collection("spec_checks").where(filter=FieldFilter("org_id", "==", user["org_id"])).stream():
         c = s.to_dict()
         if c.get("chat_id") not in chats:
+            continue
+        if guest and (q in (c.get("heat_no") or "").lower() or q in (c.get("certificate_no") or "").lower() or q in (c.get("file_name") or "").lower()):
+            g = guest_view(c)
+            hits.append({"ref": f"file:{s.id}", **{k: g[k] for k in ("file_name", "verdict", "grade", "heat_no", "drawing", "grade_mismatch", "notes")},
+                         "rows": [{k: r[k] for k in ("label", "value", "unit", "min", "max", "test_temp_c", "status")} for r in g["rows"]]})
+            continue
+        if guest:
             continue
         if not q or q in (c.get("heat_no") or "").lower() or q in (c.get("certificate_no") or "").lower() or q in (c.get("file_name") or "").lower():
             hits.append({"ref": f"file:{s.id}", "file_name": c.get("file_name"), "verdict": c["verdict"], "grade": c.get("grade"),
@@ -616,6 +682,9 @@ def spec_check(heat_or_file: str, tool_context: ToolContext) -> dict:
                                    "clause": r["source"].get("clause")} for r in c.get("rows", [])]})
     if not hits:
         return {"checks": [], "note": "No spec check found for that certificate. It may not be uploaded, or it is in a chat the user isn't in."}
+    if guest:
+        return {"checks": hits[:4], "note": "The user is an external supplier. Cite the certificate [file:...] only; explain the failing values "
+                "and the next steps. Don't mention standards documents, clauses or internal drawings."}
     return {"checks": hits[:4], "note": "Cite the certificate [file:...] and the limit's source [std:...]. pass/fail is computed in code from approved limits."}
 
 

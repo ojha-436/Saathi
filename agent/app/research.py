@@ -694,6 +694,7 @@ def ref_visible_to(ref: str, uids: set[str], org_id: str) -> bool:
             qteam = set((org.get("settings") or {}).get("quality_team") or [])
             return all(
                 user_profile(u).get("org_id") == org_id
+                and user_profile(u).get("org_role") != "guest"
                 and (user_profile(u).get("org_role") in ("owner", "admin") or u in qteam)
                 for u in uids
             )

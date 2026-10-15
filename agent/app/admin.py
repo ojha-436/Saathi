@@ -219,7 +219,8 @@ def update_org(body: OrgIn, admin=Depends(admin_user)):
     if body.quality_team is not None:
         from .firebase import same_org
 
-        new_team = same_org(admin, body.quality_team)
+        # same_org keeps guests; a guest on the Quality team would see every record and could approve spec limits
+        new_team = [u for u in same_org(admin, body.quality_team) if user_profile(u).get("org_role") != "guest"]
         update["settings.quality_team"] = new_team
         team_set = set(new_team)
         for rsnap in db.collection("records").where(filter=FieldFilter("org_id", "==", admin["org_id"])).stream():

@@ -127,7 +127,7 @@ def _counter(org_id: str, kind: str) -> str:
 
 def _quality_team(org_id: str) -> list[str]:
     org = db.collection("orgs").document(org_id).get().to_dict() or {}
-    team = (org.get("settings") or {}).get("quality_team") or []
+    team = [u for u in (org.get("settings") or {}).get("quality_team") or [] if user_profile(u).get("org_role") != "guest"]
     if team:
         return team
     return [s.id for s in db.collection("users").where(filter=FieldFilter("org_id", "==", org_id)).stream()

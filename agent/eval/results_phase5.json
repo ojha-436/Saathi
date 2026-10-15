@@ -1,0 +1,73 @@
+{
+  "supplier": {
+    "passed": 13,
+    "total": 13,
+    "cases": [
+      {
+        "case": "fail: whitelist only",
+        "ok": true,
+        "detail": "extra=[]"
+      },
+      {
+        "case": "fail: no internal facts",
+        "ok": true,
+        "detail": "leaks=[]"
+      },
+      {
+        "case": "no_limits: whitelist only",
+        "ok": true,
+        "detail": "extra=[]"
+      },
+      {
+        "case": "no_limits: no internal facts",
+        "ok": true,
+        "detail": "leaks=[]"
+      },
+      {
+        "case": "grade mismatch: whitelist only",
+        "ok": true,
+        "detail": "extra=[]"
+      },
+      {
+        "case": "grade mismatch: no internal facts",
+        "ok": true,
+        "detail": "leaks=[]"
+      },
+      {
+        "case": "pass: whitelist only",
+        "ok": true,
+        "detail": "extra=[]"
+      },
+      {
+        "case": "pass: no internal facts",
+        "ok": true,
+        "detail": "leaks=[]"
+      },
+      {
+        "case": "fail: next steps name each failing value",
+        "ok": true,
+        "detail": "Carbon (C): 0.23 % is outside the required ≤ 0.22 %. CEV: 0.49 is outside the required ≤ 0.47. Impact energy: not reported at -20 °C. Correct the certificate or re-test, then upload the new certificate in this channel."
+      },
+      {
+        "case": "fail: tells the supplier what to do",
+        "ok": true,
+        "detail": "Carbon (C): 0.23 % is outside the required ≤ 0.22 %. CEV: 0.49 is outside the required ≤ 0.47. Impact energy: not reported at -20 °C. Correct the certificate or re-test, then upload the new certificate in this channel."
+      },
+      {
+        "case": "no_limits: doesn't reveal which grades the library holds",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "case": "mismatch: names the required grade",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "case": "drawing: number and revision only, no file ref",
+        "ok": true,
+        "detail": ""
+      }
+    ]
+  }
+}

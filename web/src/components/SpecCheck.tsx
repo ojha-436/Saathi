@@ -70,7 +70,9 @@ const ROW_ICON = {
 
 export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; chatId?: string; onClose: () => void }) {
   const { toast, account } = useWs();
-  const canEditRecords = account.org_role !== "guest";
+  // Guests (suppliers) get a redacted check from the API: no standards, clauses or internal notes, and no record actions.
+  const guest = account.org_role === "guest";
+  const canEditRecords = !guest;
   const [check, setCheck] = useState<SpecCheck | null>(null);
   const [busy, setBusy] = useState<"ncr" | "rerun" | null>(null);
   const [draft, setDraft] = useState<RecordDraftResult | null>(null);
@@ -92,7 +94,7 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
     setBusy("ncr");
     const problems = check.rows
       .filter((r) => r.status === "fail" || r.status === "missing")
-      .map((r) => (r.status === "fail" ? `${r.label} ${fmt(r.value, r.unit)} outside ${limitText(r)} (${r.source.standard ?? "spec"} ${r.source.clause ?? ""})` : `${r.label}: ${r.note}`));
+      .map((r) => (r.status === "fail" ? `${r.label} ${fmt(r.value, r.unit)} outside ${limitText(r)} (${r.source?.standard ?? "spec"} ${r.source?.clause ?? ""})` : `${r.label}: ${r.note}`));
     const text = [
       `Incoming material non-conformance. Mill test certificate ${check.certificate_no || ""} for heat ${check.heat_no || "?"} from ${check.vendor || "the vendor"}`,
       check.po_no ? `(PO ${check.po_no})` : "",
@@ -143,7 +145,11 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
           <ShieldCheck size={20} className="mt-0.5 text-brand" aria-hidden />
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-bold">Spec Check</h2>
-            <p className="text-xs text-muted">Values read by Gemini; pass/fail computed by rules from your approved Standards Library limits.</p>
+            <p className="text-xs text-muted">
+              {guest
+                ? "Values read from your certificate; pass/fail computed by rules from the buyer's requirements for this drawing."
+                : "Values read by Gemini; pass/fail computed by rules from your approved Standards Library limits."}
+            </p>
           </div>
           <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-hover">
             <X size={18} />
@@ -211,8 +217,8 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
                   <tr className="border-b border-border text-left text-xs text-muted">
                     <th className="py-2 pr-2 font-medium">Property</th>
                     <th className="py-2 pr-2 font-medium">Certificate</th>
-                    <th className="py-2 pr-2 font-medium">Limit</th>
-                    <th className="py-2 font-medium">Source</th>
+                    <th className="py-2 pr-2 font-medium">{guest ? "Required" : "Limit"}</th>
+                    {!guest && <th className="py-2 font-medium">Source</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -226,9 +232,11 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
                       </td>
                       <td className={clsx("py-2 pr-2 font-mono text-[13px]", r.status === "fail" && "font-bold text-rust")}>{fmt(r.value, r.unit)}</td>
                       <td className="py-2 pr-2 font-mono text-[13px]">{limitText(r)}</td>
-                      <td className="py-2 text-xs text-muted">
-                        {r.source.standard} {r.source.clause}
-                      </td>
+                      {!guest && (
+                        <td className="py-2 text-xs text-muted">
+                          {r.source?.standard} {r.source?.clause}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -240,10 +248,12 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
           <button onClick={() => openFile(fileId)} className="mr-auto flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-muted hover:bg-hover">
             <ScanText size={14} /> Open certificate
           </button>
-          <button onClick={rerun} disabled={busy !== null} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium hover:bg-hover disabled:opacity-50">
-            {busy === "rerun" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Re-check
-          </button>
-          {check?.status === "done" && (check.verdict === "fail" || check.verdict === "incomplete") && (
+          {!guest && (
+            <button onClick={rerun} disabled={busy !== null} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium hover:bg-hover disabled:opacity-50">
+              {busy === "rerun" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Re-check
+            </button>
+          )}
+          {canEditRecords && check?.status === "done" && (check.verdict === "fail" || check.verdict === "incomplete") && (
             <button onClick={draftNcr} disabled={busy !== null} className="flex h-9 items-center gap-1.5 rounded-lg bg-rust px-4 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50">
               {busy === "ncr" ? <Loader2 size={14} className="animate-spin" /> : <Octagon size={14} />} Draft NCR
             </button>
