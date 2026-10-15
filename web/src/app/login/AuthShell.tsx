@@ -68,11 +68,18 @@ export function authMessage(err: unknown): { field: "email" | "password" | "name
   if (code.includes("unauthorized-domain")) return { field: "form", text: "Google sign-in isn't allowed from this address yet. Use your email and password." };
   if (code.includes("account-exists-with-different-credential")) return { field: "form", text: "This email already has a password account. Sign in with your email and password." };
   if (code.includes("popup-blocked")) return { field: "form", text: "Your browser blocked the Google window. Allow pop-ups for this site and try again." };
+  if (code.includes("user-disabled")) return { field: "form", text: "This account has been deactivated by its workspace admin." };
   if (code.includes("network-request-failed")) return { field: "form", text: "Can't reach the sign-in service. Check your connection and try again." };
   if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found"))
     return { field: "password", text: "Email or password is incorrect. Check both and try again." };
   return { field: "form", text: "Something went wrong signing you in. Try again." };
 }
+
+export const PASSWORD_RULES = [
+  { label: "8+ characters", test: (p: string) => p.length >= 8 },
+  { label: "A letter", test: (p: string) => /[a-z]/i.test(p) },
+  { label: "A number", test: (p: string) => /\d/.test(p) },
+];
 
 export async function signInWithGoogle() {
   if (isLocal()) throw googleUnavailableLocally();

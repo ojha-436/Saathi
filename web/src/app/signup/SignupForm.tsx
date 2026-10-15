@@ -6,13 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { deleteCurrentUser, onAuth, signOut, signUpWithPassword } from "@/lib/auth";
-import { AuthShell, Divider, GoogleButton, authMessage, inputCls, signInWithGoogle } from "../login/AuthShell";
-
-const RULES = [
-  { label: "8+ characters", test: (p: string) => p.length >= 8 },
-  { label: "A letter", test: (p: string) => /[a-z]/i.test(p) },
-  { label: "A number", test: (p: string) => /\d/.test(p) },
-];
+import { AuthShell, Divider, GoogleButton, PASSWORD_RULES as RULES, authMessage, inputCls, signInWithGoogle } from "../login/AuthShell";
 
 export function SignupForm() {
   const router = useRouter();

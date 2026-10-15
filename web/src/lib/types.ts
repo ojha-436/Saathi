@@ -77,6 +77,8 @@ export type Chat = {
   last_text?: string;
   last_sender?: string;
   ai_excluded?: boolean;
+  /** #General: every member is in it; guests never are */
+  default?: boolean;
   read_at?: Record<string, Timestamp>;
   favorite_of?: string[];
 };
