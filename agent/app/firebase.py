@@ -14,10 +14,40 @@ if LOCAL_MODE:
     bucket = LocalBucket()
 
     class _LocalAuth:
-        """Stand-in for firebase_admin.auth: accounts live in the local `_auth` collection and tokens are "local:<uid>"."""
+        """Stand-in for firebase_admin.auth: accounts live in the local `_auth` collection and tokens are HMAC-signed."""
 
         class UserNotFoundError(Exception):
             pass
+
+        def _secret(self) -> bytes:
+            from .config import CRON_SECRET
+
+            return ("saathi-local-auth:" + CRON_SECRET).encode()
+
+        def _hash_pw(self, password: str, salt: str | None = None) -> str:
+            import hashlib
+            import secrets
+
+            salt = salt or secrets.token_hex(8)
+            digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+            return f"pbkdf2:{salt}:{digest}"
+
+        def _check_pw(self, stored: str, password: str) -> bool:
+            import hmac
+
+            if (stored or "").startswith("pbkdf2:"):
+                _, salt, _ = stored.split(":", 2)
+                return hmac.compare_digest(stored, self._hash_pw(password, salt))
+            return hmac.compare_digest(stored or "", password)
+
+        def issue_token(self, uid: str) -> str:
+            import hashlib
+            import hmac
+
+            rec = self._rec(uid) or {}
+            ver = int(rec.get("token_version") or 0)
+            sig = hmac.new(self._secret(), f"{uid}:{ver}".encode(), hashlib.sha256).hexdigest()[:24]
+            return f"local:{uid}:{ver}:{sig}"
 
         def _ref(self, uid: str):
             return db.collection("_auth").document(uid)
@@ -27,10 +57,23 @@ if LOCAL_MODE:
             return snap.to_dict() if snap.exists else None
 
         def verify_id_token(self, token: str, *a, **k) -> dict:
-            uid = token[6:] if token.startswith("local:") else ""
+            import hashlib
+            import hmac
+
+            if not token.startswith("local:"):
+                raise ValueError("invalid local token")
+            parts = token.split(":")
+            uid = parts[1] if len(parts) >= 2 else ""
             rec = self._rec(uid) if uid else None
             if not rec or rec.get("disabled"):
                 raise ValueError("invalid local token")
+            ver = int(rec.get("token_version") or 0)
+            if len(parts) == 4:
+                expected = hmac.new(self._secret(), f"{uid}:{ver}".encode(), hashlib.sha256).hexdigest()[:24]
+                if parts[2] != str(ver) or not hmac.compare_digest(parts[3], expected):
+                    raise ValueError("invalid local token")
+            elif ver > 0:
+                raise ValueError("revoked local token")
             return {"uid": uid, "email": rec["email"], "name": rec.get("name", ""), "email_verified": True, "picture": "",
                     "firebase": {"sign_in_provider": "password"}, **(rec.get("claims") or {})}
 
@@ -42,13 +85,13 @@ if LOCAL_MODE:
 
         def create_user(self, uid: str | None = None, email: str = "", password: str = "", display_name: str = "", **_):
             uid = uid or "u_" + uuid.uuid4().hex[:16]
-            self._ref(uid).set({"email": email.lower(), "password": password, "name": display_name, "disabled": False, "claims": {}})
+            self._ref(uid).set({"email": email.lower(), "password": self._hash_pw(password), "name": display_name, "disabled": False, "claims": {}, "token_version": 0})
             return type("U", (), {"uid": uid})()
 
         def update_user(self, uid: str, email: str | None = None, password: str | None = None, display_name: str | None = None, disabled: bool | None = None, **_):
             if not self._rec(uid):
                 raise self.UserNotFoundError(uid)
-            changes = {k: v for k, v in {"email": email.lower() if email else None, "password": password, "name": display_name, "disabled": disabled}.items() if v is not None}
+            changes = {k: v for k, v in {"email": email.lower() if email else None, "password": self._hash_pw(password) if password else None, "name": display_name, "disabled": disabled}.items() if v is not None}
             if changes:
                 self._ref(uid).update(changes)
 
@@ -60,11 +103,13 @@ if LOCAL_MODE:
                 self._ref(uid).update({"claims": claims})
 
         def revoke_refresh_tokens(self, uid: str):
-            pass
+            rec = self._rec(uid)
+            if rec:
+                self._ref(uid).update({"token_version": int(rec.get("token_version") or 0) + 1})
 
         def login(self, email: str, password: str) -> str | None:
             for s in db.collection("_auth").where("email", "==", email.strip().lower()).stream():
-                if s.get("password") == password and not s.get("disabled"):
+                if self._check_pw(s.get("password") or "", password) and not s.get("disabled"):
                     return s.id
             return None
 
@@ -205,6 +250,9 @@ def _join(decoded: dict) -> None:
             snap = ref.get()
             if snap.exists and snap.get("org_id") == org_id:
                 ref.update({"members": firestore.ArrayUnion([uid])})
+                for col in ("files", "decisions", "handovers"):
+                    for c in db.collection(col).where("chat_id", "==", cid).stream():
+                        c.reference.update({"members": firestore.ArrayUnion([uid])})
     if org_role != "guest":
         ensure_general(org_id, uid, name)
     audit({"uid": uid, "name": name, "org_id": org_id}, "user.joined", org_id, org_role=org_role, via="invite" if channels or org_role != "owner" else "signup")
@@ -219,7 +267,7 @@ async def current_user(authorization: str = Header(default="")) -> dict:
 def user_from_token(token: str) -> dict:
     """Verifies a Firebase ID token and returns the caller's profile (also used by WebSockets, which can't send headers)."""
     try:
-        decoded = auth.verify_id_token(token)
+        decoded = auth.verify_id_token(token, check_revoked=True)
     except Exception:
         raise HTTPException(401, "Invalid token")
     profile = user_profile(decoded["uid"])

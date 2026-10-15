@@ -373,7 +373,8 @@ async def run_check(file_id: str) -> None:
         m = re.search(r"\b([A-Z]{2,5}-[A-Z]{1,4}-\d{3,5})\b", (f.get("extracted_text") or "") + " " + f.get("name", ""))
         drawing_no = m.group(1) if m else ""
     dwg = _drawing_grade(org_id, drawing_no, f.get("uploaded_by", "")) if drawing_no else None
-    target = grade or (dwg or {}).get("grade") or ""
+    mismatch = bool(dwg and dwg.get("grade") and grade and dwg["grade"] != grade)
+    target = (dwg.get("grade") if dwg and dwg.get("grade") else None) or grade or ""
     limits = [s.to_dict() for s in db.collection("spec_limits").where(filter=FieldFilter("org_id", "==", org_id))
               .where(filter=FieldFilter("grade", "==", target)).where(filter=FieldFilter("status", "==", "approved")).stream()] if target else []
     values = [v.model_dump() | {"property": norm_prop(v.property) or v.property} for v in mtc.values]
@@ -381,7 +382,9 @@ async def run_check(file_id: str) -> None:
         verdict, rows, notes = compare(values, limits, mtc.thickness_mm)
     else:
         verdict, rows, notes = "no_limits", [], [f"No approved limits for {target or 'this grade'} in the Standards Library yet."]
-    mismatch = bool(dwg and dwg.get("grade") and grade and dwg["grade"] != grade)
+    if mismatch:
+        verdict = "fail"
+        notes = [f"Grade mismatch: drawing {dwg['drawing_no']} Rev {dwg['rev']} requires {dwg['grade']}, but certificate states {grade}."] + notes
     check = {"org_id": org_id, "file_id": file_id, "chat_id": f.get("chat_id"), "file_name": f.get("name"), "verdict": verdict, "grade": target,
              "certificate_no": mtc.certificate_no, "heat_no": mtc.heat_no, "vendor": mtc.vendor, "po_no": mtc.po_no, "thickness_mm": mtc.thickness_mm,
              "drawing": dwg, "grade_mismatch": mismatch, "rows": rows, "notes": notes, "values": values, "ts": datetime.now(TZ),

@@ -78,7 +78,10 @@ def set_active(uid: str, body: ActiveIn, admin=Depends(admin_user)):
     try:
         auth.update_user(uid, disabled=not body.active)
         if not body.active:
+            set_claims(uid, "", "")
             auth.revoke_refresh_tokens(uid)
+        else:
+            set_claims(uid, admin["org_id"], target.get("org_role") or "member")
     except auth.UserNotFoundError:
         pass  # directory-only accounts (e.g. seeded data)
     db.collection("users").document(uid).update({"deactivated": not body.active})
@@ -216,7 +219,18 @@ def update_org(body: OrgIn, admin=Depends(admin_user)):
     if body.quality_team is not None:
         from .firebase import same_org
 
-        update["settings.quality_team"] = same_org(admin, body.quality_team)
+        new_team = same_org(admin, body.quality_team)
+        update["settings.quality_team"] = new_team
+        team_set = set(new_team)
+        for rsnap in db.collection("records").where(filter=FieldFilter("org_id", "==", admin["org_id"])).stream():
+            rd = rsnap.to_dict() or {}
+            base = ({rd["owner"]} if rd.get("owner") else set()) | (set() if rd.get("anonymous") or not rd.get("reporter") else {rd["reporter"]})
+            parts = sorted(team_set | base)
+            if parts != (rd.get("participants") or []):
+                rsnap.reference.update({"participants": parts})
+                crec = db.collection("chunks").document(f"rec_{rsnap.id}")
+                if crec.get().exists:
+                    crec.update({"members": parts})
     if body.qr_public is not None:
         update["settings.qr_public"] = body.qr_public
     if body.shifts is not None:

@@ -18,7 +18,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
 from .config import TZ, WEB_URL
-from .firebase import audit, bucket, current_user, db, require_admin
+from .firebase import audit, bucket, current_user, db, require_admin, user_profile
 
 router = APIRouter()
 log = logging.getLogger("saathi.drawings")
@@ -66,11 +66,19 @@ def rebuild(org_id: str, drawing_no: str) -> dict | None:
     if not key:
         return None
     revs: dict[str, dict] = {}
+    chat_cache: dict[str, dict] = {}
     title = ""
     for s in db.collection("files").where(filter=FieldFilter("org_id", "==", org_id)).stream():
         f = s.to_dict()
         doc = f.get("doc") or {}
         if doc.get("doc_type") != "engineering_drawing" or norm_no(doc.get("drawing_no")) != key:
+            continue
+        cid = f.get("chat_id") or ""
+        if cid and cid not in chat_cache:
+            chat_cache[cid] = db.collection("chats").document(cid).get().to_dict() or {}
+        if chat_cache.get(cid, {}).get("ai_excluded"):
+            continue
+        if f.get("uploaded_by") and user_profile(f["uploaded_by"]).get("org_role") == "guest":
             continue
         title = title or doc.get("title") or ""
         rev, draft = norm_rev(doc.get("revision"))
@@ -132,6 +140,7 @@ def visible(d: dict, uid: str) -> dict:
         if r["status"] == "in_work" and not can_open:
             continue
         revs.append({**{k: v for k, v in r.items() if k not in ("ts",)}, "file_id": r["file_id"] if can_open else None,
+                     "file_name": r.get("file_name") if can_open else None,
                      "chat_id": r["chat_id"] if can_open else None, "can_open": can_open})
     return {"id": f"{d['org_id']}__{d['key']}", "drawing_no": d["drawing_no"], "title": d.get("title", ""), "current_rev": d.get("current_rev"),
             "revisions": revs, "source": d.get("source", "saathi"), "updated_at": d["updated_at"].isoformat() if d.get("updated_at") else None}

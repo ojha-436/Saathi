@@ -94,10 +94,49 @@ def mirror(chunk_id: str, data: dict, org_id: str) -> None:
     if LOCAL_MODE or not org_id or not data.get("embedding"):  # offline mode has no BigQuery
         return
     with _lock:
+        _buf[:] = [b for b in _buf if b.get("chunk_id") != chunk_id]
         _buf.append(row(chunk_id, data, org_id))
         if _flusher is None or not _flusher.is_alive():
             _flusher = threading.Thread(target=_flush_loop, daemon=True, name="archive-flush")
             _flusher.start()
+
+
+def delete_chunks(*, chunk_ids: list[str] | None = None, chat_id: str | None = None, ref: str | None = None) -> None:
+    """Purges deleted/excluded chunks from the BigQuery archive table and pending buffer."""
+    from .config import LOCAL_MODE
+
+    if LOCAL_MODE:
+        return
+    ids_set = set(chunk_ids or [])
+    with _lock:
+        _buf[:] = [
+            b for b in _buf
+            if not (
+                (ids_set and b.get("chunk_id") in ids_set)
+                or (chat_id and b.get("chat_id") == chat_id)
+                or (ref and b.get("ref") == ref)
+            )
+        ]
+
+    def _run():
+        try:
+            where, params = [], []
+            if ids_set:
+                where.append("chunk_id IN UNNEST(@ids)")
+                params.append(bigquery.ArrayQueryParameter("ids", "STRING", list(ids_set)))
+            if chat_id:
+                where.append("chat_id = @cid")
+                params.append(bigquery.ScalarQueryParameter("cid", "STRING", chat_id))
+            if ref:
+                where.append("ref = @ref")
+                params.append(bigquery.ScalarQueryParameter("ref", "STRING", ref))
+            if where:
+                client().query(f"DELETE FROM `{TABLE}` WHERE " + " OR ".join(where),
+                               job_config=bigquery.QueryJobConfig(query_parameters=params)).result(timeout=30)
+        except Exception:
+            log.debug("archive delete skipped (rows may still be in streaming buffer)")
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _flush_loop() -> None:

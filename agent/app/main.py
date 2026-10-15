@@ -161,7 +161,7 @@ if LOCAL_MODE:
         uid = auth.login(body.email, body.password)
         if not uid:
             raise HTTPException(401, "Invalid email or password")
-        return {"uid": uid, "token": f"local:{uid}", "email": body.email.strip().lower()}
+        return {"uid": uid, "token": auth.issue_token(uid), "email": body.email.strip().lower()}
 
     @app.post("/api/local/signup")
     def local_signup(body: LocalSignupIn):
@@ -171,7 +171,7 @@ if LOCAL_MODE:
         if auth.login(email, body.password) or list(db.collection("_auth").where("email", "==", email).limit(1).stream()):
             raise HTTPException(409, "An account with this email already exists")
         created = auth.create_user(email=email, password=body.password, display_name=body.name.strip())
-        return {"uid": created.uid, "token": f"local:{created.uid}", "email": email}
+        return {"uid": created.uid, "token": auth.issue_token(created.uid), "email": email}
 
     @app.post("/api/local/query")
     def local_query(body: LocalQueryIn, user=Depends(current_user)):
@@ -187,7 +187,7 @@ if LOCAL_MODE:
             allowed = uid in (db.collection("chats").document(parts[1]).get().get("members") or [])
         elif parts in (["files"], ):
             allowed = has("members", "array-contains", uid)
-        elif parts in (["tasks"], ["meetings"]):
+        elif parts in (["tasks"], ["meetings"], ["records"]):
             allowed = has("participants", "array-contains", uid)
         elif parts in (["events"], ["external_items"], ["notifications"]):
             allowed = has("uid", "==", uid)
@@ -474,6 +474,9 @@ def delete_channel(chat_id: str, user=Depends(current_user)):
 
 
 def delete_chat_everything(chat_id: str) -> None:
+    from . import archive
+
+    archive.delete_chunks(chat_id=chat_id)
     ref = db.collection("chats").document(chat_id)
     for col, q in (("messages", ref.collection("messages")),
                    ("chunks", db.collection("chunks").where(filter=FieldFilter("chat_id", "==", chat_id))),
@@ -925,12 +928,17 @@ def _reindex_chat(chat_id: str) -> None:
 @app.post("/api/chats/{chat_id}/ai-exclude")
 def set_ai_exclude(chat_id: str, body: ExcludeIn, bg: BackgroundTasks, user=Depends(current_user)):
     """Privacy control: an excluded chat is removed from the assistant's index and never searched."""
+    from . import archive
+
     get_chat_for_member(chat_id, user["uid"])
     db.collection("chats").document(chat_id).update({"ai_excluded": body.excluded, "ai_excluded_by": user["name"]})
     if body.excluded:
+        archive.delete_chunks(chat_id=chat_id)
         for col in ("chunks", "decisions"):
             for c in db.collection(col).where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
                 c.reference.delete()
+        for f in db.collection("files").where(filter=FieldFilter("chat_id", "==", chat_id)).stream():
+            drawings.rebuild_for_file(f.id)
     else:
         bg.add_task(_reindex_chat, chat_id)
     return {"ok": True, "excluded": body.excluded}

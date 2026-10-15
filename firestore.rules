@@ -3,7 +3,7 @@ rules_version = '2';
 // Workspace isolation: the API sets custom claims {org_id, org_role} on each user's ID token.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
+    function signedIn() { return request.auth != null && request.auth.token.org_id != null && request.auth.token.org_id != ''; }
     function myOrg() { return request.auth.token.org_id; }
     function isGuest() { return request.auth.token.org_role == 'guest'; }
 

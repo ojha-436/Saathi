@@ -1,6 +1,6 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CiteChip } from "./bits";
 
@@ -13,7 +13,7 @@ export function Markdown({ text }: { text: string }) {
     <div className="prose-saathi">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        urlTransform={(url) => url}
+        urlTransform={(url) => (url.startsWith("cite:") ? url : defaultUrlTransform(url))}
         components={{
           a: ({ href, children }) =>
             href?.startsWith("cite:") ? (

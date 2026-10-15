@@ -195,6 +195,9 @@ def disconnect_user(uid: str) -> None:
         for s in db.collection(col).where(filter=FieldFilter("uid", "==", uid)).stream():
             s.reference.delete()
     for cid in (f"mail_{uid}", f"drive_{uid}"):
+        from . import archive
+
+        archive.delete_chunks(chat_id=cid)
         for s in db.collection("chunks").where(filter=FieldFilter("chat_id", "==", cid)).stream():
             s.reference.delete()
     db.collection("users").document(uid).update({"calendar_busy": []})

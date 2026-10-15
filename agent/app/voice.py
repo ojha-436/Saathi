@@ -33,9 +33,9 @@ SESSION_MAX_S = 600       # Live audio sessions are capped; the browser reconnec
 IDLE_CLOSE_S = 120
 # Spoken confirmation, as Gemini transcribes it: Latin (Hinglish/English) or native script (Hindi/Marathi Devanagari, Tamil,
 # Telugu). Devanagari vowel signs aren't word characters for \b, so native-script words are matched as plain substrings.
-YES = re.compile(r"\b(haan|haa|han|ha ji|haanji|ji haan|yes|yeah|yep|ok|okay|theek|thik|sahi|kar do|kardo|kar dijiye|file karo|file kar|"
-                 r"confirm|go ahead|please do|bilkul|zaroor|done|ho)\b|हाँ|हां|जी हाँ|हा जी|ठीक|कर दो|कर दीजिए|कर दीजिये|फ़ाइल कर|फाइल कर|"
-                 r"ओके|बिल्कुल|ज़रूर|जरूर|हो\b|ஆம்|சரி|అవును|సరే", re.I)
+YES = re.compile(r"\b(haan|haa|han|ha ji|haanji|ji haan|yes|yeah|yep|ok|okay|theek|thik|sahi|kar do|kardo|kar dijiye|"
+                 r"confirm|go ahead|please do|bilkul|zaroor|done)\b|हाँ|हां|जी हाँ|हा जी|ठीक|कर दो|कर दीजिए|कर दीजिये|"
+                 r"ओके|बिल्कुल|ज़रूर|जरूर|ஆம்|சரி|అవును|సరే", re.I)
 NO = re.compile(r"\b(nahi|nahin|nai|no|mat|don'?t|do not|cancel|wait|ruko|rehne do|abhi nahi)\b|नहीं|नही|मत|रुको|रहने दो|ரத்து|వద్దు", re.I)
 
 
@@ -205,6 +205,7 @@ async def voice_ws(ws: WebSocket):
                 kind = kind if kind in ("ncr", "downtime", "safety") else "ncr"
                 d = await asyncio.to_thread(draft_from_text, user, kind, args.get("description", ""))
                 drafts[d["draft_id"]] = d
+                state["last_user"] = ""  # require a fresh user reply after the draft is created before filing
                 await send({"type": "draft", "draft": d})
                 f = d["fields"]
                 return {"draft_id": d["draft_id"], "type": kind, "title": f.get("title"), "machine": f.get("machine"), "part": f.get("part_name"),

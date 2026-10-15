@@ -688,9 +688,15 @@ def ref_visible_to(ref: str, uids: set[str], org_id: str) -> bool:
             data = r.to_dict() or {}
             return r.exists and data.get("org_id") == org_id and uids <= set(data.get("participants") or [])
         if kind == "std":
-            return all(user_profile(u).get("org_id") == org_id for u in uids)
+            return all(user_profile(u).get("org_id") == org_id and user_profile(u).get("org_role") != "guest" for u in uids)
         if kind == "chart":
-            return not any(user_profile(u).get("org_role") == "guest" for u in uids)
+            org = db.collection("orgs").document(org_id).get().to_dict() or {}
+            qteam = set((org.get("settings") or {}).get("quality_team") or [])
+            return all(
+                user_profile(u).get("org_id") == org_id
+                and (user_profile(u).get("org_role") in ("owner", "admin") or u in qteam)
+                for u in uids
+            )
     except Exception:
         log.exception("visibility check failed for %s", ref)
     return False  # kn:, mail:, drive: and unknown refs are personal or unknown → never shared
@@ -699,8 +705,10 @@ def ref_visible_to(ref: str, uids: set[str], org_id: str) -> bool:
 def share_filter(report: dict, uids: set[str], org_id: str) -> tuple[dict, int]:
     cache: dict[str, bool] = {}
 
-    def ok(refs):
-        for r in refs or []:
+    def ok(refs, *, require_refs: bool = False):
+        if not refs:
+            return not require_refs
+        for r in refs:
             if r not in cache:
                 cache[r] = ref_visible_to(r, uids, org_id)
             if not cache[r]:
@@ -710,10 +718,28 @@ def share_filter(report: dict, uids: set[str], org_id: str) -> tuple[dict, int]:
     removed = 0
     out = {**report}
     for key in ("checklist", "findings", "gaps"):
-        kept = [x for x in report.get(key, []) if ok(x.get("refs"))]
+        kept = [
+            x for x in report.get(key, [])
+            if ok(x.get("refs"), require_refs=(key == "findings"))
+            and not (key == "checklist" and not x.get("refs") and "(not verified against a source)" in (x.get("detail") or ""))
+        ]
         removed += len(report.get(key, [])) - len(kept)
         out[key] = kept
-    out["charts"] = [c for c in report.get("charts", []) if ok([c["ref"]])]
+    kept_charts = [c for c in report.get("charts", []) if c.get("scope") == "whole workspace" and ok([c["ref"]], require_refs=True)]
+    removed += len(report.get("charts", [])) - len(kept_charts)
+    out["charts"] = kept_charts
+    if removed > 0:
+        # Strip uncited gaps and rebuild verdict from kept items only so private findings never leak via summary text
+        cited_gaps = [g for g in out.get("gaps", []) if g.get("refs")]
+        removed += len(out.get("gaps", [])) - len(cited_gaps)
+        out["gaps"] = cited_gaps
+        kept_claims = [f["text"] for f in out.get("findings", []) if f.get("text")]
+        kept_checks = [f"{c.get('item')}: {c.get('status')}" for c in out.get("checklist", []) if c.get("refs")]
+        summary_parts = (kept_claims[:3] or kept_checks[:3])
+        out["verdict"] = (
+            "Shared summary (filtered to sources visible in this conversation): " + "; ".join(summary_parts) + "."
+            if summary_parts else "Private sources were excluded for this channel; see the kept items below."
+        )
     return out, removed
 
 

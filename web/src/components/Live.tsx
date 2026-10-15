@@ -4,7 +4,8 @@ import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
-import { getFbAuth, apiUrl } from "@/lib/firebase";
+import { getToken } from "@/lib/auth";
+import { apiUrl } from "@/lib/firebase";
 import {
   AlertTriangle, ArrowLeft, CalendarDays, Check, CheckCircle2, DriveIcon, FileText, FileUp, Loader2, Mail, Plus, Radar, ScrollText, Search, Send,
   Sparkles, Trash2, Video, X,
@@ -267,7 +268,7 @@ function useStreamRecorder(sessionId: string, h: StreamHandlers) {
   useEffect(() => {
     connect.current = async () => {
       hr.current.onConn(tries.current ? "reconnecting" : "connecting");
-      const token = await getFbAuth().currentUser?.getIdToken();
+      const token = await getToken();
       const sock = new WebSocket(`${apiUrl().replace(/^http/, "ws")}/api/live/ws`);
       sock.binaryType = "arraybuffer";
       sock.onopen = () => sock.send(JSON.stringify({ token, session_id: sessionId }));
@@ -391,7 +392,7 @@ function useNotice() {
   const audio = useRef<string | null>(null);
   const prefetch = useCallback(async (lang: "en" | "hi") => {
     try {
-      const token = await getFbAuth().currentUser?.getIdToken();
+      const token = await getToken();
       const res = await fetch(`${apiUrl()}/api/live/announce`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ lang }) });
       if (res.ok) audio.current = URL.createObjectURL(await res.blob());
     } catch {

@@ -55,14 +55,18 @@ Return JSON:
 - supersedes: ids from the existing list that this decision replaces or reverses (same topic, newer verdict). [] if none."""
 
 
-def _candidates(org_id: str, text: str, exclude: str) -> list[dict]:
+def _candidates(org_id: str, text: str, exclude: str, members: list[str] | None = None) -> list[dict]:
     toks = set(ai.keywords(text))
+    member_set = set(members or [])
     rows = []
     for s in db.collection("decisions").where(filter=FieldFilter("org_id", "==", org_id)).where(
             filter=FieldFilter("status", "==", "active")).stream():
         if s.id == exclude:
             continue
         d = s.to_dict()
+        # Only expose/supersede decisions that all participants of the current conversation are already allowed to see
+        if member_set and not (member_set <= set(d.get("members") or [])):
+            continue
         overlap = len(toks & set(ai.keywords(" ".join([d.get("title", ""), d.get("topic", ""), " ".join(d.get("tags") or [])]))))
         if overlap >= 2:
             rows.append((overlap, s.id, d))
@@ -97,6 +101,8 @@ def _save(dec_id: str, org_id: str, d: DecisionDetail, *, members: list[str], ch
 def capture_from_message(chat: dict, msg_id: str, msg: dict, flagged: str) -> None:
     """Runs after the message classifier flags a decision. Idempotent per message."""
     try:
+        if msg.get("sender") and user_profile(msg["sender"]).get("org_role") == "guest":
+            return
         col = db.collection("chats").document(chat["id"]).collection("messages")
         ts = msg.get("ts") or datetime.now(TZ)
         q = col.where(filter=FieldFilter("ts", "<=", ts)).order_by("ts", direction=firestore.Query.DESCENDING).limit(14)
@@ -109,7 +115,7 @@ def capture_from_message(chat: dict, msg_id: str, msg: dict, flagged: str) -> No
         context = "\n".join(f"[{ai.fmt_ist(p.get('ts'))}] {p.get('sender_name')}: {(p.get('text') or '')[:400]}"
                             + (f" (file: {p['file'].get('name')})" if p.get("file") else "") for p in prior if not p.get("system"))
         dec_id = f"m_{msg_id}"
-        cands = _candidates(chat["org_id"], f"{flagged} {msg.get('text', '')}", dec_id)
+        cands = _candidates(chat["org_id"], f"{flagged} {msg.get('text', '')}", dec_id, chat.get("members", []))
         d = ai.generate_json(PROMPT.format(source=f"chat '{chat.get('name') or 'direct message'}'", flagged=flagged, context=context,
                                            candidates="\n".join(f"{c['id']} | {ai.fmt_ist(c.get('decided_at'))} | {c['title']}" for c in cands) or "(none)"),
                              DecisionDetail)
@@ -125,7 +131,7 @@ def capture_from_meeting(meeting_id: str, m: dict, notes: str) -> None:
     for i, flagged in enumerate(m.get("decisions") or []):
         try:
             dec_id = f"meet_{meeting_id}_{i}"
-            cands = _candidates(m["org_id"], flagged, dec_id)
+            cands = _candidates(m["org_id"], flagged, dec_id, m.get("participants", []))
             d = ai.generate_json(PROMPT.format(source=f"meeting '{m['title']}' ({ai.fmt_ist(m['held_at'])})", flagged=flagged,
                                                context=(notes or m.get("summary") or "")[:20000],
                                                candidates="\n".join(f"{c['id']} | {ai.fmt_ist(c.get('decided_at'))} | {c['title']}" for c in cands) or "(none)"),
@@ -208,6 +214,9 @@ def update_decision(dec_id: str, body: DecisionPatch, user=Depends(current_user)
         upd["superseded_by"] = None
     ref.update(upd)
     if body.status == "dismissed":
+        from . import archive
+
+        archive.delete_chunks(chunk_ids=[f"dec_{dec_id}"])
         db.collection("chunks").document(f"dec_{dec_id}").delete()
     audit(user, "decision.updated", dec_id, status=body.status)
     return {"ok": True}

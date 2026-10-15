@@ -271,6 +271,17 @@ def create_record(body: RecordIn, bg: BackgroundTasks, user=Depends(current_user
         media = dsnap.get("media") or []
         drafted_at = dsnap.get("ts")
     anonymous = body.anonymous and body.type == "safety"
+    if anonymous and media:
+        kept_media = []
+        for m in media:
+            if m.get("kind") == "voice":
+                try:
+                    bucket.blob(m["path"]).delete()
+                except Exception:
+                    pass
+            else:
+                kept_media.append(m)
+        media = kept_media
     team = _quality_team(user["org_id"])
     owner = (same_org(user, [body.owner]) or [None])[0] if body.owner else None
     owner = owner or (team[0] if team else user["uid"])
