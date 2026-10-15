@@ -3,7 +3,8 @@
 import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
-import { getFbAuth, apiUrl } from "@/lib/firebase";
+import { getToken } from "@/lib/auth";
+import { apiUrl } from "@/lib/firebase";
 import { StandardsTab } from "./SpecCheck";
 import { timeShort } from "@/lib/format";
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, FileText, Gavel, Loader2, Lock, Plus, ScanText, ShieldCheck, Sparkles, X } from "@/lib/icons";
@@ -108,7 +109,7 @@ export function ReportDialog({ onClose, initialType = "ncr", chatId, initialDraf
       form.append("text", text);
       photos.slice(0, 3).forEach((p) => form.append("photos", p, p.name || "photo.jpg"));
       if (voice) form.append("audio", voice, `voice.${audioExt(voice.type)}`);
-      const token = await getFbAuth().currentUser?.getIdToken();
+      const token = await getToken();
       const res = await fetch(`${apiUrl()}/api/records/draft`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail ?? "Couldn't draft that");
@@ -420,7 +421,7 @@ function RecordDetail({ r, onBack }: { r: PlantRecord; onBack: () => void }) {
   useEffect(() => {
     let urls: string[] = [];
     (async () => {
-      const token = await getFbAuth().currentUser?.getIdToken();
+      const token = await getToken();
       urls = await Promise.all(
         r.media.map(async (_, i) => {
           const res = await fetch(`${apiUrl()}/api/records/${r.id}/media/${i}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -584,7 +585,7 @@ function DrawingRegister({ register }: { register: Drawing[] }) {
   async function printCopy(d: Drawing) {
     setBusy(d.id);
     try {
-      const token = await getFbAuth().currentUser?.getIdToken();
+      const token = await getToken();
       const res = await fetch(`${apiUrl()}/api/drawings/${d.id}/stamp`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ rev: d.current_rev }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "Couldn't create the controlled copy");
       const url = URL.createObjectURL(await res.blob());

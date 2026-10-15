@@ -4,7 +4,8 @@ import clsx from "clsx";
 import { AlertTriangle, CheckCircle2, FileText, FileUp, Info, Loader2, Octagon, RefreshCw, ScanText, ShieldCheck, Trash2, X } from "@/lib/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, openFile } from "@/lib/api";
-import { getFbAuth, apiUrl } from "@/lib/firebase";
+import { getToken } from "@/lib/auth";
+import { apiUrl } from "@/lib/firebase";
 import type { Message, SpecCheck, SpecLimit, SpecRow, SpecSummary, SpecVerdict, StandardDoc } from "@/lib/types";
 import { useWs } from "./ctx";
 import { ReportDialog, type RecordDraftResult } from "./Quality";
@@ -106,7 +107,7 @@ export function SpecCheckPanel({ fileId, chatId, onClose }: { fileId: string; ch
       const form = new FormData();
       form.append("type", "ncr");
       form.append("text", text);
-      const token = await getFbAuth().currentUser?.getIdToken();
+      const token = await getToken();
       const res = await fetch(`${apiUrl()}/api/records/draft`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail ?? "Couldn't draft the NCR");
@@ -283,7 +284,7 @@ export function StandardsTab() {
     try {
       const form = new FormData();
       form.append("file", f);
-      const token = await getFbAuth().currentUser?.getIdToken();
+      const token = await getToken();
       const res = await fetch(`${apiUrl()}/api/standards`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
       if (!res.ok) throw new Error((await res.json()).detail ?? "Upload failed");
       toast("Uploaded. Saathi is indexing it and reading its limits…");

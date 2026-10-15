@@ -4,7 +4,8 @@ import clsx from "clsx";
 import { CheckCircle2, Loader2, Octagon, Timer, X } from "@/lib/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { apiUrl, getFbAuth } from "@/lib/firebase";
+import { getToken } from "@/lib/auth";
+import { apiUrl } from "@/lib/firebase";
 import { CiteChip } from "./bits";
 import { useWs } from "./ctx";
 
@@ -85,7 +86,7 @@ export function VoiceSheet({ onClose }: { onClose: () => void }) {
     let cancelled = false;
     (async () => {
       try {
-        const token = await getFbAuth().currentUser?.getIdToken();
+        const token = await getToken();
         const sock = new WebSocket(`${apiUrl().replace(/^http/, "ws")}/api/voice/ws`);
         sock.binaryType = "arraybuffer";
         sock.onopen = () => sock.send(JSON.stringify({ token }));

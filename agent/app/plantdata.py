@@ -182,7 +182,7 @@ def build(spec: PlantQuery, user: dict, privileged: bool) -> tuple[str, list]:
     group = spec.group_by if spec.group_by in valid_groups else "none"
     label = GROUP_SQL[group].format(t=tcol) if group in GROUP_SQL else ("'All'" if group == "none" else f"IFNULL({group}, '(not recorded)')")
     where, params = ["org_id = @org"], [bigquery.ScalarQueryParameter("org", "STRING", user["org_id"])]
-    if not privileged:
+    if not (privileged and recs):
         where.append(f"@uid IN UNNEST({who})")
         params.append(bigquery.ScalarQueryParameter("uid", "STRING", user["uid"]))
     if recs and spec.record_type != "any":
@@ -230,6 +230,6 @@ def ask(user: dict, question: str) -> dict:
     unit = {"count": "", "open_count": "", "downtime_hours": " h", "avg_days_to_close": " days", "on_time_rate": "%", "avg_slip_days": " days"}[spec.metric]
     chart = {"title": spec.title[:80], "unit": unit.strip(), "metric": spec.metric,
              "rows": [{"label": str(r["label"]), "value": float(r["value"]) if r["value"] is not None else None, "n": int(r["n"])} for r in rows],
-             "scope": "whole workspace" if privileged else "records and chats you're part of", "source": "BigQuery"}
+             "scope": "whole workspace" if (privileged and spec.dataset == "records") else "records and chats you're part of", "source": "BigQuery"}
     return {"chart": chart, "sql": sql, "note": "The chart is shown to the user automatically under your answer. Summarise the key numbers in 2-4 bullets; "
             "say what scope the numbers cover; don't invent causes. If rows are empty, say there is no matching data yet."}

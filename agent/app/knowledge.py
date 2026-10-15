@@ -201,7 +201,10 @@ def update_item(kid: str, body: ItemPatch, user=Depends(current_user)):
 
 @router.delete("/api/knowledge/{kid}")
 def delete_item(kid: str, user=Depends(current_user)):
+    from . import archive
+
     ref, k = _own(kid, user)
+    archive.delete_chunks(ref=f"kn:{kid}")
     for c in db.collection("chunks").where(filter=FieldFilter("ref", "==", f"kn:{kid}")).stream():
         c.reference.delete()
     try:

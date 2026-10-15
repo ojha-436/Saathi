@@ -330,6 +330,10 @@ def process_file(chat_id: str, msg_id: str, file_id: str) -> None:
     chat_snap = db.collection("chats").document(chat_id).get()
     chat = {"id": chat_id, **(chat_snap.to_dict() or {})}
     file_ref = db.collection("files").document(file_id)
+    if chat.get("ai_excluded"):
+        file_ref.update({"status": "ready", "msg_id": msg_id})
+        db.collection("chats").document(chat_id).collection("messages").document(msg_id).update({"file.status": "ready"})
+        return
     f = file_ref.get().to_dict() or {}
     from .firebase import bucket
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { getFbAuth, apiUrl } from "./firebase";
+import { getToken } from "./auth";
+import { apiUrl } from "./firebase";
 
 /** Tap-to-record voice notes with the browser's MediaRecorder (webm/opus on Chrome, mp4/aac on Safari). */
 export function useRecorder(maxSeconds = 120) {
@@ -52,7 +53,7 @@ export function audioExt(mime: string) {
 
 /** Speech → text via the API (Hindi/Hinglish/English). The audio is not stored. */
 export async function transcribe(blob: Blob): Promise<string> {
-  const token = await getFbAuth().currentUser?.getIdToken();
+  const token = await getToken();
   const form = new FormData();
   form.append("audio", blob, `voice.${audioExt(blob.type)}`);
   const res = await fetch(`${apiUrl()}/api/transcribe`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
