@@ -472,6 +472,33 @@ export type ResearchRun = {
   started_at?: Timestamp;
   completed_at?: Timestamp;
   shared_to?: string[];
+  dossier?: DossierState;
+};
+
+// Inspection Dossier (Phase 5): the evidence pack built from a readiness report
+export type DossierItem = {
+  id: string;
+  ref: string;
+  section: string;
+  section_label: string;
+  title: string;
+  detail: string;
+  include: boolean;
+  default_include: boolean;
+  blocked: string | null;
+  note: string | null;
+};
+export type DossierManifest = { items: DossierItem[]; standards: string[]; open_items: number };
+export type DossierState = {
+  id: string;
+  status: "queued" | "building" | "ready" | "failed";
+  progress?: string;
+  error?: string | null;
+  pages?: number;
+  item_count?: number;
+  open_count?: number;
+  build_ms?: number;
+  built_at?: Timestamp;
 };
 
 export type ResearchEvent = { id: string; kind: "phase" | "tool" | "result" | "step_done" | "done" | "error"; text: string; step?: number | null; tool?: string; ts?: Timestamp };
