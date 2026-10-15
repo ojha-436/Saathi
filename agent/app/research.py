@@ -29,7 +29,7 @@ from . import ai, jobs, resilience
 from .agent import (_find_person, find_decisions, get_calendar, get_message_context, lookup_document, plant_data, promise_record,
                     revision_status, search_workspace, shift_handover, similar_incidents, who_owes)
 from .config import AGENT_FALLBACK_MODEL, AGENT_MODEL, COMPANY, TASKS_MODE, TZ
-from .firebase import audit, current_user, db, get_chat_for_member, user_profile
+from .firebase import audit, bucket, current_user, db, get_chat_for_member, user_profile
 
 log = logging.getLogger("saathi.research")
 router = APIRouter()
@@ -627,6 +627,11 @@ def delete(run_id: str, user=Depends(current_user)):
         raise HTTPException(409, "Stop the research before deleting it")
     for e in ref.collection("events").stream():
         e.reference.delete()
+    if (run.get("dossier") or {}).get("gcs_path"):
+        try:
+            bucket.blob(run["dossier"]["gcs_path"]).delete()
+        except Exception:
+            log.warning("couldn't delete the dossier PDF for %s", run_id)
     ref.delete()
     return {"ok": True}
 

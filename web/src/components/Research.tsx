@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronDown,
   FileSearch,
+  FileText,
   Gavel,
   Handshake,
   History,
@@ -20,6 +21,7 @@ import {
   Plus,
   RotateCcw,
   ScanText,
+  ScrollText,
   Search,
   Send,
   ShieldCheck,
@@ -31,9 +33,11 @@ import {
 } from "@/lib/icons";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { getToken } from "@/lib/auth";
+import { apiUrl } from "@/lib/firebase";
 import { chatTitle, timeShort } from "@/lib/format";
 import { useResearchEvents, useResearchRuns } from "@/lib/hooks";
-import type { ResearchEvent, ResearchGap, ResearchReport, ResearchRun, ResearchStep } from "@/lib/types";
+import type { DossierManifest, ResearchEvent, ResearchGap, ResearchReport, ResearchRun, ResearchStep } from "@/lib/types";
 import { CiteChip, UserAvatar } from "./bits";
 import { useWs } from "./ctx";
 import { ChartCard } from "./Knowledge";
@@ -390,6 +394,7 @@ function RunView({ run, onDeleted, onRetry }: { run: ResearchRun; onDeleted: () 
         {!ACTIVE.includes(run.status) && (
           <div className="mt-8 flex flex-wrap gap-2 border-t border-border pt-4">
             {run.status === "done" && <ShareButton run={run} />}
+            {run.status === "done" && run.template === "readiness" && <DossierButton run={run} />}
             {run.status !== "awaiting_plan" && (
               <button onClick={retry} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-medium hover:bg-hover">
                 <RotateCcw size={14} /> Run again
@@ -911,6 +916,198 @@ function ShareButton({ run }: { run: ResearchRun }) {
               </button>
               <button onClick={confirmShare} disabled={!check || check.kept === 0 || busy} className="flex h-9 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-40">
                 {busy && <Loader2 size={14} className="animate-spin" />} Share
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Inspection Dossier: review what goes into the evidence pack, build it on the worker, download the stamped PDF. */
+function DossierButton({ run }: { run: ResearchRun }) {
+  const { toast } = useWs();
+  const [show, setShow] = useState(false);
+  const [man, setMan] = useState<DossierManifest | null>(null);
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<"build" | "download" | null>(null);
+  const d = run.dossier;
+  const building = d?.status === "queued" || d?.status === "building";
+
+  async function openDialog() {
+    setShow(true);
+    setMan(null);
+    try {
+      const m = await api<DossierManifest>(`/api/research/${run.id}/dossier/manifest`);
+      setMan(m);
+      setPicked(Object.fromEntries(m.items.map((i) => [i.id, i.include])));
+    } catch (e) {
+      toast((e as Error).message);
+      setShow(false);
+    }
+  }
+
+  async function build() {
+    if (!man) return;
+    setBusy("build");
+    const usable = man.items.filter((i) => !i.blocked);
+    try {
+      await api(`/api/research/${run.id}/dossier`, {
+        json: {
+          include: usable.filter((i) => picked[i.id] && !i.default_include).map((i) => i.id),
+          exclude: usable.filter((i) => !picked[i.id] && i.default_include).map((i) => i.id),
+        },
+      });
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function download() {
+    setBusy("download");
+    try {
+      const token = await getToken();
+      const res = await fetch(`${apiUrl()}/api/research/${run.id}/dossier.pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "Couldn't download the dossier");
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Saathi_dossier_${d?.id ?? run.id}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const sections = man ? [...new Set(man.items.map((i) => i.section_label))] : [];
+  const chosen = man ? man.items.filter((i) => !i.blocked && picked[i.id]).length : 0;
+  const leftOut = man ? man.items.length - chosen : 0;
+
+  return (
+    <>
+      <button onClick={openDialog} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-medium hover:bg-hover">
+        {building ? <Loader2 size={14} className="animate-spin" /> : <ScrollText size={14} />}
+        {building ? "Building dossier…" : d?.status === "ready" ? "Dossier" : "Build dossier"}
+      </button>
+      {d?.status === "ready" && !show && (
+        <button onClick={download} disabled={busy !== null} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-medium hover:bg-hover disabled:opacity-50">
+          {busy === "download" ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />} Download PDF
+        </button>
+      )}
+      {show && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-ink/45 px-4 py-[6vh]" onMouseDown={() => setShow(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Inspection dossier" onMouseDown={(e) => e.stopPropagation()} className="ws-pop w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
+            <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+              <ScrollText size={20} className="mt-0.5 text-brand" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-bold">Inspection dossier</h2>
+                <p className="text-xs text-muted">
+                  The evidence pack for the inspector: every drawing at its current revision with a QR to verify it, each certificate with its Spec Check, and an open-items page.
+                </p>
+              </div>
+              <button onClick={() => setShow(false)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-hover">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="max-h-[62vh] overflow-y-auto p-5">
+              {!man ? (
+                <p className="flex items-center gap-2 text-sm text-muted" role="status">
+                  <Loader2 size={15} className="animate-spin" /> Checking every cited source against the drawing register and your access…
+                </p>
+              ) : man.items.length === 0 ? (
+                <p className="text-sm text-muted">This report cites no drawings, certificates, reports, records or decisions to put in a pack.</p>
+              ) : (
+                <>
+                  {sections.map((label) => (
+                    <section key={label} className="mb-4">
+                      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{label}</h3>
+                      <ul className="space-y-1">
+                        {man.items
+                          .filter((i) => i.section_label === label)
+                          .map((i) => (
+                            <li key={i.id}>
+                              <label className={clsx("flex items-start gap-2.5 rounded-lg px-2.5 py-2", i.blocked ? "opacity-70" : "cursor-pointer hover:bg-hover")}>
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand)]"
+                                  checked={!i.blocked && !!picked[i.id]}
+                                  disabled={!!i.blocked || building}
+                                  onChange={(e) => setPicked((p) => ({ ...p, [i.id]: e.target.checked }))}
+                                />
+                                <span className="min-w-0 flex-1 text-sm">
+                                  <span className="font-medium">{i.title}</span>
+                                  {i.detail && <span className="ml-2 rounded-full bg-canvas px-2 py-px text-xs text-muted">{i.detail}</span>}
+                                  {i.blocked ? (
+                                    <span className="mt-0.5 block text-xs text-rust">{i.blocked}</span>
+                                  ) : i.note ? (
+                                    <span className="mt-0.5 block text-xs text-muted">{i.note}</span>
+                                  ) : null}
+                                </span>
+                              </label>
+                            </li>
+                          ))}
+                      </ul>
+                    </section>
+                  ))}
+                  {man.standards.length > 0 && (
+                    <p className="mb-3 text-xs text-muted">
+                      <b>Referenced, not reproduced:</b> {man.standards.join(" · ")}
+                    </p>
+                  )}
+                  <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
+                    {chosen} item{chosen === 1 ? "" : "s"} in the pack. {leftOut > 0 ? `${leftOut} left out, ` : ""}gaps, risks and unknowns from the report go on the open-items page at the end.
+                    Saathi re-checks revisions and your access again when it builds.
+                  </p>
+                </>
+              )}
+              {d && (
+                <div
+                  role="status"
+                  className={clsx(
+                    "mt-4 rounded-xl border px-4 py-3 text-sm",
+                    d.status === "failed" ? "border-rust/30 bg-rust-soft text-rust" : d.status === "ready" ? "border-moss/30 bg-moss-soft text-moss" : "border-border bg-canvas",
+                  )}
+                >
+                  {building ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin" /> {d.progress || "Building…"}
+                    </span>
+                  ) : d.status === "ready" ? (
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="flex items-center gap-1.5 font-semibold">
+                        <CheckCircle2 size={15} /> Dossier {d.id} is ready
+                      </span>
+                      <span className="text-xs">
+                        {d.pages} pages · {d.item_count} items · {d.open_count} open items{d.build_ms ? ` · built in ${d.build_ms < 1000 ? "under a second" : fmtDuration(d.build_ms)}` : ""}
+                      </span>
+                    </span>
+                  ) : (
+                    d.error || "Couldn't build the pack."
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border bg-canvas/60 px-5 py-3">
+              {d?.status === "ready" && (
+                <button onClick={download} disabled={busy !== null} className="mr-auto flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium hover:bg-hover disabled:opacity-50">
+                  {busy === "download" ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />} Download PDF
+                </button>
+              )}
+              <button onClick={() => setShow(false)} className="h-9 rounded-lg px-4 text-sm font-medium text-muted hover:bg-hover">
+                Close
+              </button>
+              <button
+                onClick={build}
+                disabled={!man || chosen === 0 || building || busy !== null}
+                className="flex h-9 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-40"
+              >
+                {(busy === "build" || building) && <Loader2 size={14} className="animate-spin" />} {d?.status === "ready" ? "Rebuild" : "Build dossier"}
               </button>
             </div>
           </div>

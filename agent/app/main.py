@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice
+from . import admin, ai, connectors, decisions, dossier, drawings, handover, impact, ingest, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
@@ -33,6 +33,7 @@ app.include_router(handover.router)
 app.include_router(knowledge.router)
 app.include_router(live.router)
 app.include_router(research.router)
+app.include_router(dossier.router)
 app.include_router(specs.router)
 app.include_router(voice.router)
 if SAATHI_ROLE in ("worker", "all"):
