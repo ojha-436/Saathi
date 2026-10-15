@@ -1,18 +1,18 @@
 import clsx from "clsx";
 
-/** Saathi mark: the AI mascot on a lime tile. */
-export function LogoMark({ size = 32, className }: { size?: number; className?: string }) {
+/**
+ * Saathi mark: a speech bubble that is also a folded engineering drawing, with the Gemini spark inside,
+ * on a blueprint-navy tile. `dark` flips to a white tile for navy surfaces (e.g. the sign-in panel).
+ */
+export function LogoMark({ size = 32, className, dark = false }: { size?: number; className?: string; dark?: boolean }) {
+  const stroke = dark ? "#174EA6" : "#FFFFFF";
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="10" fill="#d2e3fc" />
-      <g transform="translate(4 3.5) scale(0.08)">
-        <circle cx="48" cy="115" r="16" />
-        <circle cx="252" cy="115" r="16" />
-        <path d="M150 32C220 32 256 68 256 115C256 162 216 204 150 204L130 204L130 252C114 220 86 182 66 162C44 140 44 130 44 115C44 68 80 32 150 32Z" />
-        <rect x="65" y="66" width="160" height="100" rx="50" fill="#fff" />
-        <circle cx="107" cy="116" r="15" />
-        <circle cx="183" cy="116" r="15" />
-      </g>
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className={clsx("shrink-0", className)} aria-hidden>
+      <rect width="64" height="64" rx="16" fill={dark ? "#FFFFFF" : "#174EA6"} />
+      <path d="M38 46H25L19 52V46H15V14H37L45 22V39" stroke={stroke} strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M37 14V22H45" stroke={stroke} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M29.5 20.5L32.1 27.4L39 30L32.1 32.6L29.5 39.5L26.9 32.6L20 30L26.9 27.4L29.5 20.5Z" fill="#4285F4" />
+      <circle cx="45" cy="46" r="3.2" fill="#8AB4F8" />
     </svg>
   );
 }
@@ -20,7 +20,7 @@ export function LogoMark({ size = 32, className }: { size?: number; className?: 
 export function Logo({ dark = false, className }: { dark?: boolean; className?: string }) {
   return (
     <span className={clsx("inline-flex items-center gap-2.5", className)}>
-      <LogoMark />
+      <LogoMark dark={dark} />
       <span className={clsx("font-display text-[24px] font-semibold leading-none tracking-tight", dark ? "text-paper" : "text-ink")}>Saathi</span>
     </span>
   );

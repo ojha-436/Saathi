@@ -13,7 +13,14 @@ export const metadata: Metadata = {
     "Team chat with a personal AI assistant that finds any file or message, catches you up, and turns promises made in conversation into tracked tasks. Built on Google Cloud.",
   // Installed on iPhone/iPad from Safari → Share → Add to Home Screen (needed for web push on iOS)
   appleWebApp: { capable: true, title: "Saathi", statusBarStyle: "default" },
-  icons: { apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }] },
+  // Listed explicitly: setting `icons` here drops the link Next would otherwise add for app/icon.svg.
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#ffffff" };
