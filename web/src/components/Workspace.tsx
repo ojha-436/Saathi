@@ -14,7 +14,7 @@ import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { ResearchView } from "./Research";
 import { VoiceSheet } from "./VoiceSheet";
-import { ProductTour } from "./ProductTour";
+import { ProductTour, tourPristine } from "./ProductTour";
 import { Menu, type MenuItem, UserAvatar } from "./bits";
 
 const DEMO_PERSONAS = [
@@ -181,15 +181,6 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     }
   }, [view, chats, chatList.length]);
 
-  const [showTour, setShowTour] = useState(false);
-
-  // Automatically offer the product tour on first login if not completed
-  useEffect(() => {
-    if (settings && settings.walkthrough !== true && !account.email?.endsWith("@saathi.demo")) {
-      setShowTour(true);
-    }
-  }, [settings, account.email]);
-
   // ⌘K / Ctrl+K opens the command palette
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -238,6 +229,16 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const myState = presence(me);
 
   const isDemo = Boolean(account.email?.endsWith("@saathi.demo") || me?.email?.endsWith("@saathi.demo"));
+
+  // First visit: start the guided tour once, after settings load and the welcome profile step, unless it was
+  // already taken on any device. Shared demo logins never start it by itself (the card on My Day offers it).
+  const [showTour, setShowTour] = useState(false);
+  const autoTour = useRef(false);
+  useEffect(() => {
+    if (autoTour.current || !settings.loaded || !me || welcome) return;
+    autoTour.current = true;
+    if (!settings.walkthrough && !isDemo && tourPristine(uid)) setShowTour(true);
+  }, [settings.loaded, settings.walkthrough, me, welcome, isDemo, uid]);
 
   const demoPersonaItems: MenuItem[] = DEMO_PERSONAS.map((p) => ({
     label: `${p.name} (${p.role})`,
@@ -302,6 +303,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       value={{
         uid, account, me, users, chats, files, meetings, events, emails, driveFiles, records, register, settings, view, open, openRef, toast, dialog: setDlg,
         newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true), reads,
+        startTour: () => setShowTour(true),
       }}
     >
       <a href="#workspace-main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">
@@ -320,6 +322,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             onClick={() => setDlg("palette")}
             className="flex h-8 min-w-0 flex-1 max-w-xs items-center gap-2 rounded-lg border border-border bg-white px-2.5 text-left text-[13px] text-muted transition hover:border-brand hover:text-ink sm:max-w-md lg:max-w-xl"
             aria-label="Search or ask Saathi"
+            data-tour="search"
           >
             <Search size={15} aria-hidden /> <span className="hidden flex-1 truncate sm:inline">Search chats, channels and files, or ask Saathi</span>
             <kbd className="hidden rounded border border-border px-1.5 font-mono text-[10px] sm:inline">⌘K</kbd>

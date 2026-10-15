@@ -142,7 +142,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-surface" aria-label="Needs you">
+    <section className="rounded-2xl border border-border bg-surface" aria-label="Needs you" data-tour="needs-you">
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Clock size={16} className="text-muted" aria-hidden />
         <h2 className="flex-1 text-sm font-bold">

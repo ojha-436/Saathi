@@ -76,6 +76,7 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
           <button
             key={it.key}
             onClick={() => onSelect(it.key)}
+            data-tour={`rail-${it.key}`}
             aria-current={on ? "page" : undefined}
             className={clsx(
               "relative flex flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition",

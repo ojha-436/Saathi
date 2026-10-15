@@ -8,6 +8,7 @@ import { dueLabel, toDate } from "@/lib/format";
 import type { Notice, Task } from "@/lib/types";
 import { useWs } from "./ctx";
 import { NeedsYou } from "./NeedsYou";
+import { TourCard } from "./ProductTour";
 import { TaskRow } from "./Tasks";
 
 const LIVE = ["open", "in_progress", "blocked"];
@@ -109,7 +110,7 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
+            <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} data-tour="brief-me" className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
               <Radar size={16} className="text-white" /> Brief me
             </button>
             {account.org.settings.voice_us && account.org_role !== "guest" && (
@@ -167,6 +168,8 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             </button>
           </div>
         )}
+
+        <TourCard />
 
         <div className="mt-6">
           <NeedsYou tasks={tasks} notices={notices} />

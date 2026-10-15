@@ -49,6 +49,8 @@ export type WorkspaceCtx = {
   newTask: (prefill?: TaskPrefill) => void;
   newMeeting: (prefill?: MeetingPrefill) => void;
   showProfile: (uid: string) => void;
+  /** Start the guided tour, or continue it where it was paused */
+  startTour: () => void;
   /** Mobile only: go back from a conversation to the chat list. */
   showList: () => void;
   /** chatId → when the user last opened it */
