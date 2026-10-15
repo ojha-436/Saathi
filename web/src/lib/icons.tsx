@@ -22,18 +22,12 @@ function make(name: keyof typeof PHOSPHOR) {
   };
 }
 
-/** Saathi AI mascot: body follows currentColor, visor is white, eyes are black. */
+/** Saathi AI spark: the 4-point spark from the logo plus a small companion, in currentColor. */
 export function AiIcon({ size = 24, className, ...rest }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="20 20 250 250" className={clsx("shrink-0", className)} aria-hidden={rest["aria-hidden"] ?? true}>
-      <g fill="currentColor">
-        <circle cx="48" cy="115" r="16" />
-        <circle cx="252" cy="115" r="16" />
-        <path d="M150 32C220 32 256 68 256 115C256 162 216 204 150 204L130 204L130 252C114 220 86 182 66 162C44 140 44 130 44 115C44 68 80 32 150 32Z" />
-      </g>
-      <rect x="65" y="66" width="160" height="100" rx="50" fill="#fff" />
-      <circle cx="107" cy="116" r="15" fill="#000" />
-      <circle cx="183" cy="116" r="15" fill="#000" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={clsx("shrink-0", className)} aria-hidden={rest["aria-hidden"] ?? true}>
+      <path d="M10.5 2L12.8 8.2L19 10.5L12.8 12.8L10.5 19L8.2 12.8L2 10.5L8.2 8.2Z" />
+      <path d="M18.5 15L19.5 17.5L22 18.5L19.5 19.5L18.5 22L17.5 19.5L15 18.5L17.5 17.5Z" />
     </svg>
   );
 }
