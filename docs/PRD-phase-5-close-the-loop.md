@@ -250,7 +250,7 @@ Numbers go to the landing page and deck through `eval.export_web`, as today.
 
 | Day | Person A (web / UX) | Person B (API / AI / platform) |
 |---|---|---|
-| **Thu 15** (rest of day) | Review this PRD; decide on the unpushed `session/pompous-quail-pegg` UI/UX branch (§12) | PR-0 (§12); **S0 guest-safe Spec Check** + `quality_team` guard; pull the no-source baseline (Q6); author the who-knows eval cases |
+| **Thu 15** (rest of day) | Review this PRD; build Phase 5 UI on top of the 14 Oct UI/UX work already on `main` (§12) | PR-0 (§12, merged as #23); **S0 guest-safe Spec Check** + `quality_team` guard; pull the no-source baseline (Q6); author the who-knows eval cases |
 | **Fri 16** | Dossier: build button, manifest review, progress, download (D1, D2 UI, D10 UI). "Who knows?" card + ask composer (W3, W4 UI) | Dossier backend D2–D10 (resolver, job, cover and index, summary pages, stamp/QR, storage). W1 flag, W2 ranker, W4 send + `asks` |
 | **Sat 17** (to 14:00 IST) | Save-as-answer chip and card, `ans:` chip (W6, W7 UI); vendor verdict card (S4); mobile pass | W5–W7 (detection, save, search/citation); S1–S6 (seed after go-ahead, stage, grade guard, alerts, attempt flag); `phase5_eval`; deploy behind flags |
 | **Sat 17** (afternoon) | Record the video (Appendix); deck slides for the three features | Re-run all evals, export numbers; fixes |
@@ -287,7 +287,8 @@ Each feature ships behind its own flag (`DOSSIER`, `WHO_KNOWS`, `SUPPLIER_CHECK`
 - **PR-0, before any Phase 5 code:** merge the uncommitted security-hardening changes on `main` (21 files, 14 Oct) through a branch and PR, with two fixes the review found:
   - `agent/app/drawings.py:81` calls `user_profile`, which line 21 doesn't import. Every register rebuild raises `NameError`, which `rebuild_for_file` swallows, so **the drawing register silently stops updating**. D3 depends on the register.
   - `agent/app/research.py:736`: `share_filter` reads `claim`/`title`, but findings are `{text, refs}`, so findings never reach the rewritten shared summary.
-- **Unpushed branch `session/pompous-quail-pegg`** (4 commits, 14 Oct): the `uiuxupdate.md` UI work, persona switcher, product tour, workspace onboarding and mandatory email verification. It touches `AssistantView.tsx`, `Research.tsx`, `SpecCheck.tsx` and `Quality.tsx`, which Phase 5 also changes. Decide whether it ships before Phase 5 UI work starts, so we rebase once instead of resolving conflicts twice.
+- **Already on `main` since 14 Oct** (`970910c..323cfed`, pushed directly, no PR): the `uiuxupdate.md` UI work, persona switcher, product tour, workspace onboarding and mandatory email verification (`@saathi.demo` is exempt). It changed `AssistantView.tsx`, `Research.tsx`, `SpecCheck.tsx` and `Quality.tsx`, so Phase 5 UI work starts from that code. Reviewed after the fact on 15 Oct: no blockers.
+- **IAM (fixed 15 Oct):** the API service account needs `roles/firebaseauth.admin`. Without it, setting workspace claims failed for new sign-ups, and the revoked-token check in PR-0 turned every request into a 401 (12:03–12:30 IST, 15 Oct).
 - **No new APIs, dependencies or Firestore indexes.** Cloud Tasks, GCS, FCM, the `saathi-research`/`saathi-jobs` queues and the chunk vector index already exist.
 - **Demo content:** the supplier channel and guest (Q3); the Lot 2 MTC (`agent/seed/files/MTC_H-78120_SideFrame_Lot2.pdf`, uploaded live); a who-knows question that has **no** source in the seed data (verify by asking Saathi before recording).
 - **Script fix:** the Phase 4 storyline says *"C 0.24%"*, but the Lot 2 PDF has **C 0.23** (max 0.22), CEV 0.49 (max 0.47) and impact at 0 °C instead of −20 °C.

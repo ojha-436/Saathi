@@ -260,6 +260,10 @@ def _join(decoded: dict) -> None:
     audit({"uid": uid, "name": name, "org_id": org_id}, "user.joined", org_id, org_role=org_role, via="invite" if channels or org_role != "owner" else "signup")
 
 
+# A missing IAM role once turned every request into "Invalid token" (2026-10-15): only real token problems are a 401.
+_BAD_TOKEN = (ValueError,) if LOCAL_MODE else (ValueError, auth.InvalidIdTokenError, auth.UserDisabledError)
+
+
 async def current_user(authorization: str = Header(default="")) -> dict:
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing bearer token")
@@ -270,8 +274,12 @@ def user_from_token(token: str) -> dict:
     """Verifies a Firebase ID token and returns the caller's profile (also used by WebSockets, which can't send headers)."""
     try:
         decoded = auth.verify_id_token(token, check_revoked=True)
-    except Exception:
+    except _BAD_TOKEN as e:  # malformed, expired, revoked or disabled: the caller has to sign in again
+        log.info("token rejected: %s", type(e).__name__)
         raise HTTPException(401, "Invalid token")
+    except Exception as e:  # our side failed (IAM, network, key fetch): log it loudly and don't tell the client to sign out
+        log.error("token verification failed: %s: %s", type(e).__name__, str(e)[:300])
+        raise HTTPException(503, "Couldn't verify your sign-in right now. Please try again in a moment.")
     email = (decoded.get("email") or "").lower()
     if not decoded.get("email_verified") and not email.endswith("@saathi.demo"):
         raise HTTPException(403, "verify-email: Please verify your email address before accessing the workspace.")
