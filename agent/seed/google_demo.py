@@ -43,10 +43,10 @@ EMAILS = {
         (2, "16:40", "Kavya Iyer", "kavya@saathi.demo", "RDSO visit on 20 Oct – documents needed",
          "Prince, for the RDSO inspection on 20 Oct please keep the released Rev C drawing set of SRC-BF-2041, weld procedure WPS-12 Rev 3 and the "
          "Detail A weld sheet ready in the Bogie Project channel. Neha is preparing the MTC pack.", None),
-        (4, "11:05", "Anita Rao", "anita.rao@kaveristeels.example", "MTC for heat H-77812 (S355J2 plates)",
-         "Hello Prince,\nAttached is the mill test certificate for heat H-77812. Charpy impact at -20°C averaged 21 J. Our lab will repeat the test "
+        (4, "11:05", "Anita Rao", "anita.rao@kaveristeels.example", "MTC for heat K-55210 (S355J2 plates)",
+         "Hello Prince,\nAttached is the mill test certificate for heat K-55210. Charpy impact at -20°C averaged 21 J. Our lab will repeat the test "
          "and we will send the re-test report by 23 October.\nAnita Rao, Kaveri Steels",
-         ("Anita Rao (Kaveri Steels)", "Send the Charpy re-test report for heat H-77812", 7)),
+         ("Anita Rao (Kaveri Steels)", "Send the Charpy re-test report for heat K-55210", 7)),
     ],
     "neha": [
         (1, "09:20", "Rajesh Mehta", VENDOR, "8D report: porosity NCR on job 4522",
@@ -55,7 +55,7 @@ EMAILS = {
         (2, "14:15", "TPI Services", "inspection@tpiservices.example", "UT inspection slot confirmed: weld W7, job 4521",
          "Your third-party UT inspection for weld W7 on job 4521 is confirmed for 19 October at 4 pm at the UT bay. Please keep the job and the WPS ready.",
          ("TPI Services", "Carry out the UT inspection of weld W7 on job 4521", 3)),
-        (5, "12:30", "Anita Rao", "anita.rao@kaveristeels.example", "Re: Charpy re-test for heat H-77812",
+        (5, "12:30", "Anita Rao", "anita.rao@kaveristeels.example", "Re: Charpy re-test for heat K-55210",
          "Neha, the re-test is booked at our NABL lab on 21 October. Results will follow two days later.", None),
     ],
     "rahul": [
@@ -120,7 +120,7 @@ FILES = {
     ],
     "kavya": [
         (1, "RDSO inspection 20 Oct – readiness tracker", SHEET, "Kavya Iyer",
-         "Item,Owner,Status\nRev C drawing set,Prince,In progress\nMTC pack for all heats,Neha,Ready except H-77812 re-test\n"
+         "Item,Owner,Status\nRev C drawing set,Prince,In progress\nMTC pack for all heats,Neha,Ready except K-55210 re-test\n"
          "UT report weld W7,Neha,Booked 19 Oct\nNCR log,Neha,Ready\nWeld procedure WPS-12 Rev 3,Amit,Ready"),
         (9, "BG coach bogie prototype – project plan", DOC, "Kavya Iyer",
          "Milestones: Rev C drawings released 6 Oct; first 2 side frames machined by 15 Oct; RDSO inspection 20 Oct; prototype assembly 3 Nov. "
