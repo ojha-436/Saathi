@@ -25,11 +25,12 @@ from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
 from . import ai
-from .config import FAST_MODEL, LIVE_STT_MODEL, TTS_MODEL, TZ, VISION_MODEL
+from .config import FAST_MODEL, GENAI_LOCATION, LIVE_STT_MODEL, LOCAL_MODE, PROJECT, TTS_MODEL, TZ, VISION_MODEL
 from .firebase import bucket, current_user, db, same_org, user_from_token, user_profile
 from .search import search, user_chats
 
@@ -38,6 +39,20 @@ log = logging.getLogger("saathi.live")
 
 AUDIO_TYPES = {"audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-wav", "audio/aac", "audio/m4a", "audio/x-m4a"}
 CONTEXT_PREFIXES = ("file:", "drive:", "kn:", "meet:", "rec:", "mail:")
+
+
+_stt: genai.Client | None = None
+
+
+def stt_client() -> genai.Client:
+    """Gemini Live transcription gets a client of its own. google-genai stores the bearer token of every ordinary call in
+    the client's shared headers, and live.connect reuses that header instead of refreshing it. On the shared ai.client
+    the token went stale about an hour after an instance started, and every meeting failed with 1008 "invalid
+    authentication credentials". This client only opens Live sessions, so live.connect always fetches a fresh token."""
+    global _stt
+    if _stt is None:
+        _stt = ai.client if LOCAL_MODE else genai.Client(vertexai=True, project=PROJECT, location=GENAI_LOCATION)
+    return _stt
 
 
 # ---------------- sessions ----------------
@@ -561,7 +576,7 @@ async def live_ws(ws: WebSocket):
     state = {"seq": seq, "first_interim": None, "last_interim": None, "utter_start": None}
     recent_qs: list[str] = []
     tasks: set[asyncio.Task] = set()
-    stt = ai.client  # the transcription model is served from the global endpoint
+    stt = stt_client()  # the transcription model is served from the global endpoint
 
     async def handle_final(text: str, timing: dict) -> None:
         n = state["seq"]
