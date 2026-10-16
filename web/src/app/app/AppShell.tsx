@@ -2,7 +2,7 @@
 
 import { Building2, Loader2, MailCheck } from "@/lib/icons";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { LogoMark } from "@/components/Logo";
 import { Workspace } from "@/components/Workspace";
 import { api } from "@/lib/api";
@@ -11,6 +11,7 @@ import { getFbAuth } from "@/lib/firebase";
 import type { Account } from "@/lib/types";
 
 const VALID_DEMO = new Set(["prince", "neha", "suresh", "rahul", "kavya", "amit"]);
+const DEMO_PASSWORD = "Saathi@2026"; // shared demo logins, also on the login page
 
 export function AppShell() {
   const router = useRouter();
@@ -22,7 +23,6 @@ export function AppShell() {
   const [orgName, setOrgName] = useState("");
   const [savingOrg, setSavingOrg] = useState(false);
   const [orgDone, setOrgDone] = useState(false);
-  const autoSigningIn = useRef(false);
 
   async function load() {
     setFailed("");
@@ -63,33 +63,27 @@ export function AppShell() {
   useEffect(
     () =>
       onAuth(async (u) => {
-        const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-        const reqDemo = params?.get("demo")?.toLowerCase() ?? "";
-        const targetPersona = VALID_DEMO.has(reqDemo) ? reqDemo : "prince";
-
-        if (!u) {
-          if (!autoSigningIn.current) {
-            autoSigningIn.current = true;
-            try {
-              await signInWithPassword(`${targetPersona}@saathi.demo`, "Saathi@2026");
-              return;
-            } catch {
-              router.replace("/login?demo=1");
-              return;
-            }
-          }
-          return router.replace("/login?demo=1");
+        // One-click demo: landing-page links like /app?demo=neha sign in as that demo colleague. Only those links do;
+        // anyone else who isn't signed in goes to the login page, so a real account never lands in the demo workspace.
+        const params = new URLSearchParams(window.location.search);
+        const persona = params.get("demo")?.toLowerCase() ?? "";
+        if (params.has("demo")) {
+          // Used once: a reload or a later persona switch keeps whoever is signed in
+          params.delete("demo");
+          const qs = params.toString();
+          window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
         }
-        if (VALID_DEMO.has(reqDemo) && u.email !== `${reqDemo}@saathi.demo` && !autoSigningIn.current) {
-          autoSigningIn.current = true;
+        if (VALID_DEMO.has(persona) && u?.email !== `${persona}@saathi.demo`) {
           try {
-            await signInWithPassword(`${reqDemo}@saathi.demo`, "Saathi@2026");
-            return;
-          } catch {}
+            await signInWithPassword(`${persona}@saathi.demo`, DEMO_PASSWORD);
+            return; // onAuth runs again with the demo colleague
+          } catch {
+            if (!u) return router.replace("/login?demo=1");
+          }
         }
-        autoSigningIn.current = true;
         setUser(u);
         setAccount(null);
+        if (!u) return router.replace("/login");
         if (!u.emailVerified && !u.email?.endsWith("@saathi.demo")) {
           setVerify("Please verify your email address before opening your workspace.");
           return;

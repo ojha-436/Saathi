@@ -484,7 +484,7 @@ export function ProductTour({ onClose }: { onClose: () => void }) {
         style={cardStyle}
       >
         {arrow && <span aria-hidden className="absolute h-3 w-3 rotate-45 bg-ink" style={arrow} />}
-        <button onClick={pause} className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" aria-label="Close tour">
+        <button onClick={pause} className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" aria-label="Close tour">
           <X size={15} />
         </button>
         <div key={step.id} className="fade-in">
