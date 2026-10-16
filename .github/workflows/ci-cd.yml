@@ -143,9 +143,12 @@ jobs:
         run: |
           # --timeout/--session-affinity: Saathi Live streams meeting audio over a WebSocket for up to an hour
           # Background jobs (research, spec checks) go through Cloud Tasks to the private saathi-worker service
+          # Invite email goes out from a Gmail mailbox kept only for this; its app password is the secret
+          # saathi-smtp-password, mounted once as SMTP_PASSWORD (README). Without it, email stays off.
+          MAIL="SMTP_HOST=smtp.gmail.com,SMTP_PORT=587,SMTP_USER=saathi.invites@gmail.com,MAIL_FROM=saathi.invites@gmail.com"
           gcloud run deploy saathi-api --source agent --region "$REGION" --project "$PROJECT_ID" --quiet \
             --timeout 3600 --session-affinity \
-            --update-env-vars "SAATHI_ROLE=api,TASKS_MODE=cloudtasks,WORKER_URL=https://saathi-worker-82398575445.asia-south1.run.app" \
+            --update-env-vars "SAATHI_ROLE=api,TASKS_MODE=cloudtasks,WORKER_URL=https://saathi-worker-82398575445.asia-south1.run.app,$MAIL" \
             --update-labels "managed-by=github-actions,commit-sha=${GITHUB_SHA::7}"
       - name: Deploy saathi-worker (same image as the API; private; only the Cloud Tasks job routes)
         run: |

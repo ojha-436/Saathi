@@ -115,7 +115,7 @@ def invites(admin=Depends(admin_user)):
                      "expires_at": _ts(d.get("expires_at")), "accepted_at": _ts(d.get("accepted_at")), "delivery": _delivery(d.get("delivery"))})
     open_ = sorted((r for r in rows if r["status"] != "accepted"), key=lambda r: r["created_at"] or "", reverse=True)
     done = sorted((r for r in rows if r["status"] == "accepted"), key=lambda r: r["accepted_at"] or "", reverse=True)
-    return {"mail": mailer.enabled(), "invites": open_ + done}
+    return {"mail": mailer.enabled(), "mail_from": mailer.sender(), "invites": open_ + done}
 
 
 def _move_to_link_invite(snap):

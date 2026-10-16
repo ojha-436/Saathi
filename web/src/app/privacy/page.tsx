@@ -111,7 +111,7 @@ export default async function PrivacyPage() {
               <li>Profile details you choose to add: job title, department, phone, location, time zone and a profile photo (resized to 256 px; visible to your workspace).</li>
               <li>
                 Your workspace and role (owner, admin, member or guest), and invitations sent to your email address. When an admin invites you, Saathi emails you a
-                personal link (from your workspace&rsquo;s mail provider, with replies going to the admin who invited you) and records whether the email was sent. Invite
+                personal link (from Saathi&rsquo;s invite address, saathi.invites@gmail.com, sent through Gmail, with replies going to the admin who invited you) and records whether the email was sent. Invite
                 links expire after 14 days and only work for the invited address.
               </li>
             </ul>
