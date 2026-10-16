@@ -29,8 +29,8 @@ function SyncButton() {
       onClick={async () => {
         setBusy(true);
         try {
-          await api("/api/connectors/google/sync", { method: "POST" });
-          toast("Syncing with Google… new items appear in a minute.");
+          const r = await api<{ demo?: boolean }>("/api/connectors/google/sync", { method: "POST" });
+          toast(r.demo ? "This demo login shows sample data, so there's nothing to sync. In your own workspace, Sync fetches new mail, meetings and files." : "Syncing with Google… new items appear in a minute.");
         } catch (e) {
           toast((e as Error).message);
         } finally {
@@ -147,9 +147,11 @@ export function GmailView() {
                     <button onClick={() => open({ kind: "assistant", prompt: `Summarise the email "${e.subject}" from ${e.from_name} and tell me if I need to do anything.` })} className="flex items-center gap-1 font-semibold text-brand hover:underline">
                       <Sparkles size={12} /> Ask Saathi
                     </button>
-                    <a href={e.url} target="_blank" rel="noreferrer" className="font-semibold text-muted hover:underline">
-                      Open in Gmail
-                    </a>
+                    {e.url && (
+                      <a href={e.url} target="_blank" rel="noreferrer" className="font-semibold text-muted hover:underline">
+                        Open in Gmail
+                      </a>
+                    )}
                   </div>
                 </li>
               ))}
@@ -164,7 +166,7 @@ export function GmailView() {
 /* ---------------- Calendar ---------------- */
 
 export function CalendarView() {
-  const { uid, users, me, events, open, newMeeting } = useWs();
+  const { uid, users, me, events, open, newMeeting, toast } = useWs();
   const [now] = useState(() => Date.now());
   const days = useMemo(() => {
     const upcoming = events
@@ -226,7 +228,18 @@ export function CalendarView() {
                               </button>
                             )}
                             {e.meet_url && !done && (
-                              <a href={e.meet_url} target="_blank" rel="noreferrer" className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover">
+                              <a
+                                  href={e.meet_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(ev) => {
+                                    if (e.demo_google) {
+                                      ev.preventDefault();
+                                      toast("Sample meeting on the demo login. In your own workspace, Join opens the Google Meet call.");
+                                    }
+                                  }}
+                                  className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover"
+                                >
                                 <Video size={12} /> Join
                               </a>
                             )}
@@ -328,9 +341,11 @@ export function DriveView() {
                           <Sparkles size={12} /> Ask Saathi
                         </button>
                       )}
-                      <a href={f.url} target="_blank" rel="noreferrer" className="font-semibold text-muted hover:underline">
-                        Open in Drive
-                      </a>
+                      {f.url && (
+                        <a href={f.url} target="_blank" rel="noreferrer" className="font-semibold text-muted hover:underline">
+                          Open in Drive
+                        </a>
+                      )}
                     </div>
                   </div>
                 </li>

@@ -104,14 +104,24 @@ def list_connections(user=Depends(current_user)):
         d = s.to_dict()
         rows.append({"provider": d["provider"], "email": d.get("email"), "services": d.get("services", []), "status": d.get("status"),
                      "error": d.get("error"), "last_sync": d["last_sync"].isoformat() if d.get("last_sync") else None,
-                     "stats": d.get("stats", {})})
+                     "stats": d.get("stats", {}), "demo": d.get("status") == "demo"})
     return {"connections": rows, "available": {"google": bool(GOOGLE_OAUTH_CLIENT) and _google_allowed(user)}}
+
+
+DEMO_SHARED = ("Demo logins are shared by everyone trying Saathi, so they can't connect a real Google account (others would see "
+               "your email). They show sample Gmail, Calendar and Drive data instead; connect Google in your own workspace.")
+
+
+def _is_demo(user: dict) -> bool:
+    return (user.get("email") or "").endswith("@saathi.demo")
 
 
 @router.post("/google/start")
 def start(body: StartIn, user=Depends(current_user)):
     if user.get("org_role") == "guest":
         raise HTTPException(403, "Guests can't connect apps")
+    if _is_demo(user):
+        raise HTTPException(403, DEMO_SHARED)
     if not _google_allowed(user):
         raise HTTPException(403, "Your workspace admin has turned off Google connections")
     services = [s for s in dict.fromkeys(body.services) if s in SCOPES]
@@ -177,6 +187,8 @@ def callback(bg: BackgroundTasks, state: str = "", code: str = "", error: str = 
 
 @router.post("/google/disconnect")
 def disconnect(user=Depends(current_user)):
+    if _is_demo(user):
+        raise HTTPException(403, "This is sample data for the shared demo login; it stays so everyone trying Saathi sees the same demo.")
     disconnect_user(user["uid"])
     audit(user, "connector.disconnected", "google")
     return {"ok": True}
@@ -209,6 +221,8 @@ def sync_now(bg: BackgroundTasks, user=Depends(current_user)):
     snap = db.collection("connections").document(f"{user['uid']}_google").get()
     if not snap.exists:
         raise HTTPException(404, "Google isn't connected")
+    if snap.to_dict().get("status") == "demo":
+        return {"ok": True, "demo": True}  # sample data: nothing to fetch
     bg.add_task(sync_user, user["uid"])
     return {"ok": True}
 
@@ -242,7 +256,7 @@ def _access_token(conn: dict) -> str:
 def sync_user(uid: str, fresh: dict | None = None) -> None:
     ref = db.collection("connections").document(f"{uid}_google")
     conn = ref.get().to_dict()
-    if not conn:
+    if not conn or conn.get("status") == "demo":
         return
     user = user_profile(uid)
     if user["deactivated"]:

@@ -225,7 +225,18 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
                                 </button>
                               )}
                               {e.meet_url && !done && (
-                                <a href={e.meet_url} target="_blank" rel="noreferrer" className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover">
+                                <a
+                                  href={e.meet_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(ev) => {
+                                    if (e.demo_google) {
+                                      ev.preventDefault();
+                                      toast("Sample meeting on the demo login. In your own workspace, Join opens the Google Meet call.");
+                                    }
+                                  }}
+                                  className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-hover"
+                                >
                                   <Video size={12} /> Join
                                 </a>
                               )}

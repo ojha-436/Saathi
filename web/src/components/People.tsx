@@ -493,6 +493,8 @@ function ConnectedApps() {
 
   const g = data?.connections.find((c) => c.provider === "google");
   const guest = account.org_role === "guest";
+  // Shared demo logins can't connect a real Google account (everyone trying Saathi would see it): they show sample data
+  const demoLogin = !!account.email?.endsWith("@saathi.demo");
 
   async function connect(services?: string[]) {
     setBusy("connect");
@@ -534,7 +536,8 @@ function ConnectedApps() {
             <div className="font-semibold">Google Workspace</div>
             <div className="text-xs text-muted">Calendar, Gmail and Drive · read-only</div>
           </div>
-          {g && (
+          {g && g.demo && <span className="rounded-full bg-saffron-soft px-2 py-0.5 text-[11px] font-semibold text-saffron-ink">Sample data</span>}
+          {g && !g.demo && (
             <span className={clsx("flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", g.status === "active" && !g.error ? "bg-moss-soft text-moss" : "bg-rust-soft text-rust")}>
               {g.status === "active" && !g.error ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} {g.status === "active" && !g.error ? "Connected" : "Needs attention"}
             </span>
@@ -565,8 +568,16 @@ function ConnectedApps() {
                 </li>
               )}
             </ul>
-            <p className="text-xs text-muted">{g.last_sync ? `Last synced ${new Date(g.last_sync).toLocaleString("en-IN", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" })} · syncs every 10 minutes` : "First sync in progress…"}</p>
+            {g.demo ? (
+              <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
+                This shared demo login shows fictional sample meetings, emails and Drive files, so you can try Prep me, email promises and Drive answers.
+                In your own workspace you connect your real Google account here: read-only, synced every 10 minutes, visible only to you, and deleted when you disconnect.
+              </p>
+            ) : (
+              <p className="text-xs text-muted">{g.last_sync ? `Last synced ${new Date(g.last_sync).toLocaleString("en-IN", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" })} · syncs every 10 minutes` : "First sync in progress…"}</p>
+            )}
             {g.error && <p className="rounded-lg bg-rust-soft px-3 py-2 text-xs text-rust">{g.error}</p>}
+            {!g.demo && (
             <div className="flex flex-wrap gap-2 pt-1">
               {g.status === "needs_reauth" ? (
                 <button onClick={() => connect([...g.services])} disabled={!!busy} className="h-9 rounded-lg bg-brand px-4 font-semibold text-white hover:bg-brand-strong">
@@ -592,7 +603,13 @@ function ConnectedApps() {
                 Disconnect
               </button>
             </div>
+            )}
           </div>
+        ) : demoLogin ? (
+          <p className="mt-3 rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
+            Demo logins are shared by everyone trying Saathi, so they can&rsquo;t connect a real Google account (others would see your email). Connect Google from your own
+            workspace: Saathi reads Calendar, Gmail and Drive (never writes), syncs every 10 minutes, and only you see what it reads.
+          </p>
         ) : !data.available.google ? (
           <p className="mt-3 rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
             {guest ? "Guests can't connect apps." : "Google connections are turned off for this workspace. Ask your admin."}

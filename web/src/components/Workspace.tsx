@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { refreshToken, signInWithPassword, signOut } from "@/lib/auth";
-import { BarChart3, Building2, Check, ChevronDown, FileSearch, LogOut, Search, Settings, ShieldCheck, Smile, Sparkles, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
+import { BarChart3, Building2, Check, ChevronDown, LogOut, Search, Settings, ShieldCheck, Smile, Sparkles, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -15,6 +15,7 @@ import { AssistantView } from "./AssistantView";
 import { ResearchView } from "./Research";
 import { VoiceSheet } from "./VoiceSheet";
 import { ProductTour, tourPristine } from "./ProductTour";
+import { DemoGuide } from "./DemoGuide";
 import { Menu, type MenuItem, ROLE_LABEL, UserAvatar } from "./bits";
 
 const DEMO_PERSONAS = [
@@ -292,53 +293,25 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     if (!settings.walkthrough && !isDemo && tourPristine(uid)) setShowTour(true);
   }, [settings.loaded, settings.walkthrough, me, welcome, isDemo, uid]);
 
-  const demoPersonaItems: MenuItem[] = DEMO_PERSONAS.map((p) => ({
-    label: `${p.name} (${p.role})`,
-    hint: p.id === uid ? "Current" : p.note.split("·")[1]?.trim(),
-    onSelect: async () => {
-      if (p.id === uid) return;
+  const switchPersona = useCallback(
+    async (id: string) => {
+      if (id === uid) return;
+      const p = DEMO_PERSONAS.find((x) => x.id === id);
       try {
-        toast(`Switching to ${p.name}…`);
-        await signInWithPassword(`${p.id}@saathi.demo`, "Saathi@2026");
+        toast(`Switching to ${p?.name ?? id}…`);
+        await signInWithPassword(`${id}@saathi.demo`, "Saathi@2026");
         window.location.reload();
       } catch (e) {
         toast((e as Error).message);
       }
     },
+    [uid, toast],
+  );
+  const demoPersonaItems: MenuItem[] = DEMO_PERSONAS.map((p) => ({
+    label: `${p.name} (${p.role})`,
+    hint: p.id === uid ? "Current" : p.note.split("·")[1]?.trim(),
+    onSelect: () => switchPersona(p.id),
   }));
-
-  const demoGuideItems: MenuItem[] = [
-    {
-      label: "1. Ask Saathi + Provenance",
-      icon: Sparkles,
-      hint: "Revision & approval",
-      onSelect: () => open({ kind: "assistant", prompt: "Which revision of SRC-BF-2041 is latest and who approved it?" }),
-    },
-    {
-      label: "2. Saathi Research (Multi-Agent)",
-      icon: FileSearch,
-      hint: "Readiness & tasks",
-      onSelect: () => open({ kind: "research" }),
-    },
-    {
-      label: "3. Spec Check & Standards Library",
-      icon: ShieldCheck,
-      hint: "MTC limits & NCR",
-      onSelect: () => open({ kind: "quality", tab: "standards" }),
-    },
-    {
-      label: "4. Saathi Live (Meeting Copilot)",
-      icon: Radar,
-      hint: "Real-time HUD",
-      onSelect: () => open({ kind: "live" }),
-    },
-    {
-      label: "5. Saathi Voice (Shop Floor)",
-      icon: Sparkles,
-      hint: "Hands-free audio",
-      onSelect: () => setDlg("voice"),
-    },
-  ];
 
   function selectRail(k: ReturnType<typeof railKey>) {
     if (k === "chat") {
@@ -396,17 +369,14 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             {isDemo && (
               <>
-                <Menu
-                  label="Try Demo Flows"
-                  align="right"
-                  trigger={
-                    <span className="flex h-8 items-center gap-1.5 rounded-lg border border-brand/40 bg-brand-soft px-2 text-xs font-semibold text-brand transition hover:bg-brand hover:text-white">
-                      <Sparkles size={13} aria-hidden />
-                      <span className="hidden md:inline">Demo guide</span>
-                    </span>
-                  }
-                  items={demoGuideItems}
-                />
+                <button
+                  onClick={() => setDlg("demo-guide")}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-brand/40 bg-brand-soft px-2 text-xs font-semibold text-brand transition hover:bg-brand hover:text-white"
+                  aria-label="Demo guide: what to try"
+                >
+                  <Sparkles size={13} aria-hidden />
+                  <span className="hidden md:inline">Demo guide</span>
+                </button>
                 <Menu
                   label="Switch demo persona"
                   align="right"
@@ -533,6 +503,17 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
       {dlg === "status" && <StatusDialog onClose={() => setDlg(null)} />}
       {dlg === "report" && <ReportDialog onClose={() => setDlg(null)} />}
       {dlg === "voice" && <VoiceSheet onClose={() => setDlg(null)} />}
+      {dlg === "demo-guide" && (
+        <DemoGuide
+          onClose={() => setDlg(null)}
+          onVoice={() => setDlg("voice")}
+          onApps={() => {
+            setSettingsTab("apps");
+            setDlg("settings");
+          }}
+          onSwitch={switchPersona}
+        />
+      )}
       {(dlg === "meeting-new" || meetingPrefill) && (
         <NewMeetingDialog
           prefill={meetingPrefill ?? {}}
