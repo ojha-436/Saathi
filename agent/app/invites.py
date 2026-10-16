@@ -172,12 +172,20 @@ def _email_parts(d: dict, org_name: str, link: str) -> tuple[str, str, str]:
 
 
 def _mail_error(e: Exception) -> str:
+    # SMTP errors are OSErrors too, so the specific ones come first or every refusal would read as "didn't respond"
     if isinstance(e, smtplib.SMTPRecipientsRefused):
         return "The mail server refused this address. Check it for typos."
     if isinstance(e, smtplib.SMTPAuthenticationError):
-        return "Saathi couldn't sign in to the mail server. Check the SMTP settings."
-    if isinstance(e, smtplib.SMTPSenderRefused):
-        return "The mail server won't send from Saathi's address. Check MAIL_FROM."
+        return "Saathi couldn't sign in to its mailbox (the app password may have been revoked). Share the link yourself for now."
+    if isinstance(e, smtplib.SMTPResponseException):
+        said = e.smtp_error.decode(errors="replace") if isinstance(e.smtp_error, bytes) else str(e.smtp_error)
+        if "5.4.5" in said or "sending limit" in said.lower() or "quota" in said.lower():  # Gmail: about 500 a day
+            return "Saathi's mailbox reached its daily sending limit. Share the link yourself; email works again within a day."
+        if 400 <= e.smtp_code < 500:
+            return "The mail server is busy. Try again in a few minutes."
+        if isinstance(e, smtplib.SMTPSenderRefused):
+            return "The mail server won't send from Saathi's address. Check MAIL_FROM."
+        return "The email couldn't be sent. Try again, or share the link yourself."
     if isinstance(e, (socket.timeout, TimeoutError, ConnectionError, OSError)):
         return "The mail server didn't respond. Try again in a minute."
     return "The email couldn't be sent. Try again, or share the link yourself."

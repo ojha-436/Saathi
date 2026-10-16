@@ -243,7 +243,7 @@ function deliveryText(d: Delivery) {
 
 function InvitesTab() {
   const { chats, toast } = useWs();
-  const [data, reload] = useLoad<{ mail: boolean; invites: Invite[] }>("/api/admin/invites");
+  const [data, reload] = useLoad<{ mail: boolean; mail_from?: string; invites: Invite[] }>("/api/admin/invites");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgRole>("member");
   const [channels, setChannels] = useState<string[]>([]);
@@ -301,7 +301,7 @@ function InvitesTab() {
         <div className="rounded-xl border border-border bg-surface p-4">
           <h2 className="font-semibold">Invite someone</h2>
           <p className="mt-0.5 text-sm text-muted">
-            {mail ? "Saathi emails them a personal link." : "You get a personal link to send them (email is off on this server)."} Only this email address can use it.
+            {mail ? `Saathi emails them a personal link${data?.mail_from ? ` from ${data.mail_from}` : ""}.` : "You get a personal link to send them (email is off on this server)."} Only this email address can use it.
           </p>
           <div className="mt-3 space-y-3">
             <div>

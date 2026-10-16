@@ -80,9 +80,24 @@ No environment files or secrets are committed (`.env*` is git-ignored; only `web
 | Web (local) | `cp web/.env.example web/.env.local` and fill in the Firebase web config + API URL |
 | Web (Cloud Run) | `gcloud run deploy saathi-web --set-env-vars SAATHI_API_URL=…,FIREBASE_API_KEY=…,…` |
 | API | Env vars on Cloud Run: `DOCAI_PROCESSOR`, `BQ_TABLE`, `ALLOWED_ORIGINS`, `SIGNUP_DOMAINS` (optional), model overrides (`AGENT_MODEL`, `AGENT_FALLBACK_MODEL`, `FAST_MODEL`, `VISION_MODEL`, `AGENT_THINKING`); jobs: `SAATHI_ROLE` (api/worker), `TASKS_MODE=cloudtasks`, `WORKER_URL` (set by CI) |
-| Invite email (optional) | Env vars on saathi-api: `SMTP_HOST`, `SMTP_PORT` (587 STARTTLS or 465), `SMTP_USER`, `MAIL_FROM` (e.g. `Saathi <invites@yourdomain>`); password in Secret Manager `saathi-smtp-password`, mounted as `SMTP_PASSWORD`. Any SMTP provider works (Google Workspace/Gmail app password, SendGrid, Brevo). Without `SMTP_HOST` invites still work: admins copy the personal link or share it on WhatsApp |
+| Invite email | Sent from **saathi.invites@gmail.com**, a Gmail mailbox kept only for this (about 500 emails a day; bounces land in its inbox). CI sets `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER`, `MAIL_FROM` on saathi-api; the Gmail app password is Secret Manager `saathi-smtp-password` (asia-south1), mounted as `SMTP_PASSWORD` (one-time setup below). Any SMTP provider works (Google Workspace, SendGrid, Brevo): change those env vars. Until the password is mounted, email stays off and invites still work: admins copy the personal link or share it on WhatsApp |
 | Cron secret | Secret Manager `saathi-cron-secret`, mounted as `CRON_SECRET` |
 | Google OAuth client | Secret Manager `saathi-google-oauth` (asia-south1), mounted as `GOOGLE_OAUTH_CLIENT`. Redirect URI `…/api/connectors/google/callback`. Consent screen in Testing: add each user as a test user |
+
+**Invite email, one-time setup.** Sign in to saathi.invites@gmail.com, turn on 2-Step Verification and create an app
+password (myaccount.google.com/apppasswords). Then store it, typed at a hidden prompt so it never reaches the terminal
+history (zsh; in bash use `read -rsp "App password: " P`), let the API read it, and mount it:
+
+```bash
+read -rs "P?App password: " && printf '%s' "${P// /}" | gcloud secrets create saathi-smtp-password --project aibuildergc \
+  --replication-policy=user-managed --locations=asia-south1 --data-file=- ; unset P
+gcloud secrets add-iam-policy-binding saathi-smtp-password --project aibuildergc \
+  --member serviceAccount:saathi-agent@aibuildergc.iam.gserviceaccount.com --role roles/secretmanager.secretAccessor
+gcloud run services update saathi-api --region asia-south1 --project aibuildergc --update-secrets SMTP_PASSWORD=saathi-smtp-password:latest
+```
+
+A new app password goes in with `gcloud secrets versions add saathi-smtp-password --data-file=-` and takes effect on the
+next API revision (redeploy, or rerun the `services update` line). Revoking the app password in Google stops all invite email at once.
 
 ## Run locally
 
