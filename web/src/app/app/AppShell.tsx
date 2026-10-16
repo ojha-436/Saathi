@@ -6,9 +6,12 @@ import { useEffect, useState } from "react";
 import { LogoMark } from "@/components/Logo";
 import { Workspace } from "@/components/Workspace";
 import { api } from "@/lib/api";
-import { onAuth, refreshToken, reloadUser, resendVerification, signOut, type AuthUser } from "@/lib/auth";
+import { onAuth, refreshToken, reloadUser, resendVerification, signInWithPassword, signOut, type AuthUser } from "@/lib/auth";
 import { getFbAuth } from "@/lib/firebase";
 import type { Account } from "@/lib/types";
+
+const VALID_DEMO = new Set(["prince", "neha", "suresh", "rahul", "kavya", "amit"]);
+const DEMO_PASSWORD = "Saathi@2026"; // shared demo logins, also on the login page
 
 export function AppShell() {
   const router = useRouter();
@@ -59,7 +62,25 @@ export function AppShell() {
 
   useEffect(
     () =>
-      onAuth((u) => {
+      onAuth(async (u) => {
+        // One-click demo: landing-page links like /app?demo=neha sign in as that demo colleague. Only those links do;
+        // anyone else who isn't signed in goes to the login page, so a real account never lands in the demo workspace.
+        const params = new URLSearchParams(window.location.search);
+        const persona = params.get("demo")?.toLowerCase() ?? "";
+        if (params.has("demo")) {
+          // Used once: a reload or a later persona switch keeps whoever is signed in
+          params.delete("demo");
+          const qs = params.toString();
+          window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
+        }
+        if (VALID_DEMO.has(persona) && u?.email !== `${persona}@saathi.demo`) {
+          try {
+            await signInWithPassword(`${persona}@saathi.demo`, DEMO_PASSWORD);
+            return; // onAuth runs again with the demo colleague
+          } catch {
+            if (!u) return router.replace("/login?demo=1");
+          }
+        }
         setUser(u);
         setAccount(null);
         if (!u) return router.replace("/login");

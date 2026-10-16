@@ -9,8 +9,11 @@ import type { Notice, Task } from "@/lib/types";
 import { Menu } from "./bits";
 import { useWs } from "./ctx";
 
+type Category = "all" | "tasks" | "quality" | "mentions";
+
 type Item = {
   key: string;
+  cat: Exclude<Category, "all">;
   rank: number;
   icon: typeof Clock;
   tone: string;
@@ -27,6 +30,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
   const { uid, records, emails, settings, openRef, open, toast } = useWs();
   const [now] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
+  const [cat, setCat] = useState<Category>("all");
   const endOfDay = useMemo(() => {
     const d = new Date(now);
     d.setHours(23, 59, 59, 999);
@@ -47,6 +51,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
         const overdue = t.due_at.toMillis() < now;
         out.push({
           key: `task:${t.id}`,
+          cat: "tasks",
           rank: overdue ? 0 : 3,
           icon: ListTodo,
           tone: overdue ? "text-rust bg-rust-soft" : "text-brand bg-brand-soft",
@@ -59,9 +64,10 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
       if (t.status === "proposed" && (t.creator ?? t.owner) === uid) {
         out.push({
           key: `draft:${t.id}`,
+          cat: "tasks",
           rank: 5,
           icon: Sparkles,
-          tone: "text-saffron-ink bg-saffron-soft",
+          tone: "text-warn-ink bg-warn-soft",
           title: t.title,
           sub: "Drafted by Saathi, waiting for your confirmation",
           primary: { label: "Confirm", run: () => api(`/api/tasks/${t.id}/confirm`, { method: "POST" }) },
@@ -72,6 +78,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
       if (r.owner === uid && r.status !== "closed") {
         out.push({
           key: `rec:${r.id}`,
+          cat: "quality",
           rank: r.fields.severity === "critical" ? 0 : 1,
           icon: Gavel,
           tone: r.fields.severity === "critical" ? "text-rust bg-rust-soft" : "text-plum bg-plum-soft",
@@ -85,6 +92,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
       if (!n.read && n.kind === "handover") {
         out.push({
           key: `note:${n.id}`,
+          cat: "quality",
           rank: 0.5,
           icon: RefreshCw,
           tone: "text-blueprint bg-blueprint-soft",
@@ -97,6 +105,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
       if (!n.read && (n.kind === "mention" || n.kind === "thread_reply")) {
         out.push({
           key: `note:${n.id}`,
+          cat: "mentions",
           rank: 4,
           icon: AtSign,
           tone: "text-brand bg-brand-soft",
@@ -110,6 +119,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
       if (e.promise && !e.task_id && !e.dismissed) {
         out.push({
           key: `mail:${e.id}`,
+          cat: "tasks",
           rank: 6,
           icon: Handshake,
           tone: "text-plum bg-plum-soft",
@@ -123,6 +133,17 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
     return out.filter((i) => !isSnoozed(i.key)).sort((a, b) => a.rank - b.rank);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, records, notices, emails, settings, uid, now, endOfDay]);
+
+  const filtered = useMemo(() => (cat === "all" ? items : items.filter((i) => i.cat === cat)), [items, cat]);
+  const counts = useMemo(
+    () => ({
+      all: items.length,
+      tasks: items.filter((i) => i.cat === "tasks").length,
+      quality: items.filter((i) => i.cat === "quality").length,
+      mentions: items.filter((i) => i.cat === "mentions").length,
+    }),
+    [items],
+  );
 
   async function snooze(key: string, hours: number | "tomorrow" | "week") {
     const d = new Date();
@@ -142,21 +163,45 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-surface" aria-label="Needs you">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+    <section className="rounded-2xl border border-border bg-surface" aria-label="Needs you" data-tour="needs-you">
+      <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <Clock size={16} className="text-muted" aria-hidden />
-        <h2 className="flex-1 text-sm font-bold">
+        <h2 className="mr-auto text-sm font-bold">
           Needs you {items.length > 0 && <span className="ml-1 rounded-full bg-canvas px-1.5 text-[11px] font-semibold text-muted">{items.length}</span>}
         </h2>
-        <span className="hidden text-xs text-muted sm:inline">Overdue → handovers → records → today → mentions → email promises</span>
+        {items.length > 0 && (
+          <div role="tablist" aria-label="Filter priority items" className="flex flex-wrap items-center gap-1">
+            {(
+              [
+                ["all", "All", counts.all],
+                ["tasks", "Tasks & Promises", counts.tasks],
+                ["quality", "Quality & Handovers", counts.quality],
+                ["mentions", "Mentions", counts.mentions],
+              ] as const
+            ).map(([k, label, n]) => (
+              <button
+                key={k}
+                role="tab"
+                aria-selected={cat === k}
+                onClick={() => setCat(k)}
+                className={clsx(
+                  "rounded-full px-2.5 py-1 text-xs font-medium transition",
+                  cat === k ? "bg-brand text-white" : "bg-canvas text-muted hover:bg-hover hover:text-ink",
+                )}
+              >
+                {label} {n > 0 && <span className={clsx("ml-0.5 text-[10.5px]", cat === k ? "text-white/90" : "text-muted")}>({n})</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
-      {items.length === 0 ? (
+      {filtered.length === 0 ? (
         <p className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-muted">
-          <CheckCircle2 size={16} className="text-moss" /> You&rsquo;re clear. Nothing is waiting on you.
+          <CheckCircle2 size={16} className="text-moss" /> {items.length === 0 ? "You’re clear. Nothing is waiting on you." : "Nothing waiting in this category."}
         </p>
       ) : (
         <ul>
-          {items.slice(0, 8).map((i) => (
+          {filtered.slice(0, 8).map((i) => (
             <li key={i.key} className="group flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-canvas/60">
               <span className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-full", i.tone)} aria-hidden>
                 <i.icon size={15} />
@@ -197,7 +242,7 @@ export function NeedsYou({ tasks, notices }: { tasks: Task[]; notices: Notice[] 
           ))}
         </ul>
       )}
-      {items.length > 8 && <p className="px-4 py-2 text-xs text-muted">+{items.length - 8} more</p>}
+      {filtered.length > 8 && <p className="px-4 py-2 text-xs text-muted">+{filtered.length - 8} more</p>}
     </section>
   );
 }

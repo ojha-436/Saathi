@@ -88,7 +88,7 @@ export function useSettings(uid?: string): UserSettings {
       const tick = async () => {
         try {
           const res = await fetch(`${apiUrl()}/api/local/settings`, { headers: { Authorization: `Bearer ${await getToken()}` } });
-          if (res.ok && !stop) setS(reviveTs(await res.json()) as UserSettings);
+          if (res.ok && !stop) setS({ ...(reviveTs(await res.json()) as UserSettings), loaded: true });
         } catch {}
       };
       tick();
@@ -100,7 +100,7 @@ export function useSettings(uid?: string): UserSettings {
     }
     return onSnapshot(
       doc(getDb(), "user_settings", uid),
-      (snap) => setS((snap.data() as UserSettings) ?? {}),
+      (snap) => setS({ ...((snap.data() as UserSettings) ?? {}), loaded: true }),
       (err) => console.error("listener error settings", err),
     );
   }, [uid]);

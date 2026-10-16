@@ -56,6 +56,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
     if (!body || busy) return;
     setBusy(true);
     setText("");
+    dispatchEvent(new Event("saathi:asked")); // the guided tour waits for this
     try {
       await api("/api/assistant", { json: { text: body } });
     } catch (e) {
@@ -193,7 +194,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
                   )}
                   {m.charts?.map((c, i) => <ChartCard key={i} chart={c} />)}
                   {m.tasks?.map((id) => (taskById[id] ? <ProposedTaskCard key={id} task={taskById[id]} /> : null))}
-                  {!m.pending && (m.tool_calls || m.provenance) && <AnswerProvenance m={m} />}
+                  {!m.pending && (m.tool_calls || m.provenance) && <AnswerProvenance m={m} tourTarget={!busy && m.id === messages.at(-1)?.id} />}
                 </div>
               </div>
             ),
@@ -204,6 +205,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
 
       <div className="px-4 pb-3 pt-1 lg:px-6">
         <form
+          data-tour="ask-box"
           onSubmit={(e) => {
             e.preventDefault();
             ask(text);
@@ -229,7 +231,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
             className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] outline-none"
           />
           <MicButton onText={(t) => setText((prev) => (prev ? `${prev} ${t}` : t))} className="h-10" />
-          <button disabled={busy || !text.trim()} className="flex h-10 w-10 items-center justify-center rounded-xl bg-saffron text-ink transition hover:brightness-105 disabled:opacity-30" aria-label="Ask">
+          <button disabled={busy || !text.trim()} className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white transition hover:bg-brand-strong disabled:opacity-30" aria-label="Ask">
             {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
           </button>
         </form>
@@ -259,7 +261,7 @@ const TOOL_NAME: Record<string, string> = {
 };
 
 /** "How Saathi got this": the steps behind an answer, so every answer is explainable. */
-function AnswerProvenance({ m }: { m: AssistantMsg }) {
+function AnswerProvenance({ m, tourTarget }: { m: AssistantMsg; tourTarget?: boolean }) {
   const [open, setOpen] = useState(false);
   const cited = Array.from(new Set(m.text.match(/\[((?:msg|file|meet|mail|drive|rec|dec|ho|kn|std):[^\]]+)\]/g) ?? [])).length;
   const p = m.provenance;
@@ -271,6 +273,7 @@ function AnswerProvenance({ m }: { m: AssistantMsg }) {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        data-tour={tourTarget ? "answer-proof" : undefined}
         className="group flex flex-wrap items-center gap-1.5 rounded-lg border border-border/80 bg-canvas/60 px-2.5 py-1.5 text-left text-xs transition hover:border-brand/40 hover:bg-canvas"
       >
         <span className="flex items-center gap-1 font-semibold text-ink">
