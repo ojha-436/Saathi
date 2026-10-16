@@ -453,7 +453,10 @@ function InvitesTab() {
   const [dur, setDur] = useState<Duration | null>({ kind: "days", days: 30 });
   const [busy, setBusy] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedLink | null>(null);
+  // Until the server says otherwise, assume email is on (it is in production): no "email is off" flash while loading
+  const loaded = data != null;
   const mail = data?.mail ?? false;
+  const emailing = !loaded || mail;
   const rows = data?.invites;
   // Guests never see #General (company-wide), so it isn't offered for them
   const myChannels = Object.values(chats).filter((c) => c.type === "channel" && !(role === "guest" && c.default));
@@ -508,7 +511,12 @@ function InvitesTab() {
         <div className="rounded-xl border border-border bg-surface p-4">
           <h2 className="font-semibold">Invite someone</h2>
           <p className="mt-0.5 text-sm text-muted">
-            {mail ? `Saathi emails them a personal link${data?.mail_from ? ` from ${data.mail_from}` : ""}.` : "You get a personal link to send them (email is off on this server)."} Only this email address can use it.
+            {!loaded
+              ? "They get a personal link."
+              : mail
+                ? `Saathi emails them a personal link${data?.mail_from ? ` from ${data.mail_from}` : ""}.`
+                : "You get a personal link to send them (email is off on this server)."}{" "}
+            Only this email address can use it.
           </p>
           <div className="mt-3 space-y-3">
             <div>
@@ -558,11 +566,11 @@ function InvitesTab() {
               </div>
             )}
             <div className="flex gap-2">
-              <button onClick={() => send(true)} disabled={!!busy || !ready} className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-brand text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-40">
-                {busy === "send" && <Loader2 size={14} className="animate-spin" />} {mail ? "Send invite" : "Create invite link"}
+              <button onClick={() => send(true)} disabled={!!busy || !ready || !loaded} className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-brand text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-40">
+                {busy === "send" && <Loader2 size={14} className="animate-spin" />} {emailing ? "Send invite" : "Create invite link"}
               </button>
-              {mail && (
-                <button onClick={() => send(false)} disabled={!!busy || !ready} title="Create the invite without emailing it, and copy the link yourself" className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold hover:bg-hover disabled:opacity-40">
+              {emailing && (
+                <button onClick={() => send(false)} disabled={!!busy || !ready || !loaded} title="Create the invite without emailing it, and copy the link yourself" className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold hover:bg-hover disabled:opacity-40">
                   {busy === "link" ? <Loader2 size={14} className="animate-spin" /> : <Copy size={13} />} Link only
                 </button>
               )}
