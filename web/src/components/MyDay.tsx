@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileSearch, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, ShieldCheck, Sparkles, Sun, Users, Video, X, Gavel } from "@/lib/icons";
+import { ArrowRight, AtSign, BellRing, CalendarDays, CheckCircle2, FileText, Hand, ListTodo, Mail, NotebookPen, Plus, Radar, Sparkles, Sun, Users, Video, X, Gavel } from "@/lib/icons";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { enablePush, pushState, type PushState } from "@/lib/push";
@@ -34,11 +34,7 @@ function Empty({ text }: { text: string }) {
 
 /** Start-of-day home: what I owe, what's owed to me, meetings, mentions, and a one-click brief. */
 export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[] }) {
-  const { uid, me, account, meetings, events, emails, records, register, users, open, openRef, dialog, newTask, newMeeting, toast } = useWs();
-  const guest = account.org_role === "guest";
-  const openPlantRecords = Object.values(records).filter((r) => r.status !== "closed");
-  const openNcrs = openPlantRecords.filter((r) => r.type === "ncr").length;
-  const openDowntime = openPlantRecords.filter((r) => r.type === "downtime").length;
+  const { uid, me, account, meetings, events, emails, users, open, openRef, dialog, newTask, newMeeting, toast } = useWs();
   // Clock captured once per mount (render must stay pure)
   const [{ now, endOfToday }] = useState(() => {
     const d = new Date();
@@ -98,105 +94,44 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
   const overdue = mine.filter((t) => t.due_at && t.due_at.toMillis() < now).length;
 
   return (
-    <section className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto bg-canvas/70" aria-label="My Day">
+    <section className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto bg-canvas/50" aria-label="My Day">
       <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">
-        {/* Redesigned Dark Blueprint Plant Command Banner */}
-        <div className="blueprint-grid overflow-hidden rounded-3xl border border-slate-800 p-6 text-white shadow-lg sm:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/15 px-2.5 py-0.5 font-mono text-[10.5px] font-semibold text-emerald-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  {account.org.name.toUpperCase()}
-                </span>
-                <span className="font-mono text-xs text-slate-300">
-                  {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" })}
-                </span>
-                {me?.role && <span className="rounded-md bg-white/10 px-2 py-0.5 font-mono text-[11px] text-mint">{me.role}</span>}
-              </div>
-              <h1 className="mt-2.5 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                {greet}, {first}.
-              </h1>
-              <p className="mt-1 text-sm text-slate-300">
-                {dueToday.length ? `${dueToday.length} due today` : "Nothing due today"}
-                {overdue ? ` · ${overdue} overdue` : ""} · {owed.length} owed to you · {mentions.filter((m) => !m.read).length} unread mentions
-              </p>
-            </div>
-
-            {!guest && (
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <button
-                  onClick={() => open({ kind: "quality" })}
-                  className="rounded-2xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-left backdrop-blur transition hover:border-mint/50 hover:bg-white/15"
-                >
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-300">Open NCRs</p>
-                  <p className="mt-0.5 font-display text-2xl font-bold text-white">{openNcrs}</p>
-                </button>
-                <button
-                  onClick={() => open({ kind: "quality" })}
-                  className="rounded-2xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-left backdrop-blur transition hover:border-mint/50 hover:bg-white/15"
-                >
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-300">Machines Down</p>
-                  <p className="mt-0.5 font-display text-2xl font-bold text-amber-300">{openDowntime}</p>
-                </button>
-                <button
-                  onClick={() => open({ kind: "quality", tab: "drawings" })}
-                  className="rounded-2xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-left backdrop-blur transition hover:border-mint/50 hover:bg-white/15"
-                >
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-300">Drawings</p>
-                  <p className="mt-0.5 font-display text-2xl font-bold text-emerald-300">{register.length}</p>
-                </button>
-              </div>
-            )}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-muted">
+              {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })} · {account.org.name}
+            </p>
+            <h1 className="mt-1 text-[28px] font-bold tracking-tight">
+              {greet}, {first}.
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              {dueToday.length ? `${dueToday.length} due today` : "Nothing due today"}
+              {overdue ? ` · ${overdue} overdue` : ""} · {owed.length} owed to you · {mentions.filter((m) => !m.read).length} new mentions
+            </p>
           </div>
-
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-white/15 pt-4">
-            <button
-              onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })}
-              data-tour="brief-me"
-              className="flex h-9.5 items-center gap-2 rounded-xl bg-brand px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-strong sm:text-sm"
-            >
-              <Radar size={15} className="text-white" /> Brief me
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} data-tour="brief-me" className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
+              <Radar size={16} className="text-white" /> Brief me
             </button>
-            {!guest && (
-              <button
-                onClick={() => open({ kind: "research" })}
-                className="flex h-9.5 items-center gap-2 rounded-xl border border-mint/40 bg-white/10 px-3.5 text-xs font-semibold text-white transition hover:bg-white/20 sm:text-sm"
-              >
-                <FileSearch size={15} className="text-mint" /> Saathi Research
-              </button>
-            )}
-            {account.org.settings.voice_us && !guest && (
-              <button
-                onClick={() => dialog("voice")}
-                className="flex h-9.5 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3.5 text-xs font-semibold text-white transition hover:bg-white/20 sm:text-sm"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+            {account.org.settings.voice_us && account.org_role !== "guest" && (
+              <button onClick={() => dialog("voice")} className="flex h-10 items-center gap-2 rounded-lg bg-ink px-3.5 text-sm font-semibold text-white hover:bg-ink-3">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
                   <rect x="9" y="3" width="6" height="11" rx="3" />
                   <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
                 </svg>
                 Talk to Saathi
               </button>
             )}
-            {!guest && (
-              <button
-                onClick={() => dialog("report")}
-                className="flex h-9.5 items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-400/15 px-3.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/25 sm:text-sm"
-              >
-                <Gavel size={15} /> Report issue
+            {account.org_role !== "guest" && (
+              <button onClick={() => dialog("report")} className="flex h-10 items-center gap-2 rounded-lg border border-rust/40 bg-surface px-3.5 text-sm font-semibold text-rust hover:bg-rust-soft">
+                <Gavel size={16} /> Report issue
               </button>
             )}
-            <button
-              onClick={() => newTask()}
-              className="flex h-9.5 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-slate-200 transition hover:bg-white/15 sm:text-sm"
-            >
-              <Plus size={15} /> Task
+            <button onClick={() => newTask()} className="flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-3.5 text-sm font-semibold hover:bg-hover">
+              <Plus size={16} /> Task
             </button>
-            <button
-              onClick={() => dialog("meeting-new")}
-              className="flex h-9.5 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-slate-200 transition hover:bg-white/15 sm:text-sm"
-            >
-              <Users size={15} /> Meeting notes
+            <button onClick={() => dialog("meeting-new")} className="flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-3.5 text-sm font-semibold hover:bg-hover">
+              <Users size={16} /> Meeting notes
             </button>
           </div>
         </div>
@@ -241,63 +176,21 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <Card icon={ListTodo} title="Coming up next" count={nextUp.length || dueToday.length} action={<GoLink onClick={() => open({ kind: "tasks" })} />}>
-            {nextUp.length > 0 ? (
-              nextUp.map((t) => <TaskRow key={t.id} t={t} compact />)
-            ) : dueToday.length > 0 ? (
-              dueToday.slice(0, 4).map((t) => <TaskRow key={t.id} t={t} compact />)
-            ) : (
-              <Empty text="No upcoming tasks scheduled after today. 🎉" />
+          <Card icon={ListTodo} title="Due today" count={dueToday.length} action={<GoLink onClick={() => open({ kind: "tasks" })} />}>
+            {dueToday.length ? dueToday.map((t) => <TaskRow key={t.id} t={t} compact />) : <Empty text="Nothing due today. 🎉" />}
+            {nextUp.length > 0 && (
+              <>
+                <p className="border-t border-border px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Coming up</p>
+                {nextUp.map((t) => (
+                  <TaskRow key={t.id} t={t} compact />
+                ))}
+              </>
             )}
           </Card>
 
           <Card icon={Hand} title="Owed to you" count={owed.length} action={<GoLink onClick={() => open({ kind: "tasks" })} />}>
             {owed.length ? owed.slice(0, 6).map((t) => <TaskRow key={t.id} t={t} perspective="delegated" compact />) : <Empty text="Nobody owes you anything right now. Assign work from any message or meeting." />}
           </Card>
-
-          {!guest && (
-            <Card icon={ShieldCheck} title="Plant & quality pulse" action={<GoLink onClick={() => open({ kind: "quality" })} />}>
-              <div className="space-y-3 p-4">
-                <div className="grid grid-cols-3 gap-2.5 text-center">
-                  <button
-                    onClick={() => open({ kind: "quality" })}
-                    className="rounded-xl border border-border bg-canvas/60 px-2.5 py-2.5 transition hover:border-brand hover:bg-canvas"
-                  >
-                    <p className="font-display text-2xl leading-none text-ink">{openNcrs}</p>
-                    <p className="mt-1 text-[11px] font-medium text-muted">Open NCRs</p>
-                  </button>
-                  <button
-                    onClick={() => open({ kind: "quality" })}
-                    className="rounded-xl border border-border bg-canvas/60 px-2.5 py-2.5 transition hover:border-brand hover:bg-canvas"
-                  >
-                    <p className="font-display text-2xl leading-none text-ink">{openDowntime}</p>
-                    <p className="mt-1 text-[11px] font-medium text-muted">Machines down</p>
-                  </button>
-                  <button
-                    onClick={() => open({ kind: "quality", tab: "drawings" })}
-                    className="rounded-xl border border-border bg-canvas/60 px-2.5 py-2.5 transition hover:border-brand hover:bg-canvas"
-                  >
-                    <p className="font-display text-2xl leading-none text-ink">{register.length}</p>
-                    <p className="mt-1 text-[11px] font-medium text-muted">Controlled dwgs</p>
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <button
-                    onClick={() => open({ kind: "research" })}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-white transition hover:bg-brand-strong"
-                  >
-                    <FileSearch size={13} /> Run inspection readiness check
-                  </button>
-                  <button
-                    onClick={() => open({ kind: "quality", tab: "standards" })}
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-semibold text-ink transition hover:bg-hover"
-                  >
-                    <ShieldCheck size={13} className="text-brand" /> Spec Check
-                  </button>
-                </div>
-              </div>
-            </Card>
-          )}
 
           {events.length > 0 && (
             <Card icon={CalendarDays} title="Today's calendar" count={today.length}>
