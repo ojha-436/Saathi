@@ -3,15 +3,16 @@
 import clsx from "clsx";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
-import { ArrowRight, Check, CircleDot, Gavel, MessageSquare, Sparkles, Sun, X } from "@/lib/icons";
+import { ArrowRight, Check, CheckCircle2, CircleDot, Compass, Gavel, Loader2, MessageSquare, Sparkles, Sun, X } from "@/lib/icons";
 import { useWs, type View } from "./ctx";
 
-/* Guided tour: a dark card pinned to the real control it explains, with the matching screen opened behind it.
-   Progress is kept per section so the tour can be paused and picked up again from the card on My Day. */
+/* Guided tour. The page dims, the control being explained stays lit, and a card beside it says what it does.
+   The first section is hands-on (ask Saathi a real question, then check where the answer came from); the rest
+   walks the screens people use every day. Progress is kept per section so it can be paused and continued. */
 
 const SECTIONS = [
+  { id: "ask", label: "Ask Saathi", icon: Sparkles },
   { id: "day", label: "Your day", icon: Sun },
-  { id: "knowledge", label: "Find knowledge", icon: Sparkles },
   { id: "together", label: "Work together", icon: MessageSquare },
   { id: "decide", label: "Decide with evidence", icon: Gavel },
 ] as const;
@@ -20,17 +21,47 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 type Step = {
   id: string;
   section: SectionId;
-  /** data-tour value of the control the card points at */
+  /** data-tour value of the control that stays lit */
   target: string;
   title: string;
+  /** "{q}" is replaced by the suggested question */
   body: string;
-  /** Screen opened behind the card. Read-only screens only: Activity stays closed because opening it marks notifications read. */
+  /** Screen opened behind the card. Read-only screens only (Activity marks notifications read, so it isn't one). */
   view?: View;
   /** Not shown to guests (they have no Quality or Live) */
   staff?: boolean;
+  /** Hands-on steps: "asked" waits for a question to be sent; "target" waits for the lit control to appear */
+  gate?: "asked" | "target";
+  waiting?: string;
 };
 
 const STEPS: Step[] = [
+  {
+    id: "saathi",
+    section: "ask",
+    target: "rail-assistant",
+    title: "Saathi",
+    body: "Your AI colleague. It answers from your chats, drawings and records, and only from what you're allowed to see. Click it, or Next, to open it.",
+  },
+  {
+    id: "ask",
+    section: "ask",
+    target: "ask-box",
+    view: { kind: "assistant" },
+    gate: "asked",
+    title: "Ask your first question",
+    body: "Type {q} and press Enter. English, Hindi or Hinglish all work.",
+  },
+  {
+    id: "proof",
+    section: "ask",
+    target: "answer-proof",
+    view: { kind: "assistant" },
+    gate: "target",
+    waiting: "Saathi is answering…",
+    title: "See where the answer came from",
+    body: "Every answer cites its sources and lists the steps Saathi took. Open How Saathi got this to check them.",
+  },
   {
     id: "myday",
     section: "day",
@@ -48,14 +79,6 @@ const STEPS: Step[] = [
     body: "Saathi ranks what's waiting on you: overdue tasks, drafts to confirm, open records, shift handovers, mentions and promises from email. Act on each or snooze it in one tap.",
   },
   {
-    id: "brief",
-    section: "day",
-    target: "brief-me",
-    view: { kind: "home" },
-    title: "Brief me",
-    body: "One click for a summary of the last 24 hours, with sources cited, drawn only from chats and files you can open.",
-  },
-  {
     id: "tasks",
     section: "day",
     target: "rail-tasks",
@@ -64,34 +87,12 @@ const STEPS: Step[] = [
     body: "Tasks Saathi drafts from chats, meetings and email land here only after a person confirms them, each linked back to where it came from.",
   },
   {
-    id: "search",
-    section: "knowledge",
-    target: "search",
-    title: "Search or ask",
-    body: "Jump to any chat, channel or file, or type a question for Saathi. On a computer, ⌘K or Ctrl+K opens it from anywhere.",
-  },
-  {
-    id: "saathi",
-    section: "knowledge",
-    target: "rail-assistant",
-    view: { kind: "assistant" },
-    title: "Saathi",
-    body: "Your AI colleague. Ask in English, Hindi or Hinglish; answers cite their sources and use only what you can access. Research runs several agents at once to build readiness reports.",
-  },
-  {
     id: "chat",
     section: "together",
     target: "rail-chat",
     view: { kind: "chats" },
     title: "Chat and channels",
     body: "Direct chats and plant channels. Turn any message into a task or a decision, or hand over a shift from the channel.",
-  },
-  {
-    id: "activity",
-    section: "together",
-    target: "rail-activity",
-    title: "Activity",
-    body: "Mentions, replies and assignments in one feed, only from the channels you belong to.",
   },
   {
     id: "live",
@@ -125,6 +126,8 @@ const stepsFor = (guest: boolean) => STEPS.filter((s) => !s.staff || !guest);
 // Demo logins are shared by everyone trying the app, so their progress stays on this device only.
 const isDemoEmail = (email?: string) => !!email?.endsWith("@saathi.demo");
 const markTaken = () => api("/api/me/settings", { method: "POST", json: { walkthrough: true } }).catch(() => {});
+/** The question the hands-on step suggests: the demo plant's drawing question, or a catch-up anyone can ask. */
+const suggestedQuestion = (demo: boolean) => (demo ? "Which revision of SRC-BF-2041 is latest and who approved it?" : "What did I miss in the last 24 hours?");
 
 /* ---------- Progress (per device; the server flag only stops the tour starting by itself again) ---------- */
 
@@ -183,20 +186,19 @@ function sectionStatus(steps: Step[], p: Progress, id: SectionId): Status {
   return "todo";
 }
 
+/** Same chips as task status: Done, In progress, To do. */
 function StatusChip({ status }: { status: Status }) {
-  if (status === "done")
-    return (
-      <span className="flex items-center gap-1 rounded-full bg-moss-soft px-2 py-0.5 text-[11px] font-semibold text-moss">
-        <Check size={11} strokeWidth={3} aria-hidden /> Done
-      </span>
-    );
-  if (status === "active")
-    return (
-      <span className="flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn-ink">
-        <CircleDot size={11} aria-hidden /> In progress
-      </span>
-    );
-  return <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted">Not started</span>;
+  return (
+    <span
+      className={clsx(
+        "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold",
+        status === "done" ? "bg-moss-soft text-moss" : status === "active" ? "bg-brand-soft text-brand" : "bg-canvas text-ink/70",
+      )}
+    >
+      {status === "done" ? <CheckCircle2 size={12} aria-hidden /> : status === "active" ? <CircleDot size={12} aria-hidden /> : null}
+      {status === "done" ? "Done" : status === "active" ? "In progress" : "Not started"}
+    </span>
+  );
 }
 
 /** My Day card: start or continue the tour, with each section's status. */
@@ -217,32 +219,34 @@ export function TourCard() {
   }
 
   return (
-    <section className="mt-5 rounded-2xl border border-border bg-surface p-4 sm:p-5" aria-label="Guided tour">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-8">
-        <div className="min-w-0 md:max-w-md">
-          <p className="text-xs font-semibold text-moss">Get started</p>
-          <h2 className="mt-1 text-[15px] font-bold">Guided tour</h2>
-          <p className="mt-1 text-sm text-muted">
-            See how Saathi helps you find knowledge, work together, decide with evidence and get the day&rsquo;s work done, right on the real screens. About two minutes.
+    <section className="mt-5 rounded-2xl border border-border bg-surface" aria-label="Guided tour">
+      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <Compass size={16} className="text-muted" aria-hidden />
+        <h2 className="flex-1 text-sm font-bold">
+          Guided tour
+          {started && (
+            <span className="ml-1 rounded-full bg-canvas px-1.5 text-[11px] font-semibold text-muted">
+              {seenCount} of {steps.length}
+            </span>
+          )}
+        </h2>
+        <button onClick={hide} className="text-xs font-semibold text-muted hover:text-ink hover:underline">
+          Hide
+        </button>
+      </header>
+      <div className="grid gap-4 p-4 md:grid-cols-[1fr_20rem] md:items-center md:gap-8">
+        <div>
+          <p className="text-sm text-muted">
+            Learn Saathi by using it: ask a real question, see where the answer came from, then walk through the screens you&rsquo;ll use every day. About two minutes.
           </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button onClick={startTour} className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-sm font-semibold text-white hover:bg-brand-strong">
-              {started ? "Continue" : "Start tour"} <ArrowRight size={14} aria-hidden />
-            </button>
-            {started && (
-              <span className="text-xs text-muted">
-                {seenCount} of {steps.length} seen
-              </span>
-            )}
-            <button onClick={hide} className="text-xs font-medium text-muted hover:underline">
-              Hide
-            </button>
-          </div>
+          <button onClick={startTour} className="mt-3 flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-sm font-semibold text-white hover:bg-brand-strong">
+            {started ? "Continue" : "Start tour"} <ArrowRight size={14} aria-hidden />
+          </button>
         </div>
-        <ul className="grid gap-1 sm:grid-cols-2 md:w-80 md:shrink-0 md:grid-cols-1">
+        <ul className="divide-y divide-border rounded-xl border border-border">
           {SECTIONS.filter((s) => steps.some((st) => st.section === s.id)).map((s) => (
-            <li key={s.id} className="flex items-center gap-2.5 rounded-lg px-1 py-1.5 text-sm">
-              <s.icon size={16} className="shrink-0 text-muted" aria-hidden />
+            <li key={s.id} className="flex items-center gap-2.5 px-3 py-2 text-sm">
+              <s.icon size={15} className="shrink-0 text-muted" aria-hidden />
               <span className="flex-1 font-medium">{s.label}</span>
               <StatusChip status={sectionStatus(steps, p, s.id)} />
             </li>
@@ -253,14 +257,16 @@ export function TourCard() {
   );
 }
 
-/* ---------- Coachmark ---------- */
+/* ---------- Spotlight and card ---------- */
 
 type Box = { top: number; left: number; width: number; height: number };
 type Side = "right" | "left" | "bottom" | "top" | "inside";
 
 const CARD_W = 320;
-const GAP = 12;
+const GAP = 14;
 const EDGE = 16;
+const PAD = 6; // lit area around the control
+const SCRIM = "rgb(32 33 36 / 0.45)"; // the dialogs' bg-ink/45
 
 /** The first visible element for a tour target (the app rail exists twice: desktop column and phone bar). */
 function findTarget(name: string): HTMLElement | null {
@@ -303,7 +309,7 @@ function useLayout(target: string, card: React.RefObject<HTMLDivElement | null>)
   return layout;
 }
 
-/** Beside the target if there's room (right of the rail, under the header), else inside its bottom-right corner. */
+/** Beside the lit area if there's room (right of the rail, under the header), else inside its bottom-right corner. */
 function place(b: Box, h: number, vw: number, vh: number): { side: Side; top: number; left: number } {
   const clampX = (x: number) => Math.max(EDGE, Math.min(x, vw - CARD_W - EDGE));
   const clampY = (y: number) => Math.max(EDGE, Math.min(y, vh - h - EDGE));
@@ -320,7 +326,7 @@ function place(b: Box, h: number, vw: number, vh: number): { side: Side; top: nu
   return { side: "inside", left: clampX(Math.min(b.left + b.width, vw) - CARD_W - EDGE), top: clampY(Math.min(b.top + b.height, vh) - h - EDGE) };
 }
 
-/** The tour itself. It doesn't block the app: people can click around and come back to the card. */
+/** The tour itself. Only the lit control can be used while it runs; close it to get the whole app back. */
 export function ProductTour({ onClose }: { onClose: () => void }) {
   const { uid, account, view, open, toast } = useWs();
   const demo = isDemoEmail(account.email);
@@ -334,12 +340,20 @@ export function ProductTour({ onClose }: { onClose: () => void }) {
   const section = SECTIONS.find((s) => s.id === step.section)!;
   const cardRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
+  const viewKind = useRef(view.kind);
   const { box, vw, vh, h, ready } = useLayout(step.target, cardRef);
+  const blocked = step.gate === "asked" || (step.gate === "target" && !box);
+  // Nav items work like Next when clicked, as a "click here" step
+  const navStep = !step.gate && step.target.startsWith("rail-");
+
+  useEffect(() => {
+    viewKind.current = view.kind;
+  }, [view.kind]);
 
   /** Open a step's screen and record it as seen */
   function enter(i: number, fresh = false) {
     const s = steps[i];
-    if (s.view && s.view.kind !== view.kind) open(s.view);
+    if (s.view && s.view.kind !== viewKind.current) open(s.view);
     const p = readProgress(uid);
     const seen = fresh ? [] : p.seen;
     saveProgress(uid, { step: i, seen: seen.includes(s.id) ? seen : [...seen, s.id] });
@@ -349,18 +363,6 @@ export function ProductTour({ onClose }: { onClose: () => void }) {
     enter(i);
     setIdx(i);
   }
-
-  // The first card of this run; a finished tour starts over
-  useEffect(() => {
-    enter(idx, readProgress(uid).done === true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Keyboard focus follows the card (after the screen behind it has taken focus)
-  useEffect(() => {
-    const t = setTimeout(() => nextRef.current?.focus({ preventScroll: true }), 80);
-    return () => clearTimeout(t);
-  }, [idx]);
 
   function pause() {
     if (!demo) markTaken();
@@ -377,57 +379,105 @@ export function ProductTour({ onClose }: { onClose: () => void }) {
   }
 
   const next = () => (last ? finish() : show(idx + 1));
+  // Listeners below always call the current step's next()
+  const nextFn = useRef(next);
+  useEffect(() => {
+    nextFn.current = next;
+  });
+
+  // The first card of this run; a finished tour starts over
+  useEffect(() => {
+    enter(idx, readProgress(uid).done === true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Focus: the field to type in on hands-on steps, otherwise the card's main button
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const field = step.gate === "asked" ? findTarget(step.target)?.querySelector<HTMLElement>("textarea, input") : null;
+      (field ?? nextRef.current)?.focus({ preventScroll: true });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  // Hands-on: move on once the question is sent
+  useEffect(() => {
+    if (step.gate !== "asked") return;
+    const onAsked = () => nextFn.current();
+    addEventListener("saathi:asked", onAsked);
+    return () => removeEventListener("saathi:asked", onAsked);
+  }, [step]);
+
+  // Clicking a lit nav item counts as Next (the click still opens its screen)
+  useEffect(() => {
+    if (!navStep) return;
+    const onClick = (e: MouseEvent) => {
+      if (findTarget(step.target)?.contains(e.target as Node)) setTimeout(() => nextFn.current(), 0);
+    };
+    addEventListener("click", onClick);
+    return () => removeEventListener("click", onClick);
+  }, [step, navStep]);
 
   function onKey(e: React.KeyboardEvent) {
     if (e.key === "Escape") pause();
-    else if (e.key === "ArrowRight") next();
+    else if (e.key === "ArrowRight" && !blocked) next();
     else if (e.key === "ArrowLeft" && idx > 0) show(idx - 1);
     else return;
     e.preventDefault();
   }
 
-  // Phones and tablets use the bottom bar, so the card docks above it; desktop pins it beside the target
+  // Lit area: the control plus a little padding, kept on screen
+  const lit = box && {
+    left: Math.max(2, box.left - PAD),
+    top: Math.max(2, box.top - PAD),
+    width: Math.min(vw - 2, box.left + box.width + PAD) - Math.max(2, box.left - PAD),
+    height: Math.min(vh - 2, box.top + box.height + PAD) - Math.max(2, box.top - PAD),
+  };
+
+  // Phones and tablets: the card docks at the bottom, or at the top when the lit control is down there
   const docked = vw < 1024;
-  const spot = docked || !box ? null : place(box, h, vw, vh);
+  const spot = docked || !lit ? null : place(lit, h, vw, vh);
+  const dockTop = docked && !!lit && lit.top + lit.height / 2 > vh / 2;
   const cardStyle: React.CSSProperties = docked
-    ? { left: EDGE, right: EDGE, bottom: "calc(env(safe-area-inset-bottom) + 72px)" }
+    ? { left: EDGE, right: EDGE, ...(dockTop ? { top: 60 } : { bottom: "calc(env(safe-area-inset-bottom) + 72px)" }) }
     : spot
       ? { top: spot.top, left: spot.left, width: CARD_W }
       : { top: vh - h - 24, left: (vw - CARD_W) / 2, width: CARD_W };
-  // The ring hugs the target but stays on screen (the phone bar's last tab sits on the edge)
-  const ring = box && {
-    left: Math.max(2, box.left - 4),
-    top: Math.max(2, box.top - 4),
-    width: Math.min(vw - 2, box.left + box.width + 4) - Math.max(2, box.left - 4),
-    height: Math.min(vh - 2, box.top + box.height + 4) - Math.max(2, box.top - 4),
-  };
   let arrow: React.CSSProperties | null = null;
-  if (spot && box && spot.side !== "inside") {
-    const ay = Math.max(14, Math.min(box.top + box.height / 2 - spot.top - 6, h - 26));
-    const ax = Math.max(14, Math.min(box.left + box.width / 2 - spot.left - 6, CARD_W - 26));
+  if (spot && lit && spot.side !== "inside") {
+    const ay = Math.max(14, Math.min(lit.top + lit.height / 2 - spot.top - 6, h - 26));
+    const ax = Math.max(14, Math.min(lit.left + lit.width / 2 - spot.left - 6, CARD_W - 26));
     arrow = { right: { left: -6, top: ay }, left: { right: -6, top: ay }, bottom: { top: -6, left: ax }, top: { bottom: -6, left: ax } }[spot.side as Exclude<Side, "inside">];
   }
 
+  const [before, after] = step.body.split("{q}");
+  const motion = "transition-all duration-300 ease-out motion-reduce:transition-none";
+
   return (
     <>
-      {ring && (
-        <div
-          aria-hidden
-          className="pointer-events-none fixed z-[55] rounded-[14px] transition-all duration-300 ease-out motion-reduce:transition-none"
-          style={{ ...ring, boxShadow: "0 0 0 2px var(--color-brand), 0 0 0 7px rgb(66 133 244 / 0.22)" }}
-        >
-          <span className="pulse-ring absolute inset-0 rounded-[inherit]" />
-        </div>
+      {/* Scrim with a hole over the control; the four clear panes around the hole hold clicks */}
+      {lit ? (
+        <>
+          <div aria-hidden className={clsx("pointer-events-none fixed z-[55] rounded-xl", motion)} style={{ ...lit, boxShadow: `0 0 0 2px var(--color-brand), 0 0 0 200vmax ${SCRIM}` }}>
+            {navStep && <span className="pulse-ring absolute inset-0 rounded-[inherit]" />}
+          </div>
+          <div aria-hidden className="fixed inset-x-0 top-0 z-[55]" style={{ height: lit.top }} />
+          <div aria-hidden className="fixed inset-x-0 bottom-0 z-[55]" style={{ top: lit.top + lit.height }} />
+          <div aria-hidden className="fixed left-0 z-[55]" style={{ top: lit.top, height: lit.height, width: lit.left }} />
+          <div aria-hidden className="fixed right-0 z-[55]" style={{ top: lit.top, height: lit.height, left: lit.left + lit.width }} />
+        </>
+      ) : (
+        <div aria-hidden className="fade-in fixed inset-0 z-[55]" style={{ background: SCRIM }} />
       )}
       <div
         ref={cardRef}
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-labelledby="tour-title"
         aria-describedby="tour-body"
         onKeyDown={onKey}
         className={clsx(
-          "fixed z-[55] rounded-xl bg-ink p-4 text-white shadow-2xl ring-1 ring-white/10",
+          "fixed z-[56] rounded-xl bg-ink p-4 text-white shadow-2xl ring-1 ring-white/10",
           docked ? "mx-auto max-w-[420px]" : "transition-[top,left] duration-300 ease-out motion-reduce:transition-none",
           !ready && "invisible",
         )}
@@ -443,19 +493,42 @@ export function ProductTour({ onClose }: { onClose: () => void }) {
             {step.title}
           </h2>
           <p id="tour-body" className="mt-1.5 text-[13px] leading-relaxed text-white/75">
-            {step.body}
+            {before}
+            {after !== undefined && (
+              <>
+                <b className="font-semibold text-white">&ldquo;{suggestedQuestion(demo)}&rdquo;</b>
+                {after}
+              </>
+            )}
           </p>
         </div>
         <div className="mt-4 flex items-center gap-1.5">
           <span className="flex-1 text-xs text-white/60" aria-live="polite">
-            {idx + 1} of {steps.length}
+            {step.gate === "target" && !box ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin" aria-hidden /> {step.waiting}
+              </span>
+            ) : (
+              `${idx + 1} of ${steps.length}`
+            )}
           </span>
-          {idx > 0 && (
-            <button onClick={() => show(idx - 1)} className="h-8 rounded-full px-3 text-xs font-semibold text-white/80 transition hover:bg-white/10 hover:text-white">
-              Back
+          {blocked ? (
+            <button onClick={next} className="h-8 rounded-lg px-2.5 text-xs font-semibold text-white/70 transition hover:bg-white/10 hover:text-white">
+              Skip
             </button>
+          ) : (
+            idx > 0 && (
+              <button onClick={() => show(idx - 1)} className="h-8 rounded-lg px-2.5 text-xs font-semibold text-white/80 transition hover:bg-white/10 hover:text-white">
+                Back
+              </button>
+            )
           )}
-          <button ref={nextRef} onClick={next} className="flex h-8 items-center gap-1 rounded-full bg-white px-4 text-xs font-semibold text-ink transition hover:bg-paper-3">
+          <button
+            ref={nextRef}
+            onClick={next}
+            disabled={blocked}
+            className="flex h-8 items-center gap-1 rounded-lg bg-brand px-3.5 text-xs font-semibold text-white transition hover:bg-brand-strong disabled:opacity-40 disabled:hover:bg-brand"
+          >
             {last ? (
               <>
                 Finish <Check size={13} strokeWidth={3} aria-hidden />

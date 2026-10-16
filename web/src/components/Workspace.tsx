@@ -310,31 +310,49 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         Skip to content
       </a>
       <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-ink">
-        {/* Title bar: workspace, global search, status + profile */}
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-canvas px-3 text-ink sm:gap-3 lg:pl-[18px]">
-          <span className="flex min-w-0 shrink-0 items-center gap-2 lg:w-[calc(68px+20rem-18px)]">
+        {/* Industrial Command Header: workspace telemetry, global ⌘K command bar, demo persona switcher + profile */}
+        <header className="flex h-13 shrink-0 items-center gap-2 border-b border-slate-800 bg-rail px-3 text-white sm:gap-3 lg:pl-[18px]">
+          <span className="flex min-w-0 shrink-0 items-center gap-2.5 lg:w-[calc(72px+20rem-18px)]">
             <LogoMark size={28} />
-            <span className="text-[15px] font-semibold tracking-tight">Saathi</span>
-            <span className="hidden truncate text-xs text-muted sm:inline">{account.org.name}</span>
-            {guest && <span className="rounded-full bg-saffron px-2 py-px text-[10px] font-bold text-ink">GUEST</span>}
+            <span className="text-[15px] font-bold tracking-tight text-white">Saathi</span>
+            <span className="hidden items-center gap-1.5 truncate rounded-md border border-white/15 bg-white/10 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-200 sm:inline-flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              {account.org.name}
+            </span>
+            {guest && <span className="rounded-full bg-amber-400 px-2 py-px text-[10px] font-bold text-ink">GUEST</span>}
           </span>
           <button
             onClick={() => setDlg("palette")}
-            className="flex h-8 min-w-0 flex-1 max-w-xs items-center gap-2 rounded-lg border border-border bg-white px-2.5 text-left text-[13px] text-muted transition hover:border-brand hover:text-ink sm:max-w-md lg:max-w-xl"
+            className="flex h-8.5 min-w-0 flex-1 max-w-xs items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 text-left text-[13px] text-slate-300 transition hover:border-mint/60 hover:bg-white/15 hover:text-white sm:max-w-md lg:max-w-xl"
             aria-label="Search or ask Saathi"
             data-tour="search"
           >
-            <Search size={15} aria-hidden /> <span className="hidden flex-1 truncate sm:inline">Search chats, channels and files, or ask Saathi</span>
-            <kbd className="hidden rounded border border-border px-1.5 font-mono text-[10px] sm:inline">⌘K</kbd>
+            <Search size={15} className="text-mint" aria-hidden />
+            <span className="hidden flex-1 truncate sm:inline">Search drawings, chats & specs, or ask Saathi…</span>
+            <span className="flex-1 truncate sm:hidden">Search or ask…</span>
+            <kbd className="hidden rounded border border-white/20 bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-200 sm:inline">⌘K</kbd>
           </button>
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {!guest && account.org.settings.voice_us && (
+              <button
+                onClick={() => setDlg("voice")}
+                className="hidden h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 text-xs font-semibold text-white transition hover:bg-brand md:flex"
+                title="Hands-free shop-floor voice (Hindi / English)"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                  <rect x="9" y="3" width="6" height="11" rx="3" />
+                  <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                </svg>
+                <span>Voice</span>
+              </button>
+            )}
             {isDemo && (
               <>
                 <Menu
                   label="Try Demo Flows"
                   align="right"
                   trigger={
-                    <span className="flex h-8 items-center gap-1.5 rounded-lg border border-brand/40 bg-brand-soft px-2 text-xs font-semibold text-brand transition hover:bg-brand hover:text-white">
+                    <span className="flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-brand-strong">
                       <Sparkles size={13} aria-hidden />
                       <span className="hidden md:inline">Demo guide</span>
                     </span>
@@ -345,14 +363,14 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
                   label="Switch demo persona"
                   align="right"
                   trigger={
-                    <span className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2 text-xs font-medium text-ink shadow-2xs transition hover:border-brand">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-moss" aria-hidden />
-                      <span className="hidden font-semibold text-ink sm:inline">Demo:</span>
-                      <span className="max-w-[72px] truncate sm:max-w-[130px]">
+                    <span className="flex h-8 items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-2.5 text-xs font-medium text-white transition hover:border-mint/60 hover:bg-white/15">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden />
+                      <span className="hidden font-semibold text-slate-300 sm:inline">Role:</span>
+                      <span className="max-w-[80px] truncate font-semibold sm:max-w-[150px]">
                         {me?.name ? me.name.split(" ")[0] : "Demo"}
-                        <span className="hidden font-normal text-muted lg:inline"> ({me?.role?.split(",")[0] || "Team"})</span>
+                        <span className="hidden font-normal text-slate-300 lg:inline"> · {me?.role?.split(",")[0] || "Team"}</span>
                       </span>
-                      <ChevronDown size={12} className="shrink-0 text-muted" aria-hidden />
+                      <ChevronDown size={12} className="shrink-0 text-slate-300" aria-hidden />
                     </span>
                   }
                   items={demoPersonaItems}
@@ -361,8 +379,8 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             )}
             <Menu
               label="Your profile and status"
-              className="flex items-center gap-2 rounded-full p-0.5 transition hover:bg-black/5"
-              trigger={<UserAvatar uid={uid} size={30} clickable={false} ring="ring-canvas" />}
+              className="flex items-center gap-2 rounded-full p-0.5 transition hover:bg-white/10"
+              trigger={<UserAvatar uid={uid} size={30} clickable={false} ring="ring-rail" />}
               items={[
                 { label: me ? [me.name, me.role].filter(Boolean).join(" · ") : account.name, onSelect: () => setProfileOf(uid) },
                 "sep",
@@ -430,13 +448,28 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         </div>
 
         {!guest && view.kind !== "chat" && (
-          <button
-            onClick={() => setDlg("report")}
-            className="fixed bottom-20 right-4 z-30 flex h-12 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white shadow-xl lg:hidden"
-            aria-label="Report an issue"
-          >
-            <Plus size={18} /> Report
-          </button>
+          <div className="fixed bottom-20 right-4 z-30 flex items-center gap-2 lg:hidden">
+            {account.org.settings.voice_us && (
+              <button
+                onClick={() => setDlg("voice")}
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white shadow-xl transition hover:bg-brand-strong"
+                aria-label="Talk to Saathi (Voice)"
+                title="Talk to Saathi"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                  <rect x="9" y="3" width="6" height="11" rx="3" />
+                  <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                </svg>
+              </button>
+            )}
+            <button
+              onClick={() => setDlg("report")}
+              className="flex h-12 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white shadow-xl"
+              aria-label="Report an issue"
+            >
+              <Plus size={18} /> Report
+            </button>
+          </div>
         )}
         <AppRail mobile unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} />
 

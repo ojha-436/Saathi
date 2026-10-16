@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus, Mail, CalendarDays, DriveIcon, Gavel, Radar, Workflow } from "@/lib/icons";
+import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, FileSearch, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus, Mail, CalendarDays, DriveIcon, Gavel, Radar, Workflow } from "@/lib/icons";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle, isUnread, timeShort } from "@/lib/format";
@@ -10,7 +10,7 @@ import { ChatIcon, Menu } from "./bits";
 import { useWs, type View } from "./ctx";
 import { LogoMark } from "./Logo";
 
-export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "quality" | "decisions" | "live" | "insights" | "admin" | "gmail" | "calendar" | "drive";
+export type RailKey = "home" | "activity" | "chat" | "assistant" | "research" | "tasks" | "quality" | "decisions" | "live" | "insights" | "admin" | "gmail" | "calendar" | "drive";
 
 /** One-line chat preview: drop the list and quote markers formatted messages carry in their plain text. */
 function stripMarkers(t?: string): string {
@@ -18,7 +18,6 @@ function stripMarkers(t?: string): string {
 }
 
 export function railKey(view: View): RailKey {
-  if (view.kind === "research") return "assistant";
   return view.kind === "meeting" ? "home" : view.kind === "chats" || view.kind === "handover" ? "chat" : view.kind;
 }
 
@@ -45,6 +44,7 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
     { key: "activity", label: "Activity", icon: Bell, badge: unreadAlerts },
     { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChats },
     { key: "assistant", label: "Saathi", icon: Sparkles },
+    ...(!guest ? [{ key: "research" as const, label: "Research", icon: FileSearch }] : []),
     { key: "tasks", label: "Tasks", icon: ListTodo, badge: openTasks, dot: true },
     ...(!guest ? [{ key: "quality" as const, label: "Quality", icon: Gavel, badge: openRecords, dot: true }] : []),
     { key: "decisions", label: "Decisions", icon: Workflow },
@@ -66,8 +66,8 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
       aria-label="Apps"
       className={clsx(
         mobile
-          ? "flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
-          : "hidden w-[68px] shrink-0 flex-col items-center gap-1 border-r border-border bg-canvas py-2 lg:flex",
+          ? "flex border-t border-slate-800 bg-rail pb-[env(safe-area-inset-bottom)] text-slate-300 lg:hidden"
+          : "hidden w-[72px] shrink-0 flex-col items-center gap-1 border-r border-slate-800 bg-rail py-2.5 text-slate-400 lg:flex",
       )}
     >
       {items.map((it) => {
@@ -79,24 +79,30 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
             data-tour={`rail-${it.key}`}
             aria-current={on ? "page" : undefined}
             className={clsx(
-              "relative flex flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition",
+              "relative flex flex-col items-center justify-center gap-1 text-[10.5px] font-medium transition",
               mobile ? "h-14 flex-1" : "h-14 w-14 rounded-xl",
-              mobile ? (on ? "text-brand" : "text-muted") : on ? "bg-brand-soft text-brand" : "text-muted hover:bg-black/5 hover:text-ink",
+              mobile
+                ? on
+                  ? "text-white font-semibold"
+                  : "text-slate-400"
+                : on
+                  ? "bg-brand text-white shadow-[0_6px_18px_-4px_rgba(37,99,235,0.65)]"
+                  : "text-slate-400 hover:bg-white/10 hover:text-white",
             )}
           >
-            {!mobile && on && <span className="absolute left-[-6px] top-3 bottom-3 w-[3px] rounded-r bg-saffron" aria-hidden />}
+            {!mobile && on && <span className="absolute left-[-9px] top-3 bottom-3 w-[3px] rounded-r bg-mint" aria-hidden />}
             <span className="relative">
               {it.key === "assistant" ? (
-                <LogoMark size={26} className="rounded-[8px] ring-1 ring-brand/25" />
+                <LogoMark size={24} className="rounded-[7px] ring-1 ring-white/25" />
               ) : (
-                <it.icon size={20} aria-hidden />
+                <it.icon size={19} aria-hidden />
               )}
               {!!it.badge && (
                 <span
                   className={clsx(
                     "absolute -right-2.5 -top-1.5 min-w-[17px] rounded-full px-1 text-center text-[10px] font-bold leading-[17px] text-white",
-                    it.dot ? "bg-[#5b6573]" : "bg-rust",
-                    !mobile && "ring-2 ring-canvas",
+                    it.dot ? "bg-amber-600" : "bg-rust",
+                    !mobile && "ring-2 ring-rail",
                   )}
                 >
                   {it.badge > 99 ? "99+" : it.badge}

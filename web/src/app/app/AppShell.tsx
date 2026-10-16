@@ -2,13 +2,15 @@
 
 import { Building2, Loader2, MailCheck } from "@/lib/icons";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LogoMark } from "@/components/Logo";
 import { Workspace } from "@/components/Workspace";
 import { api } from "@/lib/api";
-import { onAuth, refreshToken, reloadUser, resendVerification, signOut, type AuthUser } from "@/lib/auth";
+import { onAuth, refreshToken, reloadUser, resendVerification, signInWithPassword, signOut, type AuthUser } from "@/lib/auth";
 import { getFbAuth } from "@/lib/firebase";
 import type { Account } from "@/lib/types";
+
+const VALID_DEMO = new Set(["prince", "neha", "suresh", "rahul", "kavya", "amit"]);
 
 export function AppShell() {
   const router = useRouter();
@@ -20,6 +22,7 @@ export function AppShell() {
   const [orgName, setOrgName] = useState("");
   const [savingOrg, setSavingOrg] = useState(false);
   const [orgDone, setOrgDone] = useState(false);
+  const autoSigningIn = useRef(false);
 
   async function load() {
     setFailed("");
@@ -59,10 +62,34 @@ export function AppShell() {
 
   useEffect(
     () =>
-      onAuth((u) => {
+      onAuth(async (u) => {
+        const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+        const reqDemo = params?.get("demo")?.toLowerCase() ?? "";
+        const targetPersona = VALID_DEMO.has(reqDemo) ? reqDemo : "prince";
+
+        if (!u) {
+          if (!autoSigningIn.current) {
+            autoSigningIn.current = true;
+            try {
+              await signInWithPassword(`${targetPersona}@saathi.demo`, "Saathi@2026");
+              return;
+            } catch {
+              router.replace("/login?demo=1");
+              return;
+            }
+          }
+          return router.replace("/login?demo=1");
+        }
+        if (VALID_DEMO.has(reqDemo) && u.email !== `${reqDemo}@saathi.demo` && !autoSigningIn.current) {
+          autoSigningIn.current = true;
+          try {
+            await signInWithPassword(`${reqDemo}@saathi.demo`, "Saathi@2026");
+            return;
+          } catch {}
+        }
+        autoSigningIn.current = true;
         setUser(u);
         setAccount(null);
-        if (!u) return router.replace("/login");
         if (!u.emailVerified && !u.email?.endsWith("@saathi.demo")) {
           setVerify("Please verify your email address before opening your workspace.");
           return;
