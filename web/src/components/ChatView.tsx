@@ -1585,7 +1585,7 @@ function PromiseChip({ m, chatId }: { m: Message; chatId: string }) {
   return (
     <div className="mt-2 flex max-w-md flex-wrap items-center gap-2 rounded-xl border border-plum/20 bg-plum-soft px-3 py-2 text-xs text-plum">
       <Handshake size={15} className="shrink-0" aria-hidden />
-      <span className="min-w-0 flex-1 leading-snug">
+      <span className="min-w-[11rem] flex-1 leading-snug">
         <b>Promise</b> · {p.committer} — {p.action}
         {p.due_at && <span className="font-mono"> · due {dueLabel(p.due_at)}</span>}
       </span>

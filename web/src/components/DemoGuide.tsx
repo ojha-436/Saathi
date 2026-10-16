@@ -57,7 +57,7 @@ export function DemoGuide({ onClose, onVoice, onApps, onSwitch }: { onClose: () 
           title: "Spec Check & Standards",
           icon: ShieldCheck,
           what: "Mill test certificates checked against the standards library, value by value, with the clause cited. A failed value can raise an NCR.",
-          tryText: "Open heat H-77812: Charpy at −20 °C is below the S355J2 minimum.",
+          tryText: "Open heat H-77812 and check each certificate value against the S355J2 limits.",
           cta: "Open Standards",
           action: () => go({ kind: "quality", tab: "standards" }),
         },

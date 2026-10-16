@@ -1,11 +1,186 @@
 # Saathi — the AI workspace that remembers
 
-Team chat with a personal AI colleague built in. Saathi **finds any chat or file with a cited source**, **briefs you on what you missed**, and **turns promises made in conversation into tracked tasks and reminders**, with no bots to install. Built for the Google Cloud AI Builder Cup 2026 (Future of Work & Enterprise Productivity), with a Manufacturing Pack that reads engineering drawings, certificates and inspection reports.
+Team chat with a personal AI colleague built in. Saathi **finds any chat, drawing or certificate with a cited source**, **briefs you on what you missed**, **turns promises into tracked tasks**, and helps teams **decide with evidence**. A manufacturing layer reads engineering drawings, mill test certificates and inspection reports; the demo runs it for a fictional Indian rail-component plant, Shakti Rail Components.
 
-- **Live app:** https://saathi-web-82398575445.asia-south1.run.app (landing → *Open live demo* → pick a colleague)
+- **Live app:** https://saathi-web-82398575445.asia-south1.run.app (landing → *Open live demo* → pick a colleague; **Demo guide** in the header shows what to try)
 - **API health:** https://saathi-api-82398575445.asia-south1.run.app/health
 
-## Evaluation (`agent/eval`)
+![Saathi landing page](docs/screenshots/landing.png)
+
+## Contents
+
+- [The problem](#the-problem)
+- [What Saathi does](#what-saathi-does)
+- [A tour in screenshots](#a-tour-in-screenshots)
+- [Architecture](#architecture)
+- [Security and privacy](#security-and-privacy)
+- [Evaluation](#evaluation)
+- [Feature reference](#feature-reference)
+- [Repository layout](#repository-layout)
+- [Run locally](#run-locally)
+- [Configuration and secrets](#configuration-and-secrets)
+- [Demo data](#demo-data)
+- [Deploy (CI/CD)](#deploy-cicd)
+
+## The problem
+
+On a plant floor and in the office around it, the knowledge needed for the next job is scattered. A drawing revision is approved in one chat, a vendor promises a dispatch date by email, the certificate sits in a PDF, and the reason for a decision lives in a meeting nobody wrote up. People ask around, re-argue settled decisions, miss commitments, and repeat quality problems because nobody can find how the last one was fixed. Vendors and contractors need some of this, but not all of it.
+
+## What Saathi does
+
+| | |
+| --- | --- |
+| **Find knowledge** | Ask in English, Hindi or Hinglish. Saathi answers only from what you are allowed to open, cites every source, and shows the steps it took. |
+| **Work together** | Chats, channels and threads; promises and decisions are spotted as people type; vendors join as guests with their own limits and an end date; Google Calendar, Gmail and Drive come in read-only. |
+| **Decide with evidence** | Research agents build cited readiness reports and turn gaps into tasks; Spec Check verifies certificates against approved limits in code; the decision log keeps what was decided and why. |
+| **Get the day done** | My Day ranks what needs you; meetings get a live copilot and notes that become tasks; the shop floor talks to Saathi hands-free; shift handovers draft themselves. |
+
+Three rules run through all of it: **AI never files anything silently** (tasks, records and handovers are drafts a person confirms), **every answer cites its source**, and **permissions are checked when the question is asked**, so nobody sees an answer built from something they couldn't open.
+
+## A tour in screenshots
+
+**My Day.** What needs you, ranked: overdue tasks, drafts to confirm, records, shift handovers, mentions and promises found in email, next to today's meetings.
+
+![My Day](docs/screenshots/my-day.png)
+
+**Ask Saathi, with sources.** Every claim links to the drawing, decision or chat it came from; *How Saathi got this* lists the tools used, the sources cited and the time taken.
+
+![Ask Saathi](docs/screenshots/ask-saathi.png)
+
+**Saathi Research.** "Are we ready for the RDSO inspection on 20 Oct?" Six agents checked 41 items in parallel; a verifier wrote the verdict, and every claim is tied to a source.
+
+![Saathi Research report](docs/screenshots/research.png)
+
+**Chat that notices.** Saathi logs the decision when Rev C is approved and offers to track the promises people make, assigned to whoever made them.
+
+![Channel with decision and promise capture](docs/screenshots/channel.png)
+
+**Spec Check and the Standards Library.** Certificate values are extracted by Gemini and judged by code against the approved limits; the standards are searchable by Saathi.
+
+![Quality: certificate checks and Standards Library](docs/screenshots/quality.png)
+
+**Decisions.** Captured from chats and meetings, with who decided, why, what was rejected and what a newer decision replaced.
+
+![Decision log](docs/screenshots/decisions.png)
+
+**Calendar and Google Meet.** Meetings with *Prep me* (a brief from your email, Drive and chats), *Join*, *Start Saathi Live* and notes. (The shared demo logins show sample Google data.)
+
+![Calendar with Google Meet](docs/screenshots/calendar-meet.png)
+
+**Guided tour and Demo guide.** The tour lights up one control at a time on the real screens; the Demo guide lists every flow with something to try.
+
+![Guided tour](docs/screenshots/guided-tour.png)
+
+![Demo guide](docs/screenshots/demo-guide.png)
+
+**Insights**, private to each person: tasks, promises, where the week went and how Saathi was used.
+
+![Insights](docs/screenshots/insights.png)
+
+<table>
+<tr>
+<td width="55%" valign="top"><b>Guests with limits.</b> An admin decides what a vendor can do besides their channels (direct messages, Saathi) and for how long. Someone who already uses Saathi at their own company keeps that workspace and switches between the two.<br><br><img src="docs/screenshots/admin-guest-invite.png" alt="Guest invite options"></td>
+<td width="45%" valign="top"><b>On the phone.</b> The same workspace with a bottom bar for the shop floor: My Day, Chat, Quality, Live and Tasks.<br><br><img src="docs/screenshots/phone-my-day.png" alt="My Day on a phone" width="300"></td>
+</tr>
+</table>
+
+## Architecture
+
+```mermaid
+flowchart TB
+  people(["Plant staff, engineers, managers, vendor guests · browser or phone"])
+  web["<b>saathi-web</b> · Cloud Run<br/>Next.js 16: landing, sign-in, invites, /app"]
+
+  subgraph firebase["Firebase"]
+    auth["Auth<br/>Google SSO · email"]
+    fs[("Firestore · asia-south1<br/>chats, tasks, records, vector index")]
+    fcm["Cloud Messaging<br/>web push"]
+  end
+
+  api["<b>saathi-api</b> · Cloud Run · FastAPI + Google ADK<br/>REST + WebSockets with workspace, role and guest checks<br/>Saathi agent (17 permission-scoped tools) · ingest · Saathi Live and Voice"]
+  worker["<b>saathi-worker</b> · Cloud Run, private<br/>Saathi Research (parallel agents + verifier) · Spec Check"]
+
+  gemini["Vertex AI · Gemini<br/>3.8 Flash · 3.5 Flash-Lite · embeddings · Live"]
+  data[("BigQuery · Cloud Storage<br/>Document AI · Vertex AI Search")]
+  cron["Cloud Scheduler<br/>every minute · every 10 minutes"]
+  gws["Google Workspace APIs<br/>Calendar · Gmail · Drive, read-only"]
+
+  people --> web
+  web -- "sign in" --> auth
+  web -- "REST + ID token" --> api
+  fs -. "real-time, read-only (security rules)" .-> web
+  api --> fs
+  api --> gemini
+  api --> data
+  api -- "jobs via Cloud Tasks" --> worker
+  worker --> gemini
+  worker --> data
+  worker --> fs
+  cron --> api
+  api --> gws
+  api --> fcm
+```
+
+**The browser only reads.** It signs in with Firebase Auth and listens to Firestore in real time, so new messages, streaming answers and research progress appear without polling. Security rules let a person read only their workspace's documents they are a member of. Every write goes through the API, which checks the workspace, the role, guest limits and membership first.
+
+**How a question is answered:**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant A as saathi-api
+  participant F as Firestore
+  participant G as Gemini on Vertex AI
+  B->>A: POST /api/assistant with the Firebase ID token
+  A->>A: verify the token, the open workspace and any guest limits
+  A->>F: search chunks the asker can read (vector + keywords, open workspace only)
+  A->>G: question, the retrieved sources and Saathi's tools
+  G-->>A: tool calls (drawing register, tasks, calendar, plant data…) and streamed text
+  A->>F: partial answer, about four writes a second
+  F-->>B: the answer appears as it is written
+  A->>F: final answer with sources, tool steps and timing
+  A->>A: audit log entry and BigQuery event
+```
+
+### Google Cloud services
+
+| Service | What Saathi uses it for |
+| --- | --- |
+| Cloud Run | `saathi-web` (Next.js), `saathi-api` (FastAPI + ADK) and `saathi-worker` (the same image, private, only the job routes) in asia-south1 |
+| Vertex AI · Gemini | The agent (Gemini 3.8 Flash, falls back to 3.5 Flash), fast classification (3.5 Flash-Lite), embeddings (`gemini-embedding-001`, asia-south1), live transcription, spoken notices, and Saathi Voice on Gemini Live (us-central1) |
+| Google ADK | The Saathi agent and the Research workflow (`SequentialAgent` of `ParallelAgent` waves, then a verifying critic) |
+| Firestore | Hot data and the vector index, with membership pre-filters; point-in-time recovery (7 days), delete protection, daily backups kept 14 days |
+| Firebase Auth, Cloud Messaging | Google SSO and email sign-in; web push for mentions, replies, tasks and reminders |
+| Document AI | OCR for drawings, certificates and reports (asia-south1), then Gemini reads title blocks, revision tables and certificate values |
+| Vertex AI Search | The workspace Standards Library that Saathi and Spec Check search |
+| BigQuery | `saathi_archive.chunks` for deep research (`VECTOR_SEARCH` with permissions applied at query time), `saathi.plant_*` for plant-data charts, `saathi.assistant_events` for usage |
+| Cloud Storage | Uploaded files and voice notes |
+| Cloud Tasks | Research runs and certificate checks, with retries, rate limits and survival across restarts |
+| Cloud Scheduler | `saathi-reminders` every minute (due reminders, guest access end dates, handover drafts, meeting prompts) and `saathi-sync` every 10 minutes (Google sync, plant data) |
+| Cloud KMS, Secret Manager | Encrypting Google refresh tokens; the OAuth client, cron secret and invite-mail password |
+| Workload Identity Federation | Keyless deploys from GitHub Actions |
+
+### Design choices that matter
+
+- **Permissions at question time.** Retrieval is filtered to the chats a person belongs to *now*, and results are re-checked before they reach the model, so joining or leaving a channel never needs a re-index. Personal sources (email, Drive, meetings, knowledge) are filtered to their owner.
+- **Retrieval first, then one model turn.** Most questions are answered with the sources fetched up front and a single model turn, streamed as it is written (median 3.8 s, first words in 2.8 s).
+- **Code decides where it must.** Gemini reads certificate values; code compares them with the approved limits for the grade on the drawing's current revision. Research citations are re-checked by code against what the tools actually returned.
+- **Workspaces and guests.** Every document carries its workspace; token claims hold the open workspace and role. One account can belong to several workspaces (a supplier's engineer is a guest in each customer's), and Saathi only reads the open one. A guest's access can end on a date: a minute-by-minute sweep takes them out of that workspace's chats, and extending it puts them back.
+- **Resilience.** Every model call retries with backoff and jitter, then falls back to a second model; a research agent that still fails reports "unknown" instead of breaking the report.
+- **Data residency.** Firestore, Cloud Storage, Document AI, embeddings and the archive run in asia-south1 (Mumbai).
+
+## Security and privacy
+
+- No secrets in the repository; configuration is read from Cloud Run environment variables at request time and secrets from Secret Manager.
+- Firestore rules: reads only, and only within your workspace and the chats, files, tasks and records you are part of. All writes go through the API.
+- Per-chat **Hidden from AI** removes a chat from Saathi's index; admins see channel names and membership, never messages.
+- Google data is read-only, visible only to the person who connected it, and deleted on disconnect. Shared demo logins can't connect a real account and show sample data instead.
+- Every question to Saathi and every admin action is written to the audit log.
+
+## Evaluation
+
+Run from `agent/eval`:
 
 | Metric | Result | Target |
 | --- | --- | --- |
@@ -19,56 +194,69 @@ Team chat with a personal AI colleague built in. Saathi **finds any chat or file
 
 Re-run with `uv run python -m eval.run_eval` and `uv run python -m eval.phase4_eval`, then `uv run python -m eval.export_web` to refresh the numbers shown on the landing page.
 
-## Features
+## Feature reference
 
 | Area | What it does |
 | --- | --- |
-| Ask Saathi | ADK agent (Gemini 3.8 Flash, low thinking level) with permission-scoped tools; retrieval-first (one model turn for most questions), answers stream as they're written; every claim cited as a clickable source chip; "How Saathi got this" under every answer |
-| Saathi Research | Give a goal (e.g. *"Are we ready for the RDSO inspection on 20 Oct?"*): a planner proposes questions you can edit, research agents run in parallel (ADK `ParallelAgent`) over your permission-scoped tools, a verifying agent writes the report and code re-checks every citation; live progress; every gap becomes a task in one click; sharing checks each source against the chat's members. Templates: inspection readiness, vendor comparison, custom |
-| Spec Check & Standards Library | Company specs, procedures and checklists indexed in **Agent Search**; Gemini extracts acceptance limits for QA approval. Every mill test certificate is checked automatically a few seconds after upload: Gemini reads the values, **code decides** pass/fail against the approved limits for the grade on the drawing's current revision (thickness bands, impact test temperature, units); a failure drafts the NCR |
-| Catch-up | “Today / 3 days / This week” brief: decisions, asks for you, files, open promises |
-| Promise capture | Commitments detected in any chat (English/Hinglish) → one-click tracked task → reminder via Cloud Scheduler |
-| Tasks without apps | “Kal subah 10 baje … reminder” → drafted task the user confirms |
-| Document intelligence | Document AI OCR + Gemini multimodal: drawing title blocks, revision tables, MTC values, OCR confidence |
-| Workspaces & admin | Every account belongs to one workspace (invite → verified company domain → new workspace). Invites are personal links (emailed over SMTP, or copied / shared on WhatsApp) that only the invited address can accept; they expire after 14 days and beat the `SIGNUP_DOMAINS` allow-list. One account can belong to several workspaces (a supplier's engineer is a guest in each customer's): the header and profile menu switch between them, and Saathi only reads the open one. Roles: owner, admin, member, guest (vendors see only invited channels; per guest the admin allows or blocks direct messages and Saathi, and sets an end date, 30 days by default, which a minute-by-minute sweep enforces by taking them out of that workspace's channels; extending restores them). Admin console: members & roles, deactivate, invites, channel governance (no message access), workspace settings, audit log. Firestore rules enforce workspace + membership via token claims |
-| Threads & push | Reply in thread (side panel, reply counts, followers notified), web push via Firebase Cloud Messaging + service worker (mentions, replies, DMs/chats per notification level, tasks, reminders; respects DND and quiet hours; click opens the message) |
-| Messaging basics | Presence & status (available/busy/DND/away/offline, message + expiry), @mentions with notifications, per-chat notification levels + quiet hours, profile cards, settings, sign out everywhere |
-| Work management | Tasks assignable to colleagues with watchers and status (to do / in progress / blocked / done); My Day home; meeting notes/transcripts → summary, decisions, action items → assigned tasks; Saathi tools `assign_task`, `who_owes` |
-| Google connector | Settings → Connected apps: Google Calendar + Gmail, read-only. Server-side OAuth (one-time state), refresh tokens encrypted with Cloud KMS (`saathi/saathi-connectors`, asia-south1), client in Secret Manager (`saathi-google-oauth`). Today's meetings on My Day with "Prep me", join and notes; colleagues see "In a meeting" from free/busy only; email commitments → trackable tasks; Saathi tool `get_calendar`, emails searchable by their owner only; sync every 10 min (`saathi-sync` scheduler job); disconnect revokes and deletes synced data; admins can turn it off per workspace |
-| Sign-in & accounts | Continue with Google (Firebase Auth SSO), email sign-up with password rules, password reset, first-run profile (name + job title); optional `SIGNUP_DOMAINS` allow-list for company domains |
-| Channels | Create public or private channels, browse and join public ones, add/remove members, owners rename or delete; search index and file access follow membership instantly |
-| Enterprise chat UX | Teams-style app rail, one list for chats and channels (Favorites · Channels · Chats) with Unread/Channels/Chats filters, unread markers, reactions, hover actions (add to tasks, ask Saathi), members & details panel, mobile bottom navigation |
-| Chat tabs | Messages/Posts · Decisions (auto-logged timeline) · Files (extracted fields) |
-| Privacy control | Per-chat “Hidden from AI” toggle removes the chat from the index |
-| Insights | Personal 7-day view: tasks, overdue, promises, assistant usage, decisions |
-| ⌘K palette | Jump to any chat or file, or send the query straight to Saathi |
-| Audit | Every assistant question + tool call → Firestore audit log and BigQuery `saathi.assistant_events` |
+| Ask Saathi | ADK agent (Gemini 3.8 Flash, low thinking level) with permission-scoped tools; retrieval-first, streamed answers; every claim a clickable source chip; *How Saathi got this* under each answer; English, Hindi and Hinglish |
+| Saathi Research | A goal (*"Are we ready for the RDSO inspection on 20 Oct?"*) becomes an editable plan; research agents run in parallel over your permission-scoped tools; a verifying agent writes the report and code re-checks every citation; live progress; each gap becomes a task in one click; sharing checks each source against the chat's members. Templates: inspection readiness, vendor comparison, custom |
+| Inspection Dossier | Turns a finished readiness report into the inspector's evidence pack (PDF): only verified content, drawings re-checked against the register, every page footed with its source |
+| Spec Check & Standards Library | Company specs, procedures and checklists indexed in Vertex AI Search; Gemini proposes acceptance limits for QA approval. A certificate is checked seconds after upload: Gemini reads the values, code decides pass/fail for the grade on the drawing's current revision (thickness bands, test temperature, units); a failure drafts the NCR |
+| Drawing register & Revision Guard | Register rebuilt from document extraction; drafts visible only to people who can open the file; QR-stamped controlled copies whose public check shows only drawing number, revision and current/superseded |
+| Plant records & memory | A photo, voice note or a few words become a drafted NCR, downtime or safety record a person confirms; Saathi finds similar past problems and what fixed them; anonymous safety reports never store the reporter |
+| Plant data | "NCRs by vendor this quarter" becomes a chart: Gemini fills a fixed query spec, the server builds a parameterised BigQuery query scoped to the asker |
+| Decision log | Decisions from chats and meetings with what, why, rejected options, who and the source; newer decisions supersede older ones; visibility follows the source |
+| Shift handover | Near the end of a shift Saathi drafts the handover for a bay from what the shift said and filed; the outgoing lead signs, the incoming crew acknowledges, and an unacknowledged handover escalates |
+| Saathi Live | In-meeting assistant: the browser streams the meeting audio, Gemini transcribes it and spots questions, which are answered in seconds with citations; notes plus transcript become an enhanced summary with action items; an optional spoken recording notice |
+| Saathi Voice | Hands-free and Hindi-first on Gemini Live with Saathi's tools; a record or reminder is filed only after the person confirms it in their own words; transcripts kept 30 days |
+| Catch-up & promises | *Today / 3 days / This week* briefs; commitments detected in any chat or email become one-click tracked tasks with reminders |
+| Work management | Tasks with assignee, watchers and status; My Day; meeting notes become summaries, decisions and assigned tasks; plain-language reminders (*"Kal subah 10 baje … reminder"*) |
+| Google connector | Settings → Connected apps: Calendar, Gmail and Drive, read-only. Server-side OAuth, refresh tokens encrypted with Cloud KMS; today's meetings with *Prep me*, *Join* and notes; colleagues see "In a meeting" from free/busy only; email promises become tasks; Drive Docs and Sheets answerable by Saathi; sync every 10 minutes; disconnect deletes the copy; admins can turn it off |
+| Workspaces, invites & guests | Invites are personal links (emailed from saathi.invites@gmail.com, or copied / shared on WhatsApp) that only the invited address can accept, valid 14 days. Roles: owner, admin, member, guest. Per guest the admin allows or blocks direct messages and Saathi and sets an end date (30 days by default). One account can belong to several workspaces, switched from the header |
+| Admin console | Members and roles, guest access, deactivation, invites, channel governance (no message access), workspace settings, impact numbers and the audit log |
+| Chat | Teams-style app rail; chats and channels in one list with filters; threads; reactions; mentions; presence and status; per-chat notification levels and quiet hours; web push; Messages · Decisions · Files tabs; ⌘K palette |
+| Onboarding | Guided tour on the real screens (hands-on first question); Demo guide for the shared demo logins |
+| Insights | Personal 7-day view: tasks, overdue, promises, Saathi usage, busiest chats |
+| Audit | Every assistant question and tool call to the Firestore audit log and BigQuery `saathi.assistant_events` |
 
-## Architecture
+## Repository layout
 
 ```
-web/   Next.js 16 on Cloud Run (saathi-web) — landing (/), sign-in (/login), sign-up (/signup), workspace (/app)
-       Firebase Auth; Firestore real-time listeners (read-only via firestore.rules)
-       Runtime config: read from env vars at request time and injected into the page (nothing baked in)
-  │ REST + Firebase ID token
-agent/ FastAPI + Google ADK on Cloud Run (saathi-api, asia-south1)
-  ├─ Saathi agent: search_workspace, get_message_context, catch_up, lookup_document, propose_task, list_tasks
-  ├─ Ingest: gemini-embedding-001 → Firestore vector index (members pre-filter);
-  │          promise/decision detection (regex pre-filter → Gemini 3.5 Flash-Lite, JSON schema);
-  │          Document AI OCR (asia-south1) + Gemini 3.8 Flash extraction
-  ├─ Channels: /api/channels (create, browse, join), /api/chats/{id}/members, PATCH/DELETE /api/chats/{id}
-  ├─ /api/insights, /api/chats/{id}/ai-exclude, /api/cron/reminders (Cloud Scheduler, secret from Secret Manager)
-  ├─ Research API (/api/research …) and Spec Check / Standards API (/api/standards, /api/files/{id}/spec-check)
-  └─ BigQuery streaming of assistant events
-  │ Cloud Tasks (queues saathi-research, saathi-jobs: retries, rate limits, survives restarts)
-saathi-worker  same image, private (Cloud Run IAM + OIDC), only the /tasks/* job routes:
-  ├─ Saathi Research: ADK SequentialAgent[ ParallelAgent waves of researchers → verifying critic ]; progress → Firestore
-  └─ Spec Check: certificate values (Gemini) vs approved limits (deterministic code); standards → Agent Search + limit extraction
-Resilience: every agent model call retries (backoff + jitter, incl. dropped connections), then falls back to a second model;
-            a research agent that still fails degrades to "unknown" instead of failing the report
-Data: Firestore (hot data + vector index) + Cloud Storage + Document AI in asia-south1 (Mumbai);
-      BigQuery saathi_archive.chunks (every chunk, VECTOR_SEARCH with query-time permissions) for deep research;
-      Agent Search (global) for the workspace Standards Library; Firestore PITR (7 days), delete protection, daily backups (14 days)
+agent/                 FastAPI + Google ADK (Cloud Run: saathi-api and saathi-worker); uv for Python
+  app/main.py          chats, channels, messages, tasks, assistant, cron
+  app/agent.py         the Saathi agent and its tools
+  app/search.py        permission-aware hybrid retrieval
+  app/ingest.py        embeddings, promise/decision detection, document extraction
+  app/research.py      multi-agent research; dossier.py builds the inspection pack
+  app/specs.py         Spec Check and the Standards Library
+  app/live.py, voice.py  Saathi Live and Saathi Voice
+  app/invites.py, workspaces.py, admin.py  invites, guest access, multiple workspaces, admin console
+  app/connectors.py    Google Calendar, Gmail and Drive
+  eval/                evaluation suite
+  seed/                demo data
+web/                   Next.js 16 + React 19 + Tailwind 4 (Cloud Run: saathi-web)
+  src/app/             routes: / (landing), /login, /signup, /invite/[token], /app, /privacy, /r/[token] (QR check)
+  src/components/      workspace UI
+docs/                  product requirement documents and screenshots
+firestore.rules        browser read rules
+.github/workflows/     CI/CD
+```
+
+## Run locally
+
+Against the Google Cloud project:
+
+```bash
+gcloud auth application-default login && gcloud auth application-default set-quota-project aibuildergc
+cd agent && uv sync && uv run uvicorn app.main:app --port 8080
+cd web && npm install && npm run dev          # http://localhost:3000
+```
+
+Offline, without a Google Cloud project (a local JSON database and local sign-in; set `GEMINI_API_KEY` for AI answers):
+
+```bash
+cd agent && SAATHI_LOCAL=1 uv run uvicorn app.main:app --port 8080
+cd web && SAATHI_LOCAL=1 SAATHI_API_URL=http://localhost:8080 npm run dev
 ```
 
 ## Configuration and secrets
@@ -99,14 +287,6 @@ gcloud run services update saathi-api --region asia-south1 --project aibuildergc
 A new app password goes in with `gcloud secrets versions add saathi-smtp-password --data-file=-` and takes effect on the
 next API revision (redeploy, or rerun the `services update` line). Revoking the app password in Google stops all invite email at once.
 
-## Run locally
-
-```bash
-gcloud auth application-default login && gcloud auth application-default set-quota-project aibuildergc
-cd agent && uv sync && uv run uvicorn app.main:app --port 8080
-cd web && npm install && npm run dev          # http://localhost:3000
-```
-
 ## Demo data
 
 ```bash
@@ -136,10 +316,10 @@ cd agent && gcloud run deploy saathi-api --source . --region asia-south1
 cd web   && gcloud run deploy saathi-web --source . --region asia-south1
 ```
 
-## Team split
+## Team
 
-| Person A — frontend & demo | Person B — AI & backend |
+| Frontend & product | AI & backend |
 | --- | --- |
 | `web/` landing, workspace UX, accessibility | `agent/app/agent.py` tools and prompts, `agent/eval` |
 | Insights, palette, chat tabs | Ingest pipeline, Document AI, BigQuery |
-| Demo video and deck | Latency work (target < 5 s) |
+| Demo and walkthroughs | Latency work (target < 5 s) |
