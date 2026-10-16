@@ -66,3 +66,5 @@ export function useWs() {
 }
 
 export const isAdmin = (a?: Account) => a?.org_role === "owner" || a?.org_role === "admin";
+/** Members can do everything; a guest can message people directly ("dm") or use Saathi ("ai") only if their admin allowed it. */
+export const guestCan = (a: Account | undefined, what: "dm" | "ai") => a?.org_role !== "guest" || a?.guest?.[what] !== false;

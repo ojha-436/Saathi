@@ -112,7 +112,9 @@ export default async function PrivacyPage() {
               <li>
                 Your workspace and role (owner, admin, member or guest), and invitations sent to your email address. When an admin invites you, Saathi emails you a
                 personal link (from Saathi&rsquo;s invite address, saathi.invites@gmail.com, sent through Gmail, with replies going to the admin who invited you) and records whether the email was sent. Invite
-                links expire after 14 days and only work for the invited address.
+                links expire after 14 days and only work for the invited address. A guest&rsquo;s access can have an end date and can leave out direct messages or Saathi; when it ends,
+                the guest leaves that workspace&rsquo;s channels (their messages stay). If you belong to more than one organisation&rsquo;s workspace, each keeps its own chats, files
+                and Saathi conversations, and Saathi only answers from the workspace you have open.
               </li>
             </ul>
             <h3>What you and your colleagues create</h3>

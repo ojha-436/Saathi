@@ -13,47 +13,47 @@
   --radius-2xl: 1.5rem;
   --radius-3xl: 2rem;
 
-  /* Precision Industrial Command palette:
-     Deep Obsidian-Navy (#0B132B) command rail, Electric Cobalt (#2563EB) primary actions,
-     Safety Amber (#F59E0B) industrial telemetry accents, Crisp Alabaster/Slate surfaces (#F8FAFC / #FFFFFF). */
-  --color-ink: #0f172a;
-  --color-ink-2: #1e293b;
-  --color-ink-3: #334155;
+  /* Given palette: medium blue #4285F4, light blue #D2E3FC, light grey #F1F3F4.
+     Derived shades (not in the brief): #174EA6 deep blue for the rail and dark panels, #3367D6 button hover,
+     #8AB4F8 light blue for text on dark panels, #202124 text, #5F6368 muted, #DADCE0 lines. */
+  --color-ink: #202124;
+  --color-ink-2: #2d2f33;
+  --color-ink-3: #3c4043;
   --color-paper: #ffffff;
-  --color-paper-2: #f8fafc;
-  --color-paper-3: #f1f5f9;
-  --color-line: #e2e8f0;
-  --color-muted: #475569;
-  --color-saffron: #3b82f6;
-  --color-saffron-ink: #1d4ed8;
-  --color-saffron-soft: #dbeafe;
-  --color-mint: #60a5fa;
-  --color-cream: #f8fafc;
-  --color-sky: #eff6ff;
-  --color-lavender: #dbeafe;
-  --color-blush: #f8fafc;
-  --color-blueprint: #2563eb;
-  --color-blueprint-soft: #dbeafe;
-  --color-moss: #059669;
-  --color-moss-soft: #d1fae5;
-  --color-rust: #dc2626;
-  --color-rust-soft: #fee2e2;
-  --color-warn: #d97706;
+  --color-paper-2: #f1f3f4;
+  --color-paper-3: #e8eaed;
+  --color-line: #dadce0;
+  --color-muted: #494d51;
+  --color-saffron: #4285f4;
+  --color-saffron-ink: #174ea6;
+  --color-saffron-soft: #d2e3fc;
+  --color-mint: #8ab4f8;
+  --color-cream: #f1f3f4;
+  --color-sky: #e8f0fe;
+  --color-lavender: #d2e3fc;
+  --color-blush: #f1f3f4;
+  --color-blueprint: #1a73e8;
+  --color-blueprint-soft: #d2e3fc;
+  --color-moss: #1e8e3e;
+  --color-moss-soft: #e6f4ea;
+  --color-rust: #d93025;
+  --color-rust-soft: #fce8e6;
+  --color-warn: #b45309;
   --color-warn-ink: #92400e;
   --color-warn-soft: #fef3c7;
   --color-warn-border: #f59e0b;
-  --color-plum: #4f46e5;
-  --color-plum-soft: #e0e7ff;
+  --color-plum: #1a73e8;
+  --color-plum-soft: #d2e3fc;
 
-  /* Workspace surfaces */
-  --color-canvas: #f1f5f9;
+  /* Workspace surfaces use the same palette */
+  --color-canvas: #f1f3f4;
   --color-surface: #ffffff;
-  --color-hover: #e2e8f0;
-  --color-border: #cbd5e1;
-  --color-brand: #2563eb;
-  --color-brand-strong: #1d4ed8;
-  --color-brand-soft: #dbeafe;
-  --color-rail: #0b132b;
+  --color-hover: #e8eaed;
+  --color-border: #dadce0;
+  --color-brand: #4285f4;
+  --color-brand-strong: #3367d6;
+  --color-brand-soft: #d2e3fc;
+  --color-rail: #174ea6;
 }
 
 html,
@@ -95,8 +95,8 @@ button:disabled {
 
 /* Headlines: big, light and tightly set */
 .font-display {
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 .font-display em,
 h1 em,
@@ -104,26 +104,20 @@ h2 em {
   font-style: normal;
 }
 
-/* Soft industrial blueprint glows behind hero / login */
+/* Soft pastel glows behind hero / login */
 .glow {
   background:
-    radial-gradient(42rem 30rem at 8% 0%, rgba(37, 99, 235, 0.12), transparent 65%),
-    radial-gradient(38rem 28rem at 95% 10%, rgba(245, 158, 11, 0.08), transparent 60%),
-    radial-gradient(34rem 26rem at 55% 100%, rgba(59, 130, 246, 0.1), transparent 65%),
-    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
-  background-size: auto, auto, auto, 32px 32px, 32px 32px;
+    radial-gradient(36rem 26rem at 6% 0%, rgba(210, 227, 252, 0.85), transparent 62%),
+    radial-gradient(34rem 28rem at 100% 8%, rgba(241, 243, 244, 0.9), transparent 62%),
+    radial-gradient(30rem 24rem at 60% 100%, rgba(232, 240, 254, 0.8), transparent 62%);
 }
 
-/* Blueprint CAD grid backgrounds */
+/* Blueprint grid backgrounds */
 .blueprint-grid {
-  background-color: #0b132b;
+  background-color: #174ea6;
   background-image:
-    radial-gradient(40rem 28rem at 0% 0%, rgba(59, 130, 246, 0.28), transparent 60%),
-    radial-gradient(36rem 26rem at 100% 100%, rgba(37, 99, 235, 0.32), transparent 60%),
-    linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
-  background-size: auto, auto, 28px 28px, 28px 28px;
+    radial-gradient(36rem 26rem at 0% 0%, rgba(138, 180, 248, 0.32), transparent 60%),
+    radial-gradient(34rem 26rem at 100% 100%, rgba(66, 133, 244, 0.4), transparent 60%);
 }
 .bg-graph {
   background-image:

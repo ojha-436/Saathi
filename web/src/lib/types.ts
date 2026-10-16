@@ -34,7 +34,18 @@ export type Account = {
     domains: string[];
     settings: { channel_creation?: "everyone" | "admins"; ai_enabled?: boolean; integrations_google?: boolean; voice_us?: boolean; quality_team?: string[]; qr_public?: boolean; shifts?: { name: string; start: string }[] };
   };
+  /** Every workspace this account belongs to (the open one is active); more than one when someone also works elsewhere */
+  workspaces?: WorkspaceRef[];
+  /** A guest's extras besides their channels, set by the admin who invited them */
+  guest?: GuestAccess;
+  /** When a guest's access to the open workspace ends (ISO), or null */
+  access_until?: string | null;
+  /** Shown once: e.g. access to another workspace ended and this one was opened instead */
+  notice?: string;
 };
+
+export type WorkspaceRef = { id: string; name: string; org_role: OrgRole; active: boolean; until: string | null };
+export type GuestAccess = { dm: boolean; ai: boolean };
 
 export type NotifyLevel = "all" | "mentions" | "off";
 export type UserSettings = {

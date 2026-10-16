@@ -20,10 +20,11 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
-from . import mailer
+from . import mailer, workspaces
 from .config import LOCAL_MODE, SIGNUP_DOMAINS, TZ, WEB_URL
 from .firebase import (
-    PUBLIC_DOMAINS, FieldFilter, _workspace_name, audit, auth, db, decode_token, ensure_general, firestore, forget_profile, set_claims,
+    GUEST_DEFAULTS, PUBLIC_DOMAINS, FieldFilter, _workspace_name, audit, auth, db, decode_token, ensure_general, firestore,
+    forget_profile, membership_live, memberships_of, set_claims,
 )
 
 log = logging.getLogger("saathi.invites")
@@ -105,10 +106,27 @@ def pending_for(email: str):
 
 def has_others(org_id: str, uid: str) -> bool:
     """Whether anyone besides `uid` is active in the workspace."""
-    for s in db.collection("users").where(filter=FieldFilter("org_id", "==", org_id)).stream():
-        if s.id != uid and not s.to_dict().get("deactivated"):
-            return True
-    return False
+    return any(u != uid and not d.get("deactivated") for u, d in workspaces.org_people(org_id).items())
+
+
+def guest_terms(d: dict) -> dict:
+    """A guest invite's access: {dm, ai} and how long (days after joining, or a fixed end date)."""
+    until = d.get("access_until")
+    return {"guest": {**GUEST_DEFAULTS, **(d.get("guest") or {})}, "access_days": d.get("access_days"),
+            "access_until": until.isoformat() if until else None}
+
+
+def _access_text(d: dict) -> str:
+    t = guest_terms(d)
+    if t["access_until"]:
+        period = f"Your access lasts until {workspaces.when(d['access_until'])}."
+    elif t["access_days"]:
+        period = f"Your access lasts {t['access_days']} days from when you join."
+    else:
+        period = ""
+    can = ["post in those channels"] + (["message the people in them directly"] if t["guest"]["dm"] else []) + \
+          (["ask Saathi about them"] if t["guest"]["ai"] else [])
+    return f"You can {', '.join(can[:-1]) + ' and ' + can[-1] if len(can) > 1 else can[0]}. {period}".strip()
 
 
 def account_kind(email: str) -> str:
@@ -140,7 +158,7 @@ def _email_parts(d: dict, org_name: str, link: str) -> tuple[str, str, str]:
     exp = d["expires_at"].astimezone(TZ)
     until = f"{exp.day} {exp:%b %Y}"
     if role == "guest":
-        access = f"As a guest you'll see only {_channels_text(chans)}. Nothing else in the workspace is visible to you."
+        access = f"As a guest you'll see only {_channels_text(chans)}. Nothing else in the workspace is visible to you. {_access_text(d)}"
     else:
         access = f"You'll join as {'an admin' if role == 'admin' else 'a member'}" + (f" and be added to {_channels_text(chans)}." if chans else ".")
     subject = f"{inviter} invited you to {org_name} on Saathi"
@@ -257,10 +275,10 @@ def _when(v) -> str:
     return f"{v.day} {v:%b %Y}"
 
 
-def join(decoded: dict, invite=None, move: bool = False) -> None:
+def join(decoded: dict, invite=None, move: bool = False, keep: bool = False) -> None:
     """Puts a signed-in person into a workspace. On first sign-in: a pending invite for this email, else a workspace that
-    claimed this verified domain, else a new workspace. From an invite link: that invite (`move` confirms leaving a
-    workspace nobody else uses)."""
+    claimed this verified domain, else a new workspace. From an invite link: that invite. Someone who already uses Saathi
+    keeps their workspace and gains this one; `move` instead leaves a workspace nobody else uses, `keep` keeps it."""
     uid = decoded["uid"]
     email = (decoded.get("email") or "").lower()
     domain = email.rsplit("@", 1)[-1]
@@ -294,19 +312,33 @@ def join(decoded: dict, invite=None, move: bool = False) -> None:
             raise HTTPException(403, f"invite-expired: Your invitation to {_org_name(lapsed['org_id'])} expired on {_when(lapsed['expires_at'])}. "
                                      f"Ask {lapsed.get('invited_by_name') or 'your admin'} to send you a new one.")
 
+    guest, until = None, None
+    if inv_data and org_role == "guest":
+        terms = inv_data.get("guest") or {}
+        guest = {**GUEST_DEFAULTS, **terms}
+        until = inv_data.get("access_until") or (datetime.now(TZ) + timedelta(days=inv_data["access_days"]) if inv_data.get("access_days") else None)
+        channels = [c for c in channels if not c.to_dict().get("default")]  # never company-wide, even from an older invite
+        if not channels:
+            raise HTTPException(409, f"The channels you were invited to aren't open to guests. Ask {inv_data.get('invited_by_name') or 'your admin'} to invite you again.")
+
     snap = db.collection("users").document(uid).get()
     old = snap.to_dict() if snap.exists else None
-    if old and old.get("org_id") and old["org_id"] != org_id:
-        if has_others(old["org_id"], uid):
-            raise HTTPException(409, {"code": "other_workspace", "workspace": _org_name(old["org_id"]),
-                                      "message": f"Your account belongs to {_org_name(old['org_id'])}, where other people work too. A Saathi account "
-                                                 "belongs to one workspace, so ask for this invite to be sent to a different email address."})
-        if not move:
-            raise HTTPException(409, {"code": "move_required", "workspace": _org_name(old["org_id"]),
-                                      "message": "Your account has its own workspace that nobody else uses. Move it to accept this invite?"})
-        _leave_solo_workspace(uid, old["org_id"], org_id)
-        audit({"uid": uid, "name": old.get("name", name), "org_id": old["org_id"]}, "user.left", old["org_id"], moved_to=org_id)
-    same = bool(old and old.get("org_id") == org_id)
+    old_ms = memberships_of(old) if old else {}
+    inviter = {"uid": inv_data.get("invited_by"), "name": inv_data.get("invited_by_name")} if inv_data else None
+    # new: first account | same: already in this workspace | rejoin: their access here had ended | add: a second workspace
+    # move: leave an empty workspace of their own for this one
+    mode = "new"
+    if old and old_ms and org_id:
+        if org_id in old_ms:
+            mode = "same" if membership_live(old_ms[org_id]) else "rejoin"
+        elif len([o for o, m in old_ms.items() if membership_live(m)]) <= 1 and not has_others(old.get("org_id", ""), uid) and not keep:
+            if not move:
+                raise HTTPException(409, {"code": "move_required", "workspace": _org_name(old["org_id"]),
+                                          "message": "Your account has its own workspace that nobody else uses. Move your account here, "
+                                                     "or keep that workspace as well and switch between them."})
+            mode = "move"
+        else:
+            mode = "add"
 
     if not org_id:
         org_id, org_role = "org_" + uuid.uuid4().hex[:16], "owner"
@@ -314,22 +346,43 @@ def join(decoded: dict, invite=None, move: bool = False) -> None:
             {"name": _workspace_name(email, name), "domains": [], "created_by": uid, "created_at": firestore.SERVER_TIMESTAMP,
              "settings": {"channel_creation": "everyone", "ai_enabled": True}}
         )
-    if same:  # already in this workspace (an invite opened twice): keep their role; admins change roles in Members
-        org_role = old.get("org_role") or org_role
+    membership = {"org_role": org_role, "joined_at": datetime.now(TZ)}
+    if org_role == "guest":
+        membership.update({"guest": guest or dict(GUEST_DEFAULTS), "until": until})
+    if inviter and inviter["uid"]:
+        membership.update({"invited_by": inviter["uid"], "invited_by_name": inviter["name"]})
+
+    if mode == "same":  # already here (an invite opened twice): keep their role; admins change roles in Members
+        org_role = old_ms[org_id].get("org_role") or org_role
         name = old.get("name") or name
+        if old.get("org_id") != org_id:
+            workspaces.switch(uid, org_id)
+    elif mode == "rejoin":
+        name = old.get("name") or name
+        workspaces.restore(uid, org_id, org_role=org_role, guest=membership.get("guest"), until=membership.get("until"))
+        workspaces.switch(uid, org_id)
+    elif mode == "add":
+        name = old.get("name") or name
+        workspaces.add(uid, org_id, org_role, guest=membership.get("guest"), until=membership.get("until"), invited_by=inviter)
     else:
+        if mode == "move":
+            _leave_solo_workspace(uid, old["org_id"], org_id)
+            audit({"uid": uid, "name": old.get("name", name), "org_id": old["org_id"]}, "user.left", old["org_id"], moved_to=org_id)
         profile = {"name": name, "role": "", "email": email, "photo": decoded.get("picture", ""), "org_id": org_id, "org_role": org_role,
-                   "provider": (decoded.get("firebase") or {}).get("sign_in_provider", ""), "created_at": firestore.SERVER_TIMESTAMP}
+                   "provider": (decoded.get("firebase") or {}).get("sign_in_provider", ""), "created_at": firestore.SERVER_TIMESTAMP,
+                   "memberships": {org_id: membership}, "orgs": [org_id], "all_orgs": [org_id],
+                   "access_next_end": membership.get("until")}
         if old:  # moving: keep who they are
             profile.update({k: old[k] for k in ("name", "role", "photo", "created_at") if old.get(k)})
             name = profile["name"]
         db.collection("users").document(uid).set(profile)
         set_claims(uid, org_id, org_role)
     forget_profile(uid)
+    same = mode == "same"
 
     if inv_data:
         inv.reference.update({"status": "accepted", "accepted_uid": uid, "accepted_at": firestore.SERVER_TIMESTAMP})
-        inviter, inviter_name = inv_data.get("invited_by"), inv_data.get("invited_by_name") or "an admin"
+        inviter_uid, inviter_name = inv_data.get("invited_by"), inv_data.get("invited_by_name") or "an admin"
         now = datetime.now(TZ)
         line = f"{name} joined{' as a guest' if org_role == 'guest' else ''} · invited by {inviter_name}"
         for ch in channels:  # guests (and members) invited straight into channels; members see a guest arrive
@@ -340,23 +393,24 @@ def join(decoded: dict, invite=None, move: bool = False) -> None:
             for col in ("files", "decisions", "handovers"):
                 for c in db.collection(col).where(filter=FieldFilter("chat_id", "==", ch.id)).stream():
                     c.reference.update({"members": firestore.ArrayUnion([uid])})
-        if inviter and not same:
+        if inviter_uid and not same:
             title = f"{name} accepted your invite"
             db.collection("notifications").add(
-                {"uid": inviter, "kind": "invite", "title": title, "body": f"{email} joined {_org_name(org_id)} as {org_role}.",
+                {"uid": inviter_uid, "kind": "invite", "title": title, "body": f"{email} joined {_org_name(org_id)} as {org_role}.",
                  "source_ref": None, "chat_id": channels[0].id if channels else None, "task_id": None, "actor": uid, "actor_name": name,
                  "org_id": org_id, "ts": now, "read": False})
             try:
                 from . import push
 
-                push.push(inviter, title, f"{email} joined as {org_role}.", tag=f"invite-{uid}")
+                push.push(inviter_uid, title, f"{email} joined as {org_role}.", tag=f"invite-{uid}")
             except Exception:
                 log.exception("invite push failed")
     if org_role != "guest":
         ensure_general(org_id, uid, name)
     if not same:
         audit({"uid": uid, "name": name, "org_id": org_id}, "user.joined", org_id, org_role=org_role,
-              via="invite" if inv_data else ("domain" if org_role != "owner" else "signup"), moved=bool(old and old.get("org_id")))
+              via="invite" if inv_data else ("domain" if org_role != "owner" else "signup"), moved=mode == "move",
+              second_workspace=mode == "add", rejoined=mode == "rejoin")
 
 
 # ---------------- public endpoints (the invite page) ----------------
@@ -391,11 +445,13 @@ def view(token: str, request: Request):
            "role": d.get("org_role", "member")}
     if state != "valid":
         return {**out, "message": _state_message(state, d)}
-    return {**out, "channels": d.get("channel_names", []), "expires_at": d["expires_at"].isoformat(), "account": account_kind(d["email"])}
+    out = {**out, "channels": d.get("channel_names", []), "expires_at": d["expires_at"].isoformat(), "account": account_kind(d["email"])}
+    return {**out, **guest_terms(d)} if out["role"] == "guest" else out
 
 
 class AcceptIn(BaseModel):
     move: bool = False
+    keep: bool = False
     name: str = ""
 
 
@@ -419,5 +475,5 @@ def accept(token: str, body: AcceptIn, request: Request, authorization: str = He
         decoded = {**decoded, "email_verified": True}
     if body.name.strip() and not decoded.get("name"):
         decoded = {**decoded, "name": body.name.strip()[:80]}
-    join(decoded, invite=snap, move=body.move)
+    join(decoded, invite=snap, move=body.move, keep=body.keep)
     return {"ok": True, "workspace": _org_name(d["org_id"])}

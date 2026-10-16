@@ -189,14 +189,16 @@ def _find_person(name: str, uid: str) -> dict | None:
         for c in user_chats(uid).values():
             visible |= set(c.get("members") or [])
     best = None
-    for s in db.collection("users").where(filter=FieldFilter("org_id", "==", me["org_id"])).stream():
-        if s.to_dict().get("deactivated") or (visible is not None and s.id not in visible):
+    from .workspaces import org_people
+
+    for pid, d in org_people(me["org_id"]).items():
+        if d.get("deactivated") or (visible is not None and pid not in visible):
             continue
-        full = (s.get("name") or "").lower()
+        full = (d.get("name") or "").lower()
         if n == full:
-            return {"uid": s.id, "name": s.get("name")}
+            return {"uid": pid, "name": d.get("name")}
         if n and (full.startswith(n) or n.split()[0] == full.split()[0]):
-            best = best or {"uid": s.id, "name": s.get("name")}
+            best = best or {"uid": pid, "name": d.get("name")}
     return best
 
 

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from . import ai
 from .config import TZ
-from .firebase import audit, current_user, db, user_profile
+from .firebase import audit, current_user, db, role_in, user_profile
 
 router = APIRouter()
 log = logging.getLogger("saathi.decisions")
@@ -101,7 +101,7 @@ def _save(dec_id: str, org_id: str, d: DecisionDetail, *, members: list[str], ch
 def capture_from_message(chat: dict, msg_id: str, msg: dict, flagged: str) -> None:
     """Runs after the message classifier flags a decision. Idempotent per message."""
     try:
-        if msg.get("sender") and user_profile(msg["sender"]).get("org_role") == "guest":
+        if msg.get("sender") and role_in(user_profile(msg["sender"]), chat.get("org_id", "")) == "guest":
             return
         col = db.collection("chats").document(chat["id"]).collection("messages")
         ts = msg.get("ts") or datetime.now(TZ)

@@ -143,54 +143,9 @@ export function LoginForm() {
       )}
 
       {mode === "signin" && (
-        <div ref={demoRef} className="mt-5 overflow-hidden rounded-2xl border border-brand/30 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => setDemoOpen((o) => !o)}
-            aria-expanded={demoOpen}
-            className="flex w-full items-center gap-3 border-b border-line bg-brand-soft/40 px-4 py-3 text-left"
-          >
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-strong">
-                Instant Demo Workspace · Shakti Rail Components
-              </span>
-              <span className="mt-0.5 block text-xs text-muted">Click any plant persona to open /app immediately (1-click sign-in)</span>
-            </span>
-            <ChevronDown size={18} className={`shrink-0 text-muted transition ${demoOpen ? "rotate-180" : ""}`} aria-hidden />
-          </button>
-          {demoOpen && (
-            <ul className="grid gap-2 p-3 sm:grid-cols-2">
-              {DEMO.map((u) => (
-                <li key={u.id}>
-                  <button
-                    type="button"
-                    onClick={() => run(u.id, () => signInWithPassword(`${u.id}@saathi.demo`, DEMO_PASSWORD))}
-                    disabled={!!busy}
-                    className="group flex min-h-[58px] w-full items-center gap-2.5 rounded-xl border border-line bg-paper-2/60 px-3 py-2 text-left transition hover:border-brand hover:bg-white hover:shadow-xs disabled:opacity-60"
-                  >
-                    <Avatar name={u.name} size={32} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-bold text-ink group-hover:text-brand">{u.name}</span>
-                      <span className="block truncate text-[11px] text-muted">{u.note ?? u.role}</span>
-                    </span>
-                    {busy === u.id ? (
-                      <Loader2 size={15} className="animate-spin text-brand" />
-                    ) : (
-                      <ArrowRight size={13} className="shrink-0 text-muted opacity-0 transition group-hover:translate-x-0.5 group-hover:text-brand group-hover:opacity-100" />
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {mode === "signin" && (
-        <div className="mt-5">
-          <Divider text="or sign in with work account" />
+        <div className="mt-7">
           <GoogleButton label="Continue with Google" busy={busy === "google"} disabled={!!busy} onClick={() => run("google", signInWithGoogle)} />
-          <Divider text="or email & password" />
+          <Divider text="or sign in with email" />
         </div>
       )}
 
@@ -279,6 +234,38 @@ export function LoginForm() {
             )}
           </button>
         </form>
+      )}
+
+      {mode === "signin" && (
+        <div ref={demoRef} className="mt-8 rounded-xl border border-border bg-canvas/60">
+          <button onClick={() => setDemoOpen((o) => !o)} aria-expanded={demoOpen} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">Explore the demo workspace</span>
+              <span className="block text-xs text-muted">Shakti Rail Components is fictional. Each colleague sees only their own chats.</span>
+            </span>
+            <ChevronDown size={18} className={`shrink-0 text-muted transition ${demoOpen ? "rotate-180" : ""}`} aria-hidden />
+          </button>
+          {demoOpen && (
+            <ul className="grid gap-2 px-3 pb-3 sm:grid-cols-2">
+              {DEMO.map((u) => (
+                <li key={u.id}>
+                  <button
+                    onClick={() => run(u.id, () => signInWithPassword(`${u.id}@saathi.demo`, DEMO_PASSWORD))}
+                    disabled={!!busy}
+                    className={`flex min-h-[56px] w-full items-center gap-3 rounded-lg border bg-white px-3 py-2 text-left transition hover:border-brand/50 disabled:opacity-60 ${u.note ? "border-saffron/60" : "border-border"}`}
+                  >
+                    <Avatar name={u.name} size={32} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{u.name}</span>
+                      <span className="block truncate text-xs text-muted">{u.note ?? u.role}</span>
+                    </span>
+                    {busy === u.id && <Loader2 size={16} className="animate-spin text-brand" />}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </AuthShell>
   );

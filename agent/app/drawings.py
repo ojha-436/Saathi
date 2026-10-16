@@ -18,7 +18,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
 from .config import TZ, WEB_URL
-from .firebase import audit, bucket, current_user, db, require_admin, user_profile
+from .firebase import audit, bucket, current_user, db, require_admin, role_in, user_profile
 
 router = APIRouter()
 log = logging.getLogger("saathi.drawings")
@@ -78,7 +78,7 @@ def rebuild(org_id: str, drawing_no: str) -> dict | None:
             chat_cache[cid] = db.collection("chats").document(cid).get().to_dict() or {}
         if chat_cache.get(cid, {}).get("ai_excluded"):
             continue
-        if f.get("uploaded_by") and user_profile(f["uploaded_by"]).get("org_role") == "guest":
+        if f.get("uploaded_by") and role_in(user_profile(f["uploaded_by"]), org_id) == "guest":
             continue
         title = title or doc.get("title") or ""
         rev, draft = norm_rev(doc.get("revision"))

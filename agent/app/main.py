@@ -12,17 +12,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice
+from . import admin, ai, connectors, decisions, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice, workspaces
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
-from .firebase import auth, audit, bucket, current_user, db, FieldFilter, firestore, get_chat_for_member, require_admin, same_org, user_profile
+from .firebase import auth, audit, bucket, current_user, db, FieldFilter, firestore, get_chat_for_member, memberships_of, require_admin, same_org, user_profile
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Saathi API")
 app.include_router(people.router)
 app.include_router(admin.router)
 app.include_router(invites.router)
+app.include_router(workspaces.router)
 app.include_router(meetings.router)
 app.include_router(connectors.router)
 app.include_router(drawings.router)
@@ -75,11 +76,24 @@ def is_guest(user: dict) -> bool:
     return user.get("org_role") == "guest"
 
 
+def require_guest_dm(user: dict, chat: dict | None = None) -> None:
+    """Guests talk in their channels; direct and group chats only if their admin allowed it."""
+    if is_guest(user) and not user["guest"]["dm"] and (chat is None or chat.get("type") != "channel"):
+        raise HTTPException(403, "Direct messages aren't part of your guest access. Write in your channels instead.")
+
+
+def require_ai(user: dict) -> None:
+    if is_guest(user) and not user["guest"]["ai"]:
+        raise HTTPException(403, "Saathi isn't part of your guest access. Ask the person who invited you if you need it.")
+
+
 def co_members(uid: str) -> set[str]:
-    """Everyone who shares at least one chat with uid (a guest's whole visible world)."""
+    """Everyone who shares at least one chat with uid in the workspace they have open (a guest's whole visible world)."""
+    org = user_profile(uid)["org_id"]
     out: set[str] = set()
     for s in db.collection("chats").where(filter=FieldFilter("members", "array_contains", uid)).stream():
-        out |= set(s.get("members") or [])
+        if s.to_dict().get("org_id") in (None, "", org):
+            out |= set(s.get("members") or [])
     return out
 
 
@@ -227,7 +241,9 @@ def health():
 @app.get("/api/me")
 def me(user=Depends(current_user)):
     org = org_of(user)
-    return {**user, "org": {"id": org["id"], "name": org.get("name", ""), "domains": org.get("domains", []), "settings": org.get("settings", {})}}
+    out = {k: v for k, v in user.items() if k not in ("memberships", "until")}
+    return {**out, "org": {"id": org["id"], "name": org.get("name", ""), "domains": org.get("domains", []), "settings": org.get("settings", {})},
+            "workspaces": workspaces.summary(user), "access_until": user["until"].isoformat() if user.get("until") else None}
 
 
 def notify(uid: str, kind: str, title: str, body: str, actor: dict | None = None, source_ref: str | None = None,
@@ -314,6 +330,7 @@ def _channel_owner(chat: dict, uid: str) -> None:
 
 @app.post("/api/chats")
 def create_chat(body: ChatIn, user=Depends(current_user)):
+    require_guest_dm(user)
     wanted = same_org(user, body.member_ids)
     if is_guest(user):  # guests can only start chats with people they already share a channel with
         wanted = [m for m in wanted if m in co_members(user["uid"])]
@@ -564,6 +581,7 @@ def after_post(chat: dict, user: dict, text: str, msg_id: str, mentioned: list[s
 @app.post("/api/chats/{chat_id}/messages")
 def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
+    require_guest_dm(user, chat)
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Empty message")
@@ -587,6 +605,7 @@ def send_message(chat_id: str, body: MessageIn, bg: BackgroundTasks, user=Depend
 async def upload_file(chat_id: str, bg: BackgroundTasks, file: UploadFile = File(...), text: str = Form(""), parent_id: str = Form(""),
                       user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
+    require_guest_dm(user, chat)
     root = thread_root(chat_id, parent_id or None)
     rate_limit(user["uid"], "upload", 10)
     ext = ("." + (file.filename or "").rsplit(".", 1)[-1].lower()) if "." in (file.filename or "") else ""
@@ -630,6 +649,7 @@ def download_file(file_id: str, user=Depends(current_user)):
 
 @app.post("/api/chats/{chat_id}/summarize")
 def summarize_chat(chat_id: str, user=Depends(current_user)):
+    require_ai(user)
     chat = get_chat_for_member(chat_id, user["uid"])
     col = db.collection("chats").document(chat_id).collection("messages")
     snaps = list(col.order_by("ts", direction=firestore.Query.DESCENDING).limit(60).stream())
@@ -702,17 +722,17 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Empty message")
+    require_ai(user)
     rate_limit(user["uid"], "assistant", 20)
     if not (org_of(user).get("settings") or {}).get("ai_enabled", True):
         raise HTTPException(403, "Your workspace admin has turned off the AI assistant")
     col = db.collection("assistant").document(user["uid"]).collection("messages")
-    history = [
-        {"role": s.get("role"), "text": s.get("text") or ""}
-        for s in reversed(list(col.order_by("ts", direction=firestore.Query.DESCENDING).limit(6).stream()))
-    ]
-    col.document().set({"role": "user", "text": text, "ts": now()})
+    # Conversations are per workspace: someone in two workspaces never carries one company's context into the other
+    recent = [s.to_dict() for s in col.order_by("ts", direction=firestore.Query.DESCENDING).limit(30).stream()]
+    history = [{"role": d.get("role"), "text": d.get("text") or ""} for d in reversed(recent) if d.get("org_id") in (None, "", user["org_id"])][-6:]
+    col.document().set({"role": "user", "text": text, "ts": now(), "org_id": user["org_id"]})
     pending = col.document()
-    pending.set({"role": "assistant", "text": "", "pending": True, "ts": now()})
+    pending.set({"role": "assistant", "text": "", "pending": True, "ts": now(), "org_id": user["org_id"]})
     started = time.monotonic()
     last = [0.0]
 
@@ -750,7 +770,8 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
 def clear_assistant(user=Depends(current_user)):
     col = db.collection("assistant").document(user["uid"]).collection("messages")
     for s in col.stream():
-        s.reference.delete()
+        if s.to_dict().get("org_id") in (None, "", user["org_id"]):
+            s.reference.delete()
     return {"ok": True}
 
 
@@ -910,6 +931,10 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
         logging.exception("handover tick failed")
         ho = {}
     try:
+        ho["guest_access_ended"] = workspaces.sweep()
+    except Exception:
+        logging.exception("guest access sweep failed")
+    try:
         ho["live_prompts"] = live.prompt_starting_meetings()
     except Exception:
         logging.exception("live prompt failed")
@@ -968,6 +993,8 @@ def insights(user=Depends(current_user)):
     decisions = []
     for c in db.collection("chats").where(filter=FieldFilter("members", "array_contains", uid)).stream():
         cd = c.to_dict()
+        if cd.get("org_id") not in (None, "", user["org_id"]):
+            continue
         msgs = [m.to_dict() for m in c.reference.collection("messages").where(filter=FieldFilter("ts", ">=", week)).stream()]
         name = cd.get("name") or ", ".join(
             user_name for user_name in [db.collection("users").document(m).get().get("name") for m in cd["members"] if m != uid]
@@ -991,12 +1018,17 @@ PUBLIC_PROFILE = ("name", "role", "email", "photo", "department", "phone", "loca
 
 
 @app.get("/api/users")
-def list_users(user=Depends(current_user)):
-    """Workspace directory. Guests only see the people they share a chat with."""
+def list_users(others: bool = False, user=Depends(current_user)):
+    """Workspace directory, with each person's role in this workspace. Guests only see the people they share a chat with.
+    others=1: only people in this workspace who have another one open right now (the browser's live directory misses them)."""
+    org = user["org_id"]
     visible = co_members(user["uid"]) | {user["uid"]} if is_guest(user) else None
     rows = []
-    for s in db.collection("users").where(filter=FieldFilter("org_id", "==", user["org_id"])).stream():
-        if visible is None or s.id in visible:
-            rows.append({"id": s.id, **{k: v for k, v in s.to_dict().items() if k in PUBLIC_PROFILE}})
+    for uid, d in workspaces.org_people(org).items():
+        if (visible is not None and uid not in visible) or (others and d.get("org_id") == org):
+            continue
+        m = memberships_of(d).get(org) or {}
+        rows.append({"id": uid, **{k: v for k, v in d.items() if k in PUBLIC_PROFILE}, "org_role": m.get("org_role", "member"),
+                     "deactivated": bool(d.get("deactivated")), "org_id": org})
     return rows
 

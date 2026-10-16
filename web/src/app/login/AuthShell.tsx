@@ -10,47 +10,28 @@ import { googleUnavailableLocally, isLocal } from "@/lib/auth";
 /** Two-column sign-in layout shared by /login and /signup. */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid min-h-dvh bg-paper-2 text-ink lg:grid-cols-[0.95fr_1.05fr]">
+    <div className="grid min-h-dvh bg-surface text-ink lg:grid-cols-[1fr_1.05fr]">
       <aside className="blueprint-grid relative hidden flex-col justify-between overflow-hidden p-12 text-paper lg:flex">
-        <div className="flex items-center justify-between">
-          <Link href="/" aria-label="Saathi home">
-            <Logo dark />
-          </Link>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 font-mono text-[10.5px] font-semibold text-emerald-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> SHAKTI RAIL · ONLINE
-          </span>
-        </div>
+        <Link href="/" aria-label="Saathi home">
+          <Logo dark />
+        </Link>
         <div className="max-w-md">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-mint">Enterprise & Shop-Floor AI OS</p>
-          <h1 className="mt-4 font-display text-5xl leading-[1.04] text-white">
-            Pick up <em className="text-mint">where the plant work happens.</em>
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-saffron">Your AI colleague</p>
+          <h1 className="mt-4 font-display text-6xl leading-[1.02]">
+            Pick up exactly <em className="text-saffron">where the work is.</em>
           </h1>
-          <p className="mt-4 text-sm leading-relaxed text-slate-300">
-            Every drawing revision, mill test certificate, shift handover, and vendor promise—indexed, verified, and cited for your exact role.
-          </p>
-          <div className="mt-6 grid grid-cols-2 gap-2.5 rounded-2xl border border-white/10 bg-white/5 p-3.5 font-mono text-xs">
-            <div className="rounded-xl bg-white/5 p-2.5">
-              <span className="text-[10px] text-slate-400">DRAWING REGISTER</span>
-              <p className="mt-0.5 font-bold text-white">SRC-BF-2041 Rev C</p>
-              <span className="text-[10px] text-emerald-300">✓ Released · QR Active</span>
-            </div>
-            <div className="rounded-xl bg-white/5 p-2.5">
-              <span className="text-[10px] text-slate-400">SPEC CHECK</span>
-              <p className="mt-0.5 font-bold text-white">EN 10025 S355J2</p>
-              <span className="text-[10px] text-amber-300">! Heat H-77812 Flagged</span>
-            </div>
-          </div>
+          <p className="mt-5 text-paper/70">Chats, channels and files in one place, with an assistant that finds anything, briefs you on what you missed and tracks every promise.</p>
         </div>
-        <ul className="space-y-2.5 text-xs text-slate-300">
+        <ul className="space-y-3 text-sm text-paper/75">
           {[
-            [ShieldCheck, "Permission-scoped ADK tools: you only see what your role and channels allow"],
-            [LockKeyhole, "Data residency in asia-south1 (Mumbai) with Cloud KMS encryption"],
-            [Sparkles, "Every AI answer and research claim cites its exact source"],
+            [ShieldCheck, "Permission-aware: Saathi only searches what you can already see"],
+            [LockKeyhole, "Data stays in asia-south1 (Mumbai) on Google Cloud"],
+            [Sparkles, "Every answer cites its source"],
           ].map(([Icon, text]) => {
             const I = Icon as typeof ShieldCheck;
             return (
               <li key={text as string} className="flex items-center gap-2.5">
-                <I size={15} className="shrink-0 text-mint" aria-hidden /> {text as string}
+                <I size={16} className="shrink-0 text-saffron" aria-hidden /> {text as string}
               </li>
             );
           })}
@@ -61,8 +42,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         <Link href="/" className="mb-8 inline-block lg:hidden" aria-label="Saathi home">
           <Logo />
         </Link>
-        <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col justify-center">{children}</div>
-        <p className="mx-auto mt-8 max-w-[480px] text-center text-xs text-muted">
+        <div className="mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center">{children}</div>
+        <p className="mx-auto mt-8 max-w-[420px] text-center text-xs text-muted">
           Protected by Firebase Authentication. By continuing you agree to use Saathi for work purposes in line with your organisation&rsquo;s policies. See our{" "}
           <Link href="/privacy" className="font-medium underline">
             Privacy Policy

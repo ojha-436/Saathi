@@ -5,7 +5,7 @@ import { ArrowRight, ArrowUp, BarChart3, ChevronDown, FileSearch, Handshake, His
 import { LogoMark } from "./Logo";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { useAssistant } from "@/lib/hooks";
+import { useAssistant, useInOrg } from "@/lib/hooks";
 import type { AssistantMsg, Task } from "@/lib/types";
 import { useWs } from "./ctx";
 import { ChartCard } from "./Knowledge";
@@ -32,7 +32,7 @@ const RANGES = [
 
 export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; prompt?: string; onPromptUsed: () => void }) {
   const { uid, me, toast, dialog, account, open } = useWs();
-  const messages = useAssistant(uid);
+  const messages = useInOrg(useAssistant(uid), account.org_id);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -231,7 +231,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
             className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] outline-none"
           />
           <MicButton onText={(t) => setText((prev) => (prev ? `${prev} ${t}` : t))} className="h-10" />
-          <button disabled={busy || !text.trim()} className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white transition hover:bg-brand-strong disabled:opacity-30" aria-label="Ask">
+          <button disabled={busy || !text.trim()} className="flex h-10 w-10 items-center justify-center rounded-xl bg-saffron text-ink transition hover:brightness-105 disabled:opacity-30" aria-label="Ask">
             {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
           </button>
         </form>

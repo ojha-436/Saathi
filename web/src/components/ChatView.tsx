@@ -69,7 +69,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { EmojiPopover } from "./EmojiPopover";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
-import { useWs } from "./ctx";
+import { guestCan, useWs } from "./ctx";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
 import { ReportBody } from "./Research";
@@ -102,7 +102,7 @@ type Panel = null | "about" | "members";
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: string }) {
-  const { uid, users, chats, toast, open, showList, settings, reads } = useWs();
+  const { uid, users, chats, toast, open, showList, settings, reads, account } = useWs();
   const chat = chats[chatId];
   const messages = useMessages(chatId);
   const [tab, setTab] = useState<Tab>("messages");
@@ -282,7 +282,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                 <Users size={16} className="sm:hidden" />
                 <span className="font-medium">{chat.members.length}</span>
               </button>
-              {chat.type !== "dm" && (
+              {chat.type !== "dm" && account.org_role !== "guest" && (
                 <button
                   onClick={() => open({ kind: "handover", chatId: chat.id })}
                   className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink transition hover:bg-hover"
@@ -292,6 +292,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                   <span className="hidden md:inline">Handover</span>
                 </button>
               )}
+              {guestCan(account, "ai") && (
               <button
                 onClick={summarize}
                 disabled={summarizing || !!chat.ai_excluded}
@@ -301,6 +302,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                 {summarizing ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} className="text-saffron-ink" />}
                 <span className="hidden sm:inline">Summarize</span>
               </button>
+              )}
               <Menu
                 label="More options"
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-ink"
@@ -316,7 +318,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
                   })),
                   "sep",
                   { label: `About this ${kindLabel}`, icon: Info, onSelect: () => setPanel("about") },
-                  ...(chat.type !== "dm" ? [{ label: "Add people", icon: UserPlus, onSelect: () => setPanel("members") }] : []),
+                  ...(chat.type !== "dm" && account.org_role !== "guest" ? [{ label: "Add people", icon: UserPlus, onSelect: () => setPanel("members") }] : []),
                   { label: chat.ai_excluded ? "Make visible to Saathi" : "Hide from Saathi", icon: chat.ai_excluded ? Eye : EyeOff, onSelect: () => toggleAi(!!chat.ai_excluded) },
                   ...(chat.type !== "dm" ? (["sep", { label: `Leave ${kindLabel}`, icon: LogOut, danger: true, onSelect: leave }] satisfies MenuItem[]) : []),
                 ]}
@@ -416,7 +418,7 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
 }
 
 function Welcome({ chat, title, empty, onAddPeople }: { chat: Chat; title: string; empty: boolean; onAddPeople: () => void }) {
-  const { open, users } = useWs();
+  const { open, users, account } = useWs();
   if (!empty) return null;
   return (
     <div className="mx-auto my-8 max-w-md rounded-2xl border border-border bg-surface p-6 text-center">
@@ -430,14 +432,16 @@ function Welcome({ chat, title, empty, onAddPeople }: { chat: Chat; title: strin
           : "Messages, files and promises shared here are searchable by Saathi for the people in this chat."}
       </p>
       <div className="mt-4 flex justify-center gap-2">
-        {chat.type !== "dm" && (
+        {chat.type !== "dm" && account.org_role !== "guest" && (
           <button onClick={onAddPeople} className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3 text-[13px] font-semibold text-white hover:bg-brand-strong">
             <UserPlus size={15} /> Add people
           </button>
         )}
-        <button onClick={() => open({ kind: "assistant" })} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-semibold hover:bg-hover">
-          <Sparkles size={15} className="text-saffron-ink" /> Ask Saathi
-        </button>
+        {guestCan(account, "ai") && (
+          <button onClick={() => open({ kind: "assistant" })} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-semibold hover:bg-hover">
+            <Sparkles size={15} className="text-saffron-ink" /> Ask Saathi
+          </button>
+        )}
       </div>
     </div>
   );
@@ -563,7 +567,7 @@ function MessageRow({
 }
 
 function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; chatId: string; chatName: string; align: "left" | "right"; onReply?: () => void }) {
-  const { open, toast, newTask, uid } = useWs();
+  const { open, toast, newTask, uid, account } = useWs();
   const [picking, setPicking] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
   async function react(r: Reaction) {
@@ -605,14 +609,16 @@ function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; c
       <button onClick={addTask} className={btn} aria-label="Create task from message" title="Create task…">
         <ListPlus size={15} />
       </button>
-      <button
-        onClick={() => open({ kind: "assistant", prompt: `Give me the context and any follow-ups for this message from ${m.sender_name} in ${chatName}: "${(m.text || m.file?.name || "").slice(0, 300)}"` })}
-        className={btn}
-        aria-label="Ask Saathi about this message"
-        title="Ask Saathi about this"
-      >
-        <Sparkles size={15} className="text-saffron-ink" />
-      </button>
+      {guestCan(account, "ai") && (
+        <button
+          onClick={() => open({ kind: "assistant", prompt: `Give me the context and any follow-ups for this message from ${m.sender_name} in ${chatName}: "${(m.text || m.file?.name || "").slice(0, 300)}"` })}
+          className={btn}
+          aria-label="Ask Saathi about this message"
+          title="Ask Saathi about this"
+        >
+          <Sparkles size={15} className="text-saffron-ink" />
+        </button>
+      )}
       {m.text && (
         <button
           onClick={() => {
@@ -1277,7 +1283,7 @@ function DetailsPanel({
   onToggleAi: (visible: boolean) => void;
   onLeave: () => void;
 }) {
-  const { uid, users, toast, open } = useWs();
+  const { uid, users, toast, open, account } = useWs();
   const [name, setName] = useState(chat.name);
   const [desc, setDesc] = useState(chat.description ?? "");
   const [saving, setSaving] = useState(false);
@@ -1413,6 +1419,7 @@ function DetailsPanel({
       ) : (
         <div className="scrollbar-thin flex-1 overflow-y-auto p-3">
           {chat.type !== "dm" &&
+            account.org_role !== "guest" &&
             (adding ? (
               <div className="mb-3 rounded-xl border border-border p-2">
                 <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search people" aria-label="Search people" className="h-9 w-full rounded-lg border border-border px-3 text-sm outline-none focus:border-brand" />

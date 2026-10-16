@@ -276,7 +276,9 @@ def sync_user(uid: str, fresh: dict | None = None) -> None:
 
 
 def _org_users_by_email(org_id: str) -> dict[str, str]:
-    return {(s.get("email") or "").lower(): s.id for s in db.collection("users").where(filter=FieldFilter("org_id", "==", org_id)).stream()}
+    from .workspaces import org_people
+
+    return {(d.get("email") or "").lower(): uid for uid, d in org_people(org_id).items()}
 
 
 def _sync_calendar(uid: str, user: dict, headers: dict) -> int:

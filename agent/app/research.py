@@ -29,7 +29,7 @@ from . import ai, jobs, resilience
 from .agent import (_find_person, find_decisions, get_calendar, get_message_context, lookup_document, plant_data, promise_record,
                     revision_status, search_workspace, shift_handover, similar_incidents, who_owes)
 from .config import AGENT_FALLBACK_MODEL, AGENT_MODEL, COMPANY, TASKS_MODE, TZ
-from .firebase import audit, bucket, current_user, db, get_chat_for_member, user_profile
+from .firebase import audit, bucket, current_user, db, get_chat_for_member, in_org, role_in, user_profile
 
 log = logging.getLogger("saathi.research")
 router = APIRouter()
@@ -693,14 +693,14 @@ def ref_visible_to(ref: str, uids: set[str], org_id: str) -> bool:
             data = r.to_dict() or {}
             return r.exists and data.get("org_id") == org_id and uids <= set(data.get("participants") or [])
         if kind == "std":
-            return all(user_profile(u).get("org_id") == org_id and user_profile(u).get("org_role") != "guest" for u in uids)
+            return all(in_org(user_profile(u), org_id) and role_in(user_profile(u), org_id) != "guest" for u in uids)
         if kind == "chart":
             org = db.collection("orgs").document(org_id).get().to_dict() or {}
             qteam = set((org.get("settings") or {}).get("quality_team") or [])
             return all(
-                user_profile(u).get("org_id") == org_id
-                and user_profile(u).get("org_role") != "guest"
-                and (user_profile(u).get("org_role") in ("owner", "admin") or u in qteam)
+                in_org(user_profile(u), org_id)
+                and role_in(user_profile(u), org_id) != "guest"
+                and (role_in(user_profile(u), org_id) in ("owner", "admin") or u in qteam)
                 for u in uids
             )
     except Exception:
