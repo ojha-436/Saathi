@@ -1,15 +1,27 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Copy, Globe, Hash, History, Loader2, Lock, MailPlus, RefreshCw, Settings2, ShieldCheck, Trash2, UserX, Users } from "@/lib/icons";
-import { useCallback, useEffect, useState } from "react";
+import { BarChart3, Building2, Check, Copy, Globe, Hash, History, Loader2, Lock, MailPlus, RefreshCw, Settings2, ShieldCheck, Trash2, UserX, Users, X } from "@/lib/icons";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { OrgRole } from "@/lib/types";
+import type { GuestAccess, OrgRole } from "@/lib/types";
 import { Avatar, ROLE_LABEL, Switch } from "./bits";
 import { useWs } from "./ctx";
 
-type Member = { id: string; name: string; email: string; title: string; org_role: OrgRole; deactivated: boolean; provider: string; last_active: string | null; created_at: string | null };
-type Invite = { id: string; email: string; org_role: OrgRole; status: "pending" | "expired" | "accepted"; invited_by: string; channels: string[]; created_at: string | null; expires_at: string | null; accepted_at: string | null; delivery: Delivery };
+type Member = {
+  id: string; name: string; email: string; title: string; org_role: OrgRole; deactivated: boolean; provider: string; last_active: string | null; created_at: string | null;
+  /** guests: access ran out (an admin extends it) */
+  expired?: boolean;
+  guest?: GuestAccess | null;
+  until?: string | null;
+  ended_at?: string | null;
+  /** other workspaces this person also belongs to (e.g. their own company's) */
+  other_workspaces?: number;
+};
+type Invite = {
+  id: string; email: string; org_role: OrgRole; status: "pending" | "expired" | "accepted"; invited_by: string; channels: string[]; created_at: string | null;
+  expires_at: string | null; accepted_at: string | null; delivery: Delivery; guest?: GuestAccess; access_days?: number | null; access_until?: string | null;
+};
 type ChannelRow = { id: string; name: string; visibility: string; members: number; owners: string[]; created_by: string; last_activity: string | null; ai_excluded: boolean };
 type AuditRow = { ts: string | null; actor: string; action: string; target: string; meta: Record<string, unknown> };
 type Tab = "impact" | "members" | "invites" | "channels" | "workspace" | "audit";
@@ -34,6 +46,9 @@ const ACTION_LABEL: Record<string, string> = {
   "member.role_changed": "changed role of",
   "member.deactivated": "deactivated",
   "member.reactivated": "reactivated",
+  "member.guest_access": "changed guest access for",
+  "member.access_expired": "guest access ended for",
+  "user.switched_workspace": "switched workspace",
   "channel.created": "created channel",
   "channel.deleted": "deleted channel",
   "channel.deleted_by_admin": "deleted channel (admin)",
@@ -123,8 +138,13 @@ function MembersTab() {
     }
     reload();
   }
+  const [editing, setEditing] = useState<string | null>(null);
   async function active(m: Member, on: boolean) {
-    if (!on && !confirm(`Deactivate ${m.name}? They're signed out everywhere and can't sign back in. Their messages stay.`)) return;
+    const elsewhere = (m.other_workspaces ?? 0) > 0;
+    const ask = elsewhere
+      ? `Remove ${m.name} from ${account.org.name}? They leave its channels and chats here, and keep their other Saathi workspace. Their messages stay.`
+      : `Deactivate ${m.name}? They're signed out everywhere and can't sign back in. Their messages stay.`;
+    if (!on && !confirm(ask)) return;
     try {
       await api(`/api/admin/members/${m.id}/active`, { json: { active: on } });
       toast(on ? `${m.name} reactivated.` : `${m.name} deactivated.`);
@@ -150,11 +170,12 @@ function MembersTab() {
         </p>
       </div>
       <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="border-b border-border text-left text-xs text-muted">
             <tr>
               <th className="px-4 py-2.5 font-semibold">Person</th>
               <th className="px-3 py-2.5 font-semibold">Role</th>
+              <th className="px-3 py-2.5 font-semibold">Access</th>
               <th className="px-3 py-2.5 font-semibold">Last active</th>
               <th className="px-3 py-2.5 font-semibold">Sign-in</th>
               <th className="px-3 py-2.5 font-semibold">
@@ -166,7 +187,8 @@ function MembersTab() {
             {list.map((m) => {
               const locked = m.id === uid || (m.org_role === "owner" && !owner);
               return (
-                <tr key={m.id} className={clsx("border-b border-border last:border-b-0", m.deactivated && "opacity-55")}>
+                <Fragment key={m.id}>
+                <tr className={clsx("border-b border-border last:border-b-0", (m.deactivated || m.expired) && "opacity-60")}>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2.5">
                       <Avatar name={m.name ?? "?"} size={30} />
@@ -178,6 +200,11 @@ function MembersTab() {
                           {m.email}
                           {m.title && ` · ${m.title}`}
                         </div>
+                        {(m.other_workspaces ?? 0) > 0 && (
+                          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted" title="They also use Saathi in their own organisation's workspace and switch between them">
+                            <Building2 size={11} aria-hidden /> Also in {m.other_workspaces} other workspace{m.other_workspaces === 1 ? "" : "s"}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -197,9 +224,28 @@ function MembersTab() {
                       {!owner && m.org_role === "owner" && <option value="owner">Owner</option>}
                     </select>
                   </td>
+                  <td className="px-3 py-2.5">
+                    {m.org_role === "guest" && !m.deactivated ? (
+                      <button onClick={() => setEditing(editing === m.id ? null : m.id)} className="text-left text-xs hover:underline" aria-expanded={editing === m.id}>
+                        <span className={clsx("block font-medium", m.expired ? "text-rust" : "text-ink")}>
+                          {m.expired ? `Ended ${shortDate(m.ended_at ?? m.until)}` : m.until ? `Until ${shortDate(m.until)}` : "No end date"}
+                        </span>
+                        <span className="block text-muted">
+                          {[m.guest?.dm ? "Direct messages" : "Channels only", m.guest?.ai ? "Saathi" : "No Saathi"].join(" · ")}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted">{m.deactivated ? "—" : "Full"}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-muted">{m.deactivated ? "Deactivated" : ago(m.last_active)}</td>
                   <td className="px-3 py-2.5 text-muted">{m.provider === "google.com" ? "Google" : m.provider === "password" ? "Email" : "Directory"}</td>
                   <td className="px-3 py-2.5 text-right">
+                    {!locked && m.expired && !m.deactivated && (
+                      <button onClick={() => setEditing(m.id)} className="mr-1 h-8 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-hover">
+                        Extend
+                      </button>
+                    )}
                     {!locked &&
                       (m.deactivated ? (
                         <button onClick={() => active(m, true)} className="h-8 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-hover">
@@ -207,20 +253,175 @@ function MembersTab() {
                         </button>
                       ) : (
                         <button onClick={() => active(m, false)} className="flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-rust hover:bg-rust-soft">
-                          <UserX size={13} /> Deactivate
+                          <UserX size={13} /> {(m.other_workspaces ?? 0) > 0 ? "Remove" : "Deactivate"}
                         </button>
                       ))}
                   </td>
                 </tr>
+                {editing === m.id && m.org_role === "guest" && !m.deactivated && (
+                  <tr className="border-b border-border bg-canvas/60">
+                    <td colSpan={6} className="px-4 py-3">
+                      <GuestEditor
+                        m={m}
+                        onDone={() => {
+                          setEditing(null);
+                          reload();
+                        }}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
       <p className="mt-3 text-xs text-muted">
-        Owners manage owners and admins. Guests only see the channels they&rsquo;re invited to. Role changes and deactivations sign the person out and are recorded in the audit log.
+        Owners manage owners and admins. Guests only see the channels they&rsquo;re invited to; click a guest&rsquo;s access to change what else they may do and until when.
+        Someone who also uses Saathi elsewhere is only removed from this workspace. Every change is recorded in the audit log.
       </p>
     </>
+  );
+}
+
+const shortDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** How long a guest's access lasts: N days (from joining, or from now when editing), until a date, or no end date. */
+type Duration = { kind: "days"; days: number } | { kind: "date"; date: string } | { kind: "none" };
+
+function DurationPicker({ value, onChange, keep }: { value: Duration | null; onChange: (d: Duration | null) => void; keep?: string }) {
+  const chip = (on: boolean) => clsx("h-8 rounded-lg border px-2.5 text-xs", on ? "border-brand bg-brand-soft font-semibold text-brand" : "border-border bg-surface hover:bg-hover");
+  const [minDay] = useState(() => isoDay(new Date(Date.now() + 86_400_000)));
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Access ends">
+        {keep && (
+          <button type="button" role="radio" aria-checked={value === null} onClick={() => onChange(null)} className={chip(value === null)}>
+            {keep}
+          </button>
+        )}
+        {[7, 30, 90].map((d) => (
+          <button key={d} type="button" role="radio" aria-checked={value?.kind === "days" && value.days === d} onClick={() => onChange({ kind: "days", days: d })} className={chip(value?.kind === "days" && value.days === d)}>
+            {d} days
+          </button>
+        ))}
+        <button type="button" role="radio" aria-checked={value?.kind === "date"} onClick={() => onChange({ kind: "date", date: value?.kind === "date" ? value.date : "" })} className={chip(value?.kind === "date")}>
+          Pick a date
+        </button>
+        <button type="button" role="radio" aria-checked={value?.kind === "none"} onClick={() => onChange({ kind: "none" })} className={chip(value?.kind === "none")}>
+          No end date
+        </button>
+      </div>
+      {value?.kind === "date" && (
+        <input
+          type="date"
+          min={minDay}
+          value={value.date}
+          onChange={(e) => onChange({ kind: "date", date: e.target.value })}
+          aria-label="Access ends on"
+          className="mt-2 h-9 rounded-lg border border-border bg-surface px-2 text-sm outline-none focus:border-brand"
+        />
+      )}
+    </div>
+  );
+}
+
+/** What each role can do, in plain words, with the guest's two switches. */
+function RoleAccess({ role, dm, ai, setDm, setAi, editing }: { role: OrgRole; dm: boolean; ai: boolean; setDm: (v: boolean) => void; setAi: (v: boolean) => void; editing?: boolean }) {
+  const yes = (t: string) => (
+    <li className="flex gap-2">
+      <Check size={14} className="mt-0.5 shrink-0 text-moss" aria-hidden /> <span>{t}</span>
+    </li>
+  );
+  if (role !== "guest")
+    return (
+      <ul className="space-y-1 rounded-lg bg-canvas px-3 py-2.5 text-xs text-ink/80" aria-label="What they can do">
+        {yes("See everyone in the workspace, join public channels and chat with anyone")}
+        {yes("Create channels (unless you limit that to admins) and use Saathi and every feature: Research, Quality, Live, Decisions")}
+        {role === "admin" && yes("Manage people, invites, channels and workspace settings in this admin console")}
+      </ul>
+    );
+  return (
+    <div className="space-y-2 rounded-lg bg-canvas px-3 py-2.5 text-xs text-ink/80" aria-label="What a guest can do">
+      <ul className="space-y-1">
+        {yes(editing ? "Read and post in their channels, including everything already posted there" : "Read and post in the channels you pick below, including everything already posted there")}
+        {yes("See only the people in those channels")}
+      </ul>
+      <label className="flex items-center gap-3 rounded-lg bg-surface px-2.5 py-2">
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-ink">Message people directly</span>
+          <span className="block text-muted">Direct and group chats with people from their channels</span>
+        </span>
+        <Switch on={dm} onChange={setDm} label="Guest can message people directly" />
+      </label>
+      <label className="flex items-center gap-3 rounded-lg bg-surface px-2.5 py-2">
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-ink">Use Saathi (AI)</span>
+          <span className="block text-muted">Ask questions and summarise chats; answers come only from their channels</span>
+        </span>
+        <Switch on={ai} onChange={setAi} label="Guest can use Saathi" />
+      </label>
+      <p className="flex gap-2 text-muted">
+        <X size={14} className="mt-0.5 shrink-0 text-rust" aria-hidden />
+        <span>
+          Never: create or browse channels, add people, see your company directory, or use Research, Live meetings, Quality &amp; plant records, the drawing register, decisions or
+          connected Google apps.
+        </span>
+      </p>
+    </div>
+  );
+}
+
+/** Change a guest's extras and end date; a new date for access that ran out gives it back (same channels as before). */
+function GuestEditor({ m, onDone }: { m: Member; onDone: () => void }) {
+  const { toast } = useWs();
+  const [dm, setDm] = useState(m.guest?.dm ?? true);
+  const [ai, setAi] = useState(m.guest?.ai ?? true);
+  const [dur, setDur] = useState<Duration | null>(m.expired ? { kind: "days", days: 30 } : null);
+  const [busy, setBusy] = useState(false);
+  async function save(endNow = false) {
+    if (endNow && !confirm(`End ${m.name}'s access now? They leave this workspace's channels; you can extend it again later.`)) return;
+    setBusy(true);
+    try {
+      const body = endNow
+        ? { until: null, days: null, end_now: true }
+        : { dm, ai, ...(dur?.kind === "days" ? { days: dur.days } : dur?.kind === "date" ? { until: dur.date } : dur?.kind === "none" ? { no_limit: true } : {}) };
+      const r = await api<{ restored: boolean }>(`/api/admin/members/${m.id}/guest`, { json: body });
+      toast(endNow ? `${m.name}'s access ended.` : r.restored ? `${m.name} has access again.` : "Guest access saved.");
+      onDone();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
+      <div className="space-y-2">
+        <p className="text-xs font-semibold">What {m.name.split(" ")[0]} can do besides their channels</p>
+        <RoleAccess role="guest" dm={dm} ai={ai} setDm={setDm} setAi={setAi} editing />
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold">{m.expired ? "Give access again for" : "Access ends"}</p>
+        <DurationPicker value={dur} onChange={setDur} keep={m.expired ? undefined : m.until ? `Keep ${shortDate(m.until)}` : "Keep no end date"} />
+        <p className="text-xs text-muted">Days count from today. They see the date in their workspace switcher.</p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button onClick={() => save()} disabled={busy || (dur?.kind === "date" && !dur.date)} className="flex h-9 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-40">
+            {busy && <Loader2 size={14} className="animate-spin" />} {m.expired ? "Give access again" : "Save"}
+          </button>
+          {!m.expired && (
+            <button onClick={() => save(true)} disabled={busy} className="h-9 rounded-lg px-3 text-sm font-semibold text-rust hover:bg-rust-soft disabled:opacity-40">
+              End access now
+            </button>
+          )}
+          <button onClick={onDone} className="h-9 rounded-lg px-3 text-sm text-muted hover:bg-hover">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -247,6 +448,9 @@ function InvitesTab() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgRole>("member");
   const [channels, setChannels] = useState<string[]>([]);
+  const [gdm, setGdm] = useState(true);
+  const [gai, setGai] = useState(true);
+  const [dur, setDur] = useState<Duration | null>({ kind: "days", days: 30 });
   const [busy, setBusy] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedLink | null>(null);
   const mail = data?.mail ?? false;
@@ -264,7 +468,10 @@ function InvitesTab() {
     setBusy(sendEmail ? "send" : "link");
     try {
       const r = await api<{ path: string; again: boolean; note: string; delivery: Delivery }>("/api/admin/invites", {
-        json: { email, org_role: role, channel_ids: channels.filter((id) => myChannels.some((c) => c.id === id)), send_email: sendEmail },
+        json: {
+          email, org_role: role, channel_ids: channels.filter((id) => myChannels.some((c) => c.id === id)), send_email: sendEmail,
+          ...(role === "guest" ? { guest_dm: gdm, guest_ai: gai, access_days: dur?.kind === "days" ? dur.days : null, access_until: dur?.kind === "date" ? dur.date : null } : {}),
+        },
       });
       setIssued({ email: email.trim().toLowerCase(), url: location.origin + r.path, delivery: r.delivery, note: r.note });
       toast(r.delivery?.status === "sent" ? `Invite emailed to ${email.trim()}.` : r.again ? "Invite updated." : "Invite created. Share the link below.");
@@ -294,7 +501,7 @@ function InvitesTab() {
     }
   }
 
-  const ready = email.includes("@") && !(role === "guest" && !channels.length);
+  const ready = email.includes("@") && !(role === "guest" && (!channels.length || (dur?.kind === "date" && !dur.date)));
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
       <section className="min-w-0 space-y-4">
@@ -319,9 +526,17 @@ function InvitesTab() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted">
-              {role === "guest" ? "Guests (vendors, contractors) see only the channels below, including everything already posted in them. Pick at least one." : role === "admin" ? "Admins can manage people, invites and channels." : "Members can find public channels and chat with anyone in the workspace."}
-            </p>
+            <RoleAccess role={role} dm={gdm} ai={gai} setDm={setGdm} setAi={setGai} />
+            {role === "guest" && (
+              <div>
+                <p className="text-sm font-medium">Access ends</p>
+                <DurationPicker value={dur} onChange={setDur} />
+                <p className="mt-1 text-xs text-muted">
+                  {dur?.kind === "days" ? `${dur.days} days from when they join. ` : ""}You can extend it, shorten it or end it any time under Members.
+                  {" "}If they already use Saathi at their own company, they keep that workspace and switch between the two.
+                </p>
+              </div>
+            )}
             {(role === "guest" || myChannels.length > 0) && (
               <div>
                 <p className="text-sm font-medium">Add to channels {role !== "guest" && <span className="font-normal text-muted">(optional)</span>}</p>
@@ -374,6 +589,10 @@ function InvitesTab() {
                     <div className="truncate text-xs text-muted">
                       {ROLE_LABEL[i.org_role]} · by {i.invited_by}
                       {i.channels.length > 0 && ` · ${i.channels.join(", ")}`}
+                      {i.org_role === "guest" &&
+                        ` · ${i.access_until ? `until ${shortDate(i.access_until)}` : i.access_days ? `${i.access_days} days` : "no end date"}` +
+                          (i.guest && !i.guest.dm ? " · channels only" : "") +
+                          (i.guest && !i.guest.ai ? " · no Saathi" : "")}
                     </div>
                   </div>
                   <span className={clsx("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", i.status === "accepted" ? "bg-moss-soft text-moss" : i.status === "expired" ? "bg-rust-soft text-rust" : "bg-saffron-soft text-saffron-ink")}>

@@ -502,7 +502,9 @@ def detect_questions(user: dict, title: str, tail: str, line: str) -> list[TextQ
 
 def _vocabulary(org_id: str, uid: str) -> list[str]:
     """Names, drawing numbers and labels the recogniser should spell right (custom vocabulary, ≤100 terms)."""
-    terms = [s.get("name") for s in db.collection("users").where(filter=FieldFilter("org_id", "==", org_id)).stream() if s.get("name")]
+    from .workspaces import org_people
+
+    terms = [d.get("name") for d in org_people(org_id).values() if d.get("name")]
     terms += [s.get("drawing_no") for s in db.collection("drawings").where(filter=FieldFilter("org_id", "==", org_id)).stream() if s.get("drawing_no")]
     terms += [k.get("label") for k in db.collection("knowledge").where(filter=FieldFilter("uid", "==", uid)).stream() if k.get("label")]
     org = db.collection("orgs").document(org_id).get().to_dict() or {}

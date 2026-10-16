@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { enablePush, pushState, type PushState } from "@/lib/push";
 import { dueLabel, toDate } from "@/lib/format";
 import type { Notice, Task } from "@/lib/types";
-import { useWs } from "./ctx";
+import { guestCan, useWs } from "./ctx";
 import { NeedsYou } from "./NeedsYou";
 import { TourCard } from "./ProductTour";
 import { TaskRow } from "./Tasks";
@@ -110,9 +110,11 @@ export function MyDayView({ tasks, notices }: { tasks: Task[]; notices: Notice[]
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} data-tour="brief-me" className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
-              <Radar size={16} className="text-white" /> Brief me
-            </button>
+            {guestCan(account, "ai") && (
+              <button onClick={() => open({ kind: "assistant", prompt: "What did I miss in the last 24 hours?" })} data-tour="brief-me" className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
+                <Radar size={16} className="text-white" /> Brief me
+              </button>
+            )}
             {account.org.settings.voice_us && account.org_role !== "guest" && (
               <button onClick={() => dialog("voice")} className="flex h-10 items-center gap-2 rounded-lg bg-ink px-3.5 text-sm font-semibold text-white hover:bg-ink-3">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>

@@ -143,15 +143,17 @@ def _public(kid: str, k: dict) -> dict:
 
 @router.get("/api/knowledge")
 def list_items(user=Depends(current_user)):
-    rows = [_public(s.id, s.to_dict()) for s in db.collection("knowledge").where(filter=FieldFilter("uid", "==", user["uid"])).stream()]
+    rows = [_public(s.id, s.to_dict()) for s in db.collection("knowledge").where(filter=FieldFilter("uid", "==", user["uid"])).stream()
+            if s.to_dict().get("org_id") in (None, "", user["org_id"])]
     rows.sort(key=lambda r: r["created_at"] or "", reverse=True)
     return rows
 
 
 @router.post("/api/knowledge")
 async def add_item(bg: BackgroundTasks, file: UploadFile = File(...), label: str = Form(""), user=Depends(current_user)):
-    from .main import rate_limit
+    from .main import rate_limit, require_ai
 
+    require_ai(user)
     rate_limit(user["uid"], "knowledge", 20)
     name = (file.filename or "file").strip()[:120]
     ext = ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
@@ -258,8 +260,9 @@ class WikiIn(BaseModel):
 
 @router.post("/api/knowledge/wiki")
 def wiki(body: WikiIn, user=Depends(current_user)):
-    from .main import rate_limit
+    from .main import rate_limit, require_ai
 
+    require_ai(user)
     rate_limit(user["uid"], "wiki", 6)
     label = _label(body.label)
     items = [(s.id, s.to_dict()) for s in db.collection("knowledge").where(filter=FieldFilter("uid", "==", user["uid"])).stream()

@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { STATUS_META, presence, statusText } from "@/lib/format";
 import type { ChannelSummary } from "@/lib/types";
 import { RoleBadge, UserAvatar } from "./bits";
-import { useWs } from "./ctx";
+import { guestCan, useWs } from "./ctx";
 
 /** Shown when Chat is opened without a conversation selected (and as onboarding when you have none yet). */
 export function ChatHome({ empty }: { empty: boolean }) {
@@ -62,9 +62,11 @@ export function ChatHome({ empty }: { empty: boolean }) {
             {empty ? `Message a colleague at ${account.org.name}, or join a channel to follow a team or project.` : "Pick a conversation on the left, or start a new one."}
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <button onClick={() => dialog("new-chat")} className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
-              <MessageSquarePlus size={16} /> New chat
-            </button>
+            {guestCan(account, "dm") && (
+              <button onClick={() => dialog("new-chat")} className="flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong">
+                <MessageSquarePlus size={16} /> New chat
+              </button>
+            )}
             {!guest && (
               <>
                 <button onClick={() => dialog("new-channel")} className="flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-semibold hover:bg-hover">

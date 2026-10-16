@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { chatTitle, isUnread, timeShort } from "@/lib/format";
 import type { Chat, NotifyLevel, UserSettings } from "@/lib/types";
 import { ChatIcon, Menu } from "./bits";
-import { useWs, type View } from "./ctx";
+import { guestCan, useWs, type View } from "./ctx";
 import { LogoMark } from "./Logo";
 
 export type RailKey = "home" | "activity" | "chat" | "assistant" | "tasks" | "quality" | "decisions" | "live" | "insights" | "admin" | "gmail" | "calendar" | "drive";
@@ -27,7 +27,7 @@ export function notifyLevel(chat: Chat, settings: UserSettings): NotifyLevel {
 }
 
 /** Teams-style app bar: vertical on desktop, bottom navigation on phones. */
-export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect, mobile, admin, connected = [], emailPromises = 0, openRecords = 0, guest = false }: {
+export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect, mobile, admin, connected = [], emailPromises = 0, openRecords = 0, guest = false, ai = true }: {
   unreadChats: number;
   unreadAlerts: number;
   openTasks: number;
@@ -39,12 +39,14 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
   emailPromises?: number;
   openRecords?: number;
   guest?: boolean;
+  /** false for a guest whose access doesn't include Saathi */
+  ai?: boolean;
 }) {
   const all: { key: RailKey; label: string; icon: typeof Bell; badge?: number; dot?: boolean }[] = [
     { key: "home", label: "My Day", icon: Sun },
     { key: "activity", label: "Activity", icon: Bell, badge: unreadAlerts },
     { key: "chat", label: "Chat", icon: MessageSquare, badge: unreadChats },
-    { key: "assistant", label: "Saathi", icon: Sparkles },
+    ...(ai ? [{ key: "assistant" as const, label: "Saathi", icon: Sparkles }] : []),
     { key: "tasks", label: "Tasks", icon: ListTodo, badge: openTasks, dot: true },
     ...(!guest ? [{ key: "quality" as const, label: "Quality", icon: Gavel, badge: openRecords, dot: true }] : []),
     { key: "decisions", label: "Decisions", icon: Workflow },
@@ -239,6 +241,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
             <Compass size={17} />
           </button>
         )}
+        {guestCan(account, "dm") && (
         <Menu
           label="New"
           align="right"
@@ -261,6 +264,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
                 ]
           }
         />
+        )}
       </div>
 
       <div className="flex gap-1.5 px-4 pb-2" role="group" aria-label="Filter">
@@ -277,6 +281,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
       </div>
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-3" aria-label="Conversations">
+        {guestCan(account, "ai") && (
         <button
           onClick={() => go({ kind: "assistant" })}
           aria-current={assistantActive ? "page" : undefined}
@@ -288,6 +293,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
             <span className="block truncate text-xs text-muted">Your AI colleague · search, catch up, remind</span>
           </span>
         </button>
+        )}
 
         {section("favorites", "Favorites", favorites)}
         {section(
@@ -309,7 +315,7 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
           "chats",
           "Chats",
           chats,
-          filter === "all" || filter === "chats" ? (
+          (filter === "all" || filter === "chats") && guestCan(account, "dm") ? (
             <li>
               <button onClick={() => dialog("new-chat")} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted hover:bg-hover hover:text-ink">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-[#c5cad3]" aria-hidden>

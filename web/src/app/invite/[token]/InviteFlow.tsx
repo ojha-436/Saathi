@@ -23,6 +23,10 @@ type Invite = {
   channels?: string[];
   expires_at?: string;
   account?: "none" | "password" | "google" | "both";
+  /** guests: what else they may do, and how long access lasts after joining */
+  guest?: { dm: boolean; ai: boolean };
+  access_days?: number | null;
+  access_until?: string | null;
 };
 /** Accept refusals the page handles itself (the rest are shown as an error line). */
 type Problem = { code: "move_required" | "other_workspace"; message: string; workspace?: string };
@@ -80,11 +84,11 @@ export function InviteFlow({ token }: { token: string }) {
   useEffect(() => onAuth(setUser), []);
 
   /** Joins the workspace with the signed-in account. `createdHere`: an account this page just made is removed again on failure. */
-  async function accept(opts: { move?: boolean; createdHere?: boolean } = {}): Promise<boolean> {
+  async function accept(opts: { move?: boolean; keep?: boolean; createdHere?: boolean } = {}): Promise<boolean> {
     const res = await fetch(`${apiUrl()}/api/invites/${encodeURIComponent(token)}/accept`, {
       method: "POST",
       headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ move: !!opts.move, name: name.trim() }),
+      body: JSON.stringify({ move: !!opts.move, keep: !!opts.keep, name: name.trim() }),
     });
     if (res.ok) {
       await reloadUser().catch(() => {});
@@ -183,6 +187,22 @@ export function InviteFlow({ token }: { token: string }) {
             ))}
           </ul>
         )}
+        {role === "guest" && invite.guest && (
+          <ul className="mt-3 space-y-1 border-t border-border pt-2.5 text-xs text-ink/80" aria-label="Your guest access">
+            <li>
+              {invite.guest.dm ? "✓ You can post in these channels and message the people in them directly." : "✓ You can post in these channels. Direct messages aren't included."}
+            </li>
+            <li>{invite.guest.ai ? "✓ You can ask Saathi (AI) about them." : "✗ Saathi (AI) isn't included."}</li>
+            <li>
+              {invite.access_until
+                ? `Your access lasts until ${day(invite.access_until)}.`
+                : invite.access_days
+                  ? `Your access lasts ${invite.access_days} days from when you join.`
+                  : "Your access has no end date."}{" "}
+              Already use Saathi at your company? You keep that workspace and switch between the two.
+            </li>
+          </ul>
+        )}
       </div>
       <p className="mt-3 flex items-start gap-1.5 text-xs text-muted">
         <Lock size={13} className="mt-px shrink-0" aria-hidden />
@@ -207,15 +227,18 @@ export function InviteFlow({ token }: { token: string }) {
         <div className="mt-6 rounded-xl border border-border p-4" role="alert">
           {problem.code === "move_required" ? (
             <>
-              <h3 className="font-semibold">Move your account to {invite.workspace}?</h3>
+              <h3 className="font-semibold">You already have a workspace</h3>
               <p className="mt-1.5 text-sm text-muted">
-                {email} already has its own workspace{problem.workspace ? <>, <b className="text-ink">{problem.workspace}</b>,</> : ""} that nobody else uses. A Saathi
-                account belongs to one workspace, so joining {invite.workspace} closes that one and you lose access to what&rsquo;s in it.
+                {email} has its own workspace{problem.workspace ? <>, <b className="text-ink">{problem.workspace}</b>,</> : ""} that nobody else uses. Keep it and switch between
+                the two from your profile menu, or move your account to {invite.workspace} and close the empty one.
               </p>
               {errorBox}
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <button onClick={() => run("move", () => accept({ move: true }))} disabled={!!busy} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-60">
-                  {busy === "move" && <Loader2 size={15} className="animate-spin" />} Move my account and join
+                <button onClick={() => run("keep", () => accept({ keep: true }))} disabled={!!busy} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-60">
+                  {busy === "keep" && <Loader2 size={15} className="animate-spin" />} Keep both and join
+                </button>
+                <button onClick={() => run("move", () => accept({ move: true }))} disabled={!!busy} className="flex h-10 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-canvas disabled:opacity-60">
+                  {busy === "move" && <Loader2 size={15} className="animate-spin" />} Move my account here
                 </button>
                 <button onClick={() => signOut().then(() => setProblem(null))} disabled={!!busy} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-canvas">
                   Not now

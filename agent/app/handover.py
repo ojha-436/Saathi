@@ -451,8 +451,11 @@ def tick() -> dict:
         h = s.to_dict()
         if h.get("signed_at") and now - h["signed_at"] >= ESCALATE_AFTER:
             org = db.collection("orgs").document(h["org_id"]).get().to_dict() or {}
-            admins = [u.id for u in db.collection("users").where(filter=FieldFilter("org_id", "==", h["org_id"])).stream()
-                      if u.to_dict().get("org_role") in ("owner", "admin") and not u.to_dict().get("deactivated")]
+            from .workspaces import org_people
+
+            admins = [u for u, d in org_people(h["org_id"]).items()
+                      if ((d.get("memberships") or {}).get(h["org_id"]) or {"org_role": d.get("org_role")}).get("org_role") in ("owner", "admin")
+                      and not d.get("deactivated")]
             targets = set((org.get("settings") or {}).get("handover_escalation") or admins) & set(h.get("members") or [])
             for t in targets or set(admins) & set(h.get("members") or []):
                 notify(t, "handover", f"Handover not acknowledged · {h['area']}",

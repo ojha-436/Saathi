@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import ai
 from .config import TZ, VISION_MODEL
-from .firebase import audit, bucket, current_user, db, get_chat_for_member, same_org, user_profile
+from .firebase import audit, bucket, current_user, db, get_chat_for_member, in_org, memberships_of, role_in, same_org, user_profile
 
 router = APIRouter()
 log = logging.getLogger("saathi.records")
@@ -127,11 +127,14 @@ def _counter(org_id: str, kind: str) -> str:
 
 def _quality_team(org_id: str) -> list[str]:
     org = db.collection("orgs").document(org_id).get().to_dict() or {}
-    team = [u for u in (org.get("settings") or {}).get("quality_team") or [] if user_profile(u).get("org_role") != "guest"]
+    team = [u for u in (org.get("settings") or {}).get("quality_team") or []
+            if in_org(user_profile(u), org_id) and role_in(user_profile(u), org_id) != "guest"]
     if team:
         return team
-    return [s.id for s in db.collection("users").where(filter=FieldFilter("org_id", "==", org_id)).stream()
-            if s.to_dict().get("org_role") in ("owner", "admin") and not s.to_dict().get("deactivated")]
+    from .workspaces import org_people
+
+    return [u for u, d in org_people(org_id).items()
+            if (memberships_of(d).get(org_id) or {}).get("org_role") in ("owner", "admin") and not d.get("deactivated")]
 
 
 def _enrich(user: dict, d: dict) -> dict:
@@ -148,6 +151,8 @@ def _enrich(user: dict, d: dict) -> dict:
     if d.get("heat_no"):
         heat = re.sub(r"\s", "", d["heat_no"]).upper()
         for s in db.collection("files").where(filter=FieldFilter("members", "array_contains", user["uid"])).stream():
+            if s.to_dict().get("org_id") not in (None, "", user["org_id"]):
+                continue
             doc = (s.to_dict().get("doc") or {})
             if doc.get("heat_no") and re.sub(r"\s", "", doc["heat_no"]).upper() == heat:
                 out["mtc"] = {"file_id": s.id, "name": s.get("name")}

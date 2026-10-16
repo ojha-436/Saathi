@@ -2,10 +2,11 @@ import logging
 import re
 import time
 import uuid
+from datetime import datetime
 
 from fastapi import Header, HTTPException
 
-from .config import FILES_BUCKET, LOCAL_MODE, PROJECT
+from .config import FILES_BUCKET, LOCAL_MODE, PROJECT, TZ
 
 if LOCAL_MODE:
     from .localdb import DistanceMeasure, FieldFilter, LocalBucket, LocalDB, Vector, firestore  # noqa: F401
@@ -143,6 +144,37 @@ PUBLIC_DOMAINS = {
 _PROFILE_TTL = 300  # profiles can be edited; other Cloud Run instances pick changes up within 5 minutes
 _profiles: dict[str, tuple[float, dict]] = {}
 
+# What a guest may do besides reading and writing in their channels (admins change these per guest)
+GUEST_DEFAULTS = {"dm": True, "ai": True}
+
+
+def memberships_of(data: dict) -> dict[str, dict]:
+    """Every workspace a person belongs or belonged to: org_id -> {org_role, guest, until, ended, ...}.
+    `org_id`/`org_role` on the user document are the workspace they're in right now. Accounts from before people could be in
+    several workspaces have only those two fields, which are then their one membership."""
+    out = {k: dict(v) for k, v in (data.get("memberships") or {}).items()}
+    if data.get("org_id") and data["org_id"] not in out:
+        out[data["org_id"]] = {"org_role": data.get("org_role") or "member"}
+    return out
+
+
+def membership_live(m: dict | None, at: datetime | None = None) -> bool:
+    """Not removed and not past its end date (guests can have one)."""
+    if not m or m.get("ended"):
+        return False
+    until = m.get("until")
+    return not until or until > (at or datetime.now(TZ))
+
+
+def in_org(profile: dict, org_id: str) -> bool:
+    return bool(org_id) and membership_live(profile.get("memberships", {}).get(org_id))
+
+
+def role_in(profile: dict, org_id: str) -> str:
+    """A person's role in a given workspace ("" if they aren't in it). Use this, not profile["org_role"], for anyone but the caller:
+    org_role is the role in whichever workspace that person has open right now."""
+    return (profile.get("memberships", {}).get(org_id) or {}).get("org_role", "")
+
 
 def user_profile(uid: str) -> dict:
     hit = _profiles.get(uid)
@@ -150,9 +182,12 @@ def user_profile(uid: str) -> dict:
         return hit[1]
     snap = db.collection("users").document(uid).get()
     data = snap.to_dict() or {}
+    ms = memberships_of(data)
+    here = ms.get(data.get("org_id", "")) or {}
     profile = {
         "uid": uid, "name": data.get("name", "Unknown"), "role": data.get("role", ""), "email": data.get("email", ""),
-        "org_id": data.get("org_id", ""), "org_role": data.get("org_role", ""), "deactivated": bool(data.get("deactivated")),
+        "org_id": data.get("org_id", ""), "org_role": here.get("org_role") or data.get("org_role", ""), "deactivated": bool(data.get("deactivated")),
+        "memberships": ms, "guest": {**GUEST_DEFAULTS, **(here.get("guest") or {})}, "until": here.get("until"),
     }
     if snap.exists:
         _profiles[uid] = (time.monotonic(), profile)
@@ -250,6 +285,10 @@ def user_from_token(token: str) -> dict:
             raise HTTPException(403, "Your account isn't part of a workspace yet. Ask your admin for an invite.")
     if profile["deactivated"]:
         raise HTTPException(401, "This account has been deactivated by your workspace admin.")
+    if not in_org(profile, profile["org_id"]):  # their guest access ran out, or an admin removed them, while it was open
+        from .workspaces import leave_ended
+
+        profile = leave_ended(profile)
     return profile
 
 
@@ -259,11 +298,12 @@ def require_admin(user: dict) -> None:
 
 
 def same_org(user: dict, uids: list[str]) -> list[str]:
-    """Keeps only active users from the caller's workspace (protects every member picker on the server side)."""
+    """Keeps only active users from the caller's workspace (protects every member picker on the server side). People who
+    belong to several workspaces count wherever they are a member, whichever workspace they have open."""
     out = []
     for u in dict.fromkeys(uids):
         p = user_profile(u)
-        if p["org_id"] == user["org_id"] and not p["deactivated"] and p["name"] != "Unknown":
+        if in_org(p, user["org_id"]) and not p["deactivated"] and p["name"] != "Unknown":
             out.append(u)
     return out
 

@@ -36,6 +36,7 @@ export function AppShell() {
       const msg = (e as Error).message;
       if (msg.startsWith("verify-email:")) setVerify(msg.slice(13).trim());
       else if (msg.startsWith("invite-expired:")) setFailed(msg.slice(15).trim());
+      else if (msg.startsWith("access-ended:")) setFailed(msg.slice(13).trim()); // a guest's access ran out or was removed
       else if (msg.includes("organisation") || msg.includes("deactivated")) {
         await signOut();
         router.replace(`/login?error=${msg.includes("deactivated") ? "deactivated" : "domain"}`);

@@ -1,21 +1,21 @@
 "use client";
 
 import clsx from "clsx";
-import { signInWithPassword, signOut } from "@/lib/auth";
-import { BarChart3, ChevronDown, FileSearch, LogOut, Search, Settings, ShieldCheck, Smile, Sparkles, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
+import { refreshToken, signInWithPassword, signOut } from "@/lib/auth";
+import { BarChart3, Building2, Check, ChevronDown, FileSearch, LogOut, Search, Settings, ShieldCheck, Smile, Sparkles, Mail, CalendarDays, DriveIcon, Gavel, Plus, Radar, Workflow } from "@/lib/icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { rememberKnowledge } from "@/lib/knowledgeNames";
 import { STATUS_META, isUnread, ownStatusText, presence, statusText } from "@/lib/format";
-import { useChats, useEmailItems, useEvents, useFiles, useMeetings, useNotices, useRecords, useRegister, useReads, useSettings, useTasks, useUsers } from "@/lib/hooks";
-import type { Account, DriveFile, StatusState } from "@/lib/types";
+import { useChats, useEmailItems, useEvents, useFiles, useInOrg, useMeetings, useNotices, useRecords, useRegister, useReads, useSettings, useTasks, useUsers } from "@/lib/hooks";
+import type { Account, DriveFile, StatusState, WorkspaceRef } from "@/lib/types";
 import { AdminView } from "./Admin";
 import { AssistantView } from "./AssistantView";
 import { ResearchView } from "./Research";
 import { VoiceSheet } from "./VoiceSheet";
 import { ProductTour, tourPristine } from "./ProductTour";
-import { Menu, type MenuItem, UserAvatar } from "./bits";
+import { Menu, type MenuItem, ROLE_LABEL, UserAvatar } from "./bits";
 
 const DEMO_PERSONAS = [
   { id: "prince", name: "Prince Kumar", role: "Design Engineer", note: "Design Engineer · Best place to start" },
@@ -27,7 +27,7 @@ const DEMO_PERSONAS = [
 ];
 import { ChatHome } from "./ChatHome";
 import { ChatView } from "./ChatView";
-import { Ctx, isAdmin, type DialogKind, type MeetingPrefill, type TaskPrefill, type View } from "./ctx";
+import { Ctx, guestCan, isAdmin, type DialogKind, type MeetingPrefill, type TaskPrefill, type View } from "./ctx";
 import { BrowseChannelsDialog, CommandPalette, CreateChannelDialog, NewChatDialog, ProfileDialog } from "./Dialogs";
 import { InsightsView } from "./InsightsView";
 import { LogoMark } from "./Logo";
@@ -47,21 +47,23 @@ const QUICK_STATUS: StatusState[] = ["available", "busy", "dnd", "away", "offlin
 export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const router = useRouter();
   const guest = account.org_role === "guest";
-  const userList = useUsers(account.org_id, guest);
-  const chatList = useChats(uid);
+  const org = account.org_id;
+  const userList = useUsers(org, guest);
+  // Someone in several workspaces sees only the open one's chats, files, tasks and alerts
+  const chatList = useInOrg(useChats(uid), org);
   const reads = useReads(uid);
-  const fileList = useFiles(uid);
-  const tasks = useTasks(uid);
-  const notices = useNotices(uid);
-  const meetingList = useMeetings(uid);
+  const fileList = useInOrg(useFiles(uid), org);
+  const tasks = useInOrg(useTasks(uid), org);
+  const notices = useInOrg(useNotices(uid), org);
+  const meetingList = useInOrg(useMeetings(uid), org);
   const settings = useSettings(uid);
-  const recordList = useRecords(guest ? undefined : uid);
+  const recordList = useInOrg(useRecords(guest ? undefined : uid), org);
   const records = useMemo(() => Object.fromEntries(recordList.map((r) => [r.id, r])), [recordList]);
   // Register refreshes when drawing files finish processing (their doc fields change)
   const registerVersion = fileList.filter((f) => f.doc?.drawing_no).map((f) => `${f.id}:${f.doc?.revision}`).join("|");
   const register = useRegister(!guest, registerVersion.length + registerVersion.split("|").length);
-  const events = useEvents(uid);
-  const emailList = useEmailItems(uid);
+  const events = useInOrg(useEvents(uid), org);
+  const emailList = useInOrg(useEmailItems(uid), org);
   const emails = useMemo(() => Object.fromEntries(emailList.filter((e) => (e as { provider?: string }).provider !== "drive").map((e) => [e.id, e])), [emailList]);
   const driveFiles = useMemo(
     () => Object.fromEntries(emailList.filter((e) => (e as { provider?: string }).provider === "drive").map((e) => [e.id, e as unknown as DriveFile])),
@@ -103,11 +105,61 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4500);
   }, []);
 
-  const open = useCallback((v: View) => {
-    setView(v);
-    setMobileList(false);
-    requestAnimationFrame(() => mainRef.current?.focus({ preventScroll: true }));
-  }, []);
+  // A guest's access can leave out Saathi or direct messages: every way in (rail, palette, "Ask Saathi" buttons) stops here
+  const canAI = guestCan(account, "ai");
+  const canDM = guestCan(account, "dm");
+  const open = useCallback(
+    (v: View) => {
+      if (v.kind === "assistant" && !canAI) {
+        toast("Saathi isn't part of your guest access. Ask the person who invited you if you need it.");
+        return;
+      }
+      setView(v);
+      setMobileList(false);
+      requestAnimationFrame(() => mainRef.current?.focus({ preventScroll: true }));
+    },
+    [canAI, toast],
+  );
+  const dialog = useCallback(
+    (k: DialogKind | null) => {
+      if (k === "new-chat" && !canDM) {
+        toast("Direct messages aren't part of your guest access. Write in your channels instead.");
+        return;
+      }
+      setDlg(k);
+    },
+    [canDM, toast],
+  );
+
+  // Someone in several workspaces: switching reopens the app with the other workspace's token claims
+  const workspaces = account.workspaces ?? [];
+  const switchTo = useCallback(
+    async (w: WorkspaceRef) => {
+      if (w.active) return;
+      toast(`Opening ${w.name}…`);
+      try {
+        await api("/api/me/workspace", { json: { org_id: w.id } });
+        await refreshToken();
+        window.location.reload();
+      } catch (e) {
+        toast((e as Error).message);
+      }
+    },
+    [toast],
+  );
+  const workspaceItems: MenuItem[] = workspaces.map((w) => ({
+    label: w.name,
+    icon: w.active ? Check : Building2,
+    hint: (w.active ? "Open · " : "") + ROLE_LABEL[w.org_role] + (w.until ? ` until ${new Date(w.until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""),
+    onSelect: () => switchTo(w),
+  }));
+  const shownNotice = useRef(false);
+  useEffect(() => {
+    if (account.notice && !shownNotice.current) {
+      shownNotice.current = true;
+      toast(account.notice);
+    }
+  }, [account.notice, toast]);
 
   const openRef = useCallback(
     (ref: string) => {
@@ -301,7 +353,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   return (
     <Ctx.Provider
       value={{
-        uid, account, me, users, chats, files, meetings, events, emails, driveFiles, records, register, settings, view, open, openRef, toast, dialog: setDlg,
+        uid, account, me, users, chats, files, meetings, events, emails, driveFiles, records, register, settings, view, open, openRef, toast, dialog,
         newTask: (p) => setTaskPrefill(p ?? {}), newMeeting: (p) => setMeetingPrefill(p ?? {}), showProfile: setProfileOf, showList: () => setMobileList(true), reads,
         startTour: () => setShowTour(true),
       }}
@@ -315,7 +367,21 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
           <span className="flex min-w-0 shrink-0 items-center gap-2 lg:w-[calc(68px+20rem-18px)]">
             <LogoMark size={28} />
             <span className="text-[15px] font-semibold tracking-tight">Saathi</span>
-            <span className="hidden truncate text-xs text-muted sm:inline">{account.org.name}</span>
+            {workspaces.length > 1 ? (
+              <Menu
+                label="Switch workspace"
+                className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted transition hover:bg-black/5 hover:text-ink sm:flex"
+                trigger={
+                  <>
+                    <span className="truncate">{account.org.name}</span>
+                    <ChevronDown size={12} className="shrink-0" aria-hidden />
+                  </>
+                }
+                items={workspaceItems}
+              />
+            ) : (
+              <span className="hidden truncate text-xs text-muted sm:inline">{account.org.name}</span>
+            )}
             {guest && <span className="rounded-full bg-saffron px-2 py-px text-[10px] font-bold text-ink">GUEST</span>}
           </span>
           <button
@@ -366,6 +432,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
               items={[
                 { label: me ? [me.name, me.role].filter(Boolean).join(" · ") : account.name, onSelect: () => setProfileOf(uid) },
                 "sep",
+                ...(workspaces.length > 1 ? [...workspaceItems, "sep" as const] : []),
                 ...QUICK_STATUS.map((s) => ({
                   label: STATUS_META[s].label + (s === "offline" ? " (appear offline)" : ""),
                   hint: myState === s ? "✓" : undefined,
@@ -400,7 +467,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <AppRail unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} emailPromises={emailPromises} openRecords={recordList.filter((r) => r.status !== "closed" && r.owner === uid).length} guest={guest} />
+          <AppRail unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} emailPromises={emailPromises} openRecords={recordList.filter((r) => r.status !== "closed" && r.owner === uid).length} guest={guest} ai={canAI} />
 
           {listPane && (
             <div className={clsx("w-full shrink-0 lg:block lg:w-80", mobileList ? "block" : "hidden")}>
@@ -410,7 +477,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
           <main id="workspace-main" ref={mainRef} tabIndex={-1} className={clsx("min-w-0 flex-1 flex-col bg-surface outline-none lg:flex", listPane && mobileList ? "hidden" : "flex")}>
             {view.kind === "home" && <MyDayView tasks={tasks} notices={notices} />}
-            {view.kind === "assistant" && <AssistantView tasks={tasks} prompt={view.prompt} onPromptUsed={() => setView({ kind: "assistant" })} />}
+            {view.kind === "assistant" && canAI && <AssistantView tasks={tasks} prompt={view.prompt} onPromptUsed={() => setView({ kind: "assistant" })} />}
             {view.kind === "research" && <ResearchView key={view.id ?? "research"} focusId={view.id} />}
             {view.kind === "insights" && <InsightsView />}
             {view.kind === "tasks" && <TasksView tasks={tasks} />}
@@ -438,7 +505,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
             <Plus size={18} /> Report
           </button>
         )}
-        <AppRail mobile unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} />
+        <AppRail mobile unreadChats={unreadChats} unreadAlerts={unreadAlerts} openTasks={openTasks} active={active} onSelect={selectRail} admin={admin} connected={connected} guest={guest} ai={canAI} />
 
         <div className="pointer-events-none fixed bottom-20 right-4 z-[70] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 lg:bottom-5" role="status" aria-live="polite">
           {toasts.map((t) => (

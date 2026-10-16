@@ -1,7 +1,7 @@
 "use client";
 
 import { collection, doc, limit, onSnapshot, orderBy, query, where, type Timestamp } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { getToken, isLocal } from "./auth";
 import { apiUrl, getDb } from "./firebase";
@@ -61,14 +61,16 @@ function useLive<T>(spec: Spec | null, key: string): T[] {
   return rows;
 }
 
-/** Workspace directory. Members get a live listener scoped to their workspace; guests get co-members from the API. */
+/** Workspace directory. Members get a live listener scoped to their workspace; guests get co-members from the API.
+ *  People who belong to several workspaces and have another one open aren't in the live listener (their profile's org_id is
+ *  that workspace), so members also fetch them from the API, with their role here. */
 export function useUsers(orgId?: string, guest?: boolean): UserProfile[] {
   const live = useLive<UserProfile>(orgId && !guest ? { path: "users", where: [["org_id", "==", orgId]] } : null, `users:${orgId}:${guest}`);
   const [fetched, setFetched] = useState<UserProfile[]>([]);
   useEffect(() => {
-    if (!orgId || !guest) return;
+    if (!orgId) return;
     let stop = false;
-    const load = () => api<UserProfile[]>("/api/users").then((r) => !stop && setFetched(r)).catch(() => {});
+    const load = () => api<UserProfile[]>(guest ? "/api/users" : "/api/users?others=1").then((r) => !stop && setFetched(r)).catch(() => {});
     load();
     const t = setInterval(load, 60_000);
     return () => {
@@ -76,7 +78,20 @@ export function useUsers(orgId?: string, guest?: boolean): UserProfile[] {
       clearInterval(t);
     };
   }, [orgId, guest]);
-  return guest ? fetched : live;
+  return useMemo(() => {
+    if (guest) return fetched;
+    const here = new Set(live.map((u) => u.id));
+    return [...live, ...fetched.filter((u) => !here.has(u.id))];
+  }, [guest, live, fetched]);
+}
+
+/** Live queries return a person's chats, tasks and alerts from every workspace they belong to: keep the open one's
+ *  (records from before workspaces were tagged have no org_id and always show). */
+export function useInOrg<T>(rows: T[], orgId?: string): T[] {
+  return useMemo(() => rows.filter((r) => {
+    const o = (r as { org_id?: string }).org_id;
+    return !o || !orgId || o === orgId;
+  }), [rows, orgId]);
 }
 
 export function useSettings(uid?: string): UserSettings {

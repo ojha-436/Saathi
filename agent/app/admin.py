@@ -6,9 +6,12 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import invites as inv, mailer
+from . import invites as inv, mailer, workspaces
 from .config import TZ
-from .firebase import audit, auth, current_user, db, FieldFilter, forget_profile, ORG_ROLES, PUBLIC_DOMAINS, require_admin, set_claims, user_profile
+from .firebase import (
+    GUEST_DEFAULTS, ORG_ROLES, PUBLIC_DOMAINS, FieldFilter, audit, auth, current_user, db, forget_profile, membership_live,
+    memberships_of, require_admin, role_in, set_claims, user_profile,
+)
 
 router = APIRouter(prefix="/api/admin")
 
@@ -19,10 +22,18 @@ def admin_user(user=Depends(current_user)) -> dict:
 
 
 def _member(uid: str, admin: dict) -> dict:
+    """Someone who is (or was) in the admin's workspace, with org_role = their role here."""
+    forget_profile(uid)
     p = user_profile(uid)
-    if p["org_id"] != admin["org_id"]:
+    if admin["org_id"] not in p["memberships"]:
         raise HTTPException(404, "Member not found")
-    return p
+    return {**p, "org_role": role_in(p, admin["org_id"])}
+
+
+def _only_here(p: dict, org_id: str) -> bool:
+    """True when this workspace is the person's only one: removing them then deactivates the whole account (as before);
+    otherwise only their access to this workspace ends."""
+    return not any(o != org_id and membership_live(m) for o, m in p["memberships"].items())
 
 
 def _ts(v):
@@ -31,12 +42,19 @@ def _ts(v):
 
 @router.get("/members")
 def members(admin=Depends(admin_user)):
+    org = admin["org_id"]
     rows = []
-    for s in db.collection("users").where(filter=FieldFilter("org_id", "==", admin["org_id"])).stream():
-        d = s.to_dict()
-        rows.append({"id": s.id, "name": d.get("name"), "email": d.get("email"), "title": d.get("role", ""), "org_role": d.get("org_role", "member"),
-                     "deactivated": bool(d.get("deactivated")), "provider": d.get("provider", ""), "last_active": _ts(d.get("last_active")),
-                     "created_at": _ts(d.get("created_at"))})
+    for uid, d in workspaces.org_people(org, include_ended=True).items():
+        ms = memberships_of(d)
+        m = ms.get(org) or {}
+        ended = (m.get("ended") or {}).get("reason")
+        expired = ended == "expired" or (not ended and bool(m.get("until")) and not membership_live(m))
+        rows.append({"id": uid, "name": d.get("name"), "email": d.get("email"), "title": d.get("role", ""), "org_role": m.get("org_role", "member"),
+                     "deactivated": bool(d.get("deactivated")) or ended == "removed", "expired": expired,
+                     "provider": d.get("provider", ""), "last_active": _ts(d.get("last_active")), "created_at": _ts(m.get("joined_at") or d.get("created_at")),
+                     "guest": {**GUEST_DEFAULTS, **(m.get("guest") or {})} if m.get("org_role") == "guest" else None,
+                     "until": _ts(m.get("until")), "ended_at": _ts((m.get("ended") or {}).get("at")),
+                     "other_workspaces": len([o for o, x in ms.items() if o != org and membership_live(x)])})
     order = {r: i for i, r in enumerate(ORG_ROLES)}
     rows.sort(key=lambda r: (r["deactivated"], order.get(r["org_role"], 9), (r["name"] or "").lower()))
     return rows
@@ -54,12 +72,24 @@ def set_role(uid: str, body: RoleIn, admin=Depends(admin_user)):
     if (target["org_role"] == "owner" or body.org_role == "owner") and admin["org_role"] != "owner":
         raise HTTPException(403, "Only an owner can change owners")
     if target["org_role"] == "owner" and body.org_role != "owner":
-        owners = db.collection("users").where(filter=FieldFilter("org_id", "==", admin["org_id"])).where(filter=FieldFilter("org_role", "==", "owner")).get()
+        owners = [u for u, d in workspaces.org_people(admin["org_id"]).items() if (memberships_of(d).get(admin["org_id"]) or {}).get("org_role") == "owner"]
         if len(owners) <= 1:
             raise HTTPException(400, "A workspace needs at least one owner")
-    db.collection("users").document(uid).update({"org_role": body.org_role})
-    set_claims(uid, admin["org_id"], body.org_role)
-    auth.revoke_refresh_tokens(uid)  # new role applies on the next sign-in/refresh
+    ref = db.collection("users").document(uid)
+    data = ref.get().to_dict() or {}
+    ms = memberships_of(data)
+    m = ms[admin["org_id"]]
+    m["org_role"] = body.org_role
+    if body.org_role == "guest":
+        m.setdefault("guest", dict(GUEST_DEFAULTS))
+    else:
+        m.pop("until", None)  # only guest access has an end date
+    update = {"memberships": ms, "access_next_end": workspaces._next_end(ms)}
+    if data.get("org_id") == admin["org_id"]:  # they have this workspace open: the token's role changes too
+        update["org_role"] = body.org_role
+        set_claims(uid, admin["org_id"], body.org_role)
+        auth.revoke_refresh_tokens(uid)  # new role applies on the next sign-in/refresh
+    ref.update(update)
     forget_profile(uid)
     audit(admin, "member.role_changed", uid, name=target["name"], old=target["org_role"], new=body.org_role)
     return {"ok": True}
@@ -76,6 +106,25 @@ def set_active(uid: str, body: ActiveIn, admin=Depends(admin_user)):
         raise HTTPException(400, "You can't deactivate yourself")
     if target["org_role"] == "owner" and admin["org_role"] != "owner":
         raise HTTPException(403, "Only an owner can deactivate an owner")
+    here = target["memberships"][admin["org_id"]]
+    ended = (here.get("ended") or {}).get("reason")
+    if body.active and (ended == "expired" or (not ended and not membership_live(here))):
+        raise HTTPException(400, "Their guest access ran out. Give it a new end date instead.")
+    if ended or not _only_here(target, admin["org_id"]):
+        # They use Saathi elsewhere too, or their access here had already ended: only this workspace changes
+        if body.active:
+            workspaces.restore(uid, admin["org_id"])
+        elif ended:  # access that ran out becomes a removal, so a later invite or reactivation is a deliberate choice
+            ref = db.collection("users").document(uid)
+            data = ref.get().to_dict() or {}
+            ms = memberships_of(data)
+            ms[admin["org_id"]]["ended"] = {**ms[admin["org_id"]]["ended"], "reason": "removed", "by_name": admin["name"]}
+            workspaces._save(ref, data, ms)
+            forget_profile(uid)
+        else:
+            workspaces.end(uid, admin["org_id"], "removed", by=admin)
+        audit(admin, "member.reactivated" if body.active else "member.deactivated", uid, name=target["name"], workspace_only=True)
+        return {"ok": True}
     try:
         auth.update_user(uid, disabled=not body.active)
         if not body.active:
@@ -96,6 +145,44 @@ class InviteIn(BaseModel):
     org_role: str = "member"
     channel_ids: list[str] = []
     send_email: bool = True
+    # guests only: what else they may do, and for how long after joining (days) or until a date (YYYY-MM-DD); neither = no limit
+    guest_dm: bool = True
+    guest_ai: bool = True
+    access_days: int | None = 30
+    access_until: str | None = None
+
+
+class GuestIn(BaseModel):
+    dm: bool | None = None
+    ai: bool | None = None
+    # one of: a number of days from now, a date (YYYY-MM-DD), or no_limit
+    days: int | None = None
+    until: str | None = None
+    no_limit: bool = False
+    end_now: bool = False  # ends access today; extending later gives back the same channels
+
+
+@router.post("/members/{uid}/guest")
+def guest_access(uid: str, body: GuestIn, admin=Depends(admin_user)):
+    """A guest's access: direct messages, Saathi, and the end date (extend, shorten, remove the limit)."""
+    target = _member(uid, admin)
+    if target["org_role"] != "guest":
+        raise HTTPException(400, "Only guests have these settings")
+    if (target["memberships"][admin["org_id"]].get("ended") or {}).get("reason") == "removed":
+        raise HTTPException(400, "Reactivate them first")
+    if body.end_now:
+        workspaces.end(uid, admin["org_id"], "expired", by=admin)
+        audit(admin, "member.guest_access", uid, name=target["name"], ended=True)
+        return {"ok": True, "restored": False}
+    until = "keep"
+    if body.no_limit:
+        until = None
+    elif body.days or body.until:
+        until = workspaces.access_until(body.days, body.until)
+    out = workspaces.set_guest_access(uid, admin["org_id"], dm=body.dm, ai=body.ai, until=until)
+    audit(admin, "member.guest_access", uid, name=target["name"], dm=body.dm, ai=body.ai,
+          until=None if until in ("keep", None) else until.isoformat(), no_limit=body.no_limit, restored=out["restored"])
+    return {"ok": True, **out}
 
 
 def _delivery(d: dict | None) -> dict | None:
@@ -112,7 +199,8 @@ def invites(admin=Depends(admin_user)):
             continue
         rows.append({"id": s.id, "email": inv.email_of(s), "org_role": d.get("org_role"), "status": "pending" if state == "valid" else state,
                      "invited_by": d.get("invited_by_name"), "channels": d.get("channel_names", []), "created_at": _ts(d.get("created_at")),
-                     "expires_at": _ts(d.get("expires_at")), "accepted_at": _ts(d.get("accepted_at")), "delivery": _delivery(d.get("delivery"))})
+                     "expires_at": _ts(d.get("expires_at")), "accepted_at": _ts(d.get("accepted_at")), "delivery": _delivery(d.get("delivery")),
+                     **(inv.guest_terms(d) if d.get("org_role") == "guest" else {})})
     open_ = sorted((r for r in rows if r["status"] != "accepted"), key=lambda r: r["created_at"] or "", reverse=True)
     done = sorted((r for r in rows if r["status"] == "accepted"), key=lambda r: r["accepted_at"] or "", reverse=True)
     return {"mail": mailer.enabled(), "mail_from": mailer.sender(), "invites": open_ + done}
@@ -141,14 +229,19 @@ def invite(body: InviteIn, admin=Depends(admin_user)):
     existing = db.collection("users").where(filter=FieldFilter("email", "==", email)).limit(1).get()
     if existing:
         u = existing[0].to_dict()
-        if u.get("org_id") == admin["org_id"]:
-            if u.get("deactivated"):
-                raise HTTPException(409, f"{u.get('name') or email} was deactivated in this workspace. Reactivate them in Members instead.")
+        ms = memberships_of(u)
+        here = ms.get(admin["org_id"])
+        if u.get("deactivated") and here:
+            raise HTTPException(409, f"{u.get('name') or email} was deactivated in this workspace. Reactivate them in Members instead.")
+        if membership_live(here):
             raise HTTPException(409, f"{u.get('name') or email} is already in this workspace. Change their role in Members, or add them to a channel from the channel itself.")
-        if inv.has_others(u.get("org_id", ""), existing[0].id):
-            raise HTTPException(409, f"{email} already uses Saathi with another organisation. A Saathi account belongs to one workspace, "
-                                     "so invite a different address for them (for example their work email).")
-        note = "They already have a Saathi account that nobody else uses. When they accept, Saathi asks them to move it here."
+        if here:
+            note = "Their earlier access here ended. When they accept, it starts again with these settings."
+        elif inv.has_others(u.get("org_id", ""), existing[0].id) or len([o for o, m in ms.items() if membership_live(m)]) > 1:
+            note = ("They already use Saathi with another organisation. They keep that workspace and get yours as well; "
+                    "they switch between them from their profile menu.")
+        else:
+            note = "They already have a Saathi account that nobody else uses. When they accept, they can move it here or keep both."
     names = []
     for cid in body.channel_ids:
         snap = db.collection("chats").document(cid).get()
@@ -173,6 +266,12 @@ def invite(body: InviteIn, admin=Depends(admin_user)):
     data = {"email": email, "email_norm": inv.norm_email(email), "org_id": admin["org_id"], "org_role": body.org_role,
             "channel_ids": body.channel_ids, "channel_names": names, "status": "pending", "invited_by": admin["uid"],
             "invited_by_name": admin["name"], "invited_by_email": admin.get("email", "")}
+    if body.org_role == "guest":
+        fixed = workspaces.access_until(None, body.access_until) if body.access_until else None
+        if not fixed and body.access_days is not None:
+            workspaces.access_until(body.access_days, None)  # validates the range
+        data.update({"guest": {"dm": body.guest_dm, "ai": body.guest_ai}, "access_until": fixed,
+                     "access_days": None if fixed else body.access_days})
     again = ref is not None
     if again:
         if body.send_email and inv.recently_emailed(ref.get().to_dict()):
@@ -303,7 +402,7 @@ def update_org(body: OrgIn, admin=Depends(admin_user)):
         from .firebase import same_org
 
         # same_org keeps guests; a guest on the Quality team would see every record and could approve spec limits
-        new_team = [u for u in same_org(admin, body.quality_team) if user_profile(u).get("org_role") != "guest"]
+        new_team = [u for u in same_org(admin, body.quality_team) if role_in(user_profile(u), admin["org_id"]) != "guest"]
         update["settings.quality_team"] = new_team
         team_set = set(new_team)
         for rsnap in db.collection("records").where(filter=FieldFilter("org_id", "==", admin["org_id"])).stream():

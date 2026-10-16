@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
 import { ArrowRight, Check, CheckCircle2, CircleDot, Compass, Gavel, Loader2, MessageSquare, Sparkles, Sun, X } from "@/lib/icons";
-import { useWs, type View } from "./ctx";
+import { guestCan, useWs, type View } from "./ctx";
 
 /* Guided tour. The page dims, the control being explained stays lit, and a card beside it says what it does.
    The first section is hands-on (ask Saathi a real question, then check where the answer came from); the rest
@@ -122,7 +122,8 @@ const STEPS: Step[] = [
   },
 ];
 
-const stepsFor = (guest: boolean) => STEPS.filter((s) => !s.staff || !guest);
+/** Guests skip Quality and Live; guests without Saathi skip the hands-on "Ask Saathi" section. */
+const stepsFor = (guest: boolean, ai = true) => STEPS.filter((s) => (!s.staff || !guest) && (ai || s.section !== "ask"));
 // Demo logins are shared by everyone trying the app, so their progress stays on this device only.
 const isDemoEmail = (email?: string) => !!email?.endsWith("@saathi.demo");
 const markTaken = () => api("/api/me/settings", { method: "POST", json: { walkthrough: true } }).catch(() => {});
@@ -206,7 +207,7 @@ export function TourCard() {
   const { uid, account, settings, startTour, toast } = useWs();
   const p = useProgress(uid);
   const demo = isDemoEmail(account.email);
-  const steps = stepsFor(account.org_role === "guest");
+  const steps = stepsFor(account.org_role === "guest", guestCan(account, "ai"));
   const started = p.seen.length > 0;
   // Finished or hidden here, or a fresh device for someone who already took the tour elsewhere
   if (!settings.loaded || p.done || p.hidden || (!started && settings.walkthrough && !demo)) return null;
@@ -330,7 +331,7 @@ function place(b: Box, h: number, vw: number, vh: number): { side: Side; top: nu
 export function ProductTour({ onClose }: { onClose: () => void }) {
   const { uid, account, view, open, toast } = useWs();
   const demo = isDemoEmail(account.email);
-  const [steps] = useState(() => stepsFor(account.org_role === "guest"));
+  const [steps] = useState(() => stepsFor(account.org_role === "guest", guestCan(account, "ai")));
   const [idx, setIdx] = useState(() => {
     const p = readProgress(uid);
     return p.done ? 0 : Math.min(Math.max(p.step, 0), steps.length - 1);

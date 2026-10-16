@@ -2,12 +2,15 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from . import ai
-from .firebase import db, DistanceMeasure, FieldFilter, Vector
+from .firebase import db, DistanceMeasure, FieldFilter, Vector, user_profile
 
 
 def user_chats(uid: str) -> dict[str, dict]:
+    """The caller's chats in the workspace they have open. Everything Saathi reads goes through this, so someone in two
+    workspaces never gets one company's content in the other's answers."""
+    org = user_profile(uid)["org_id"]
     q = db.collection("chats").where(filter=FieldFilter("members", "array_contains", uid))
-    return {s.id: {"id": s.id, **s.to_dict()} for s in q.stream()}
+    return {s.id: {"id": s.id, **s.to_dict()} for s in q.stream() if s.to_dict().get("org_id") in (None, "", org)}
 
 
 def _result(d: dict, score: float) -> dict:
@@ -56,7 +59,7 @@ def search(uid: str, query: str, k: int = 8, qv: list[float] | None = None) -> l
                 scored[snap.id] = (score, d)
 
     toks = ai.keywords(query)
-    org = next((d.get("org_id") for d in chats.values() if d.get("org_id")), None)
+    org = user_profile(uid)["org_id"]
     if toks and org:
         kq = (db.collection("chunks").where(filter=FieldFilter("org_id", "==", org))
               .where(filter=FieldFilter("keywords", "array_contains_any", toks[:30])).limit(40))
@@ -73,7 +76,7 @@ def search(uid: str, query: str, k: int = 8, qv: list[float] | None = None) -> l
     for score, d in scored.values():
         if d.get("source_type") in PERSONAL or str(d.get("chat_id", "")).startswith("meeting_"):
             # meeting participants are fixed when the summary is created; emails belong to the person who connected Gmail
-            if uid not in (d.get("members") or []):
+            if uid not in (d.get("members") or []) or d.get("org_id") not in (None, "", org):
                 continue
         elif d.get("chat_id") not in allowed or chats[d["chat_id"]].get("ai_excluded"):
             continue
