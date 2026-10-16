@@ -114,6 +114,7 @@ cd agent
 uv run python seed/make_pdfs.py   # synthetic PDFs (drawings Rev B/C/D, MTC, quote, inspection report)
 uv run python -m seed.seed        # full rebuild (wipes the workspace!)
 uv run python -m seed.reset       # fast reset: clears assistant chats, tasks, alerts and messages added after seeding
+uv run python -m seed.google_demo # sample Gmail, Calendar (Google Meet) and Drive for the shared demo logins; --remove deletes it
 ```
 
 ## Deploy (CI/CD)

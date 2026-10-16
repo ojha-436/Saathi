@@ -259,10 +259,12 @@ export type Connection = {
   provider: "google";
   email: string;
   services: ("calendar" | "gmail" | "drive")[];
-  status: "active" | "needs_reauth";
+  status: "active" | "needs_reauth" | "demo";
   error?: string | null;
   last_sync: string | null;
   stats: { events?: number; emails?: number; email_promises?: number; files?: number };
+  /** shared demo logins show fictional sample data instead of a real Google account */
+  demo?: boolean;
 };
 
 export type CalendarEvent = {
@@ -273,6 +275,8 @@ export type CalendarEvent = {
   location?: string;
   meet_url?: string | null;
   html_link?: string;
+  /** sample meeting on a shared demo login (its Meet link isn't real) */
+  demo_google?: boolean;
   attendee_emails: string[];
   attendee_uids: string[];
   private?: boolean;
