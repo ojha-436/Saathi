@@ -3,8 +3,9 @@
 import clsx from "clsx";
 import { ArrowRight, ArrowUp, BarChart3, ChevronDown, FileSearch, Handshake, History, Loader2, Radar, RotateCcw, ShieldCheck, Sparkles, Timer, Workflow } from "@/lib/icons";
 import { LogoMark } from "./Logo";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { clock, dayHeading, dueLabel } from "@/lib/format";
 import { useAssistant, useInOrg } from "@/lib/hooks";
 import type { AssistantMsg, Task } from "@/lib/types";
 import { useWs } from "./ctx";
@@ -169,13 +170,27 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
         )}
 
         <div className="mx-auto max-w-3xl space-y-6" aria-live="polite">
-          {messages.map((m) =>
-            m.role === "user" ? (
-              <div key={m.id} className="flex justify-end">
+          {messages.map((m, i) => {
+            // grouped by day, like the chats: "Today", "Yesterday", then the date; every message shows its time
+            const day = dayHeading(m.ts);
+            const newDay = !!day && day !== dayHeading(messages[i - 1]?.ts);
+            const at = m.ts ? <time dateTime={m.ts.toDate().toISOString()} title={dueLabel(m.ts)}>{clock(m.ts)}</time> : null;
+            return (
+            <Fragment key={m.id}>
+            {newDay && (
+              <div className="flex items-center gap-3 text-xs font-medium text-muted" role="separator">
+                <div className="h-px flex-1 bg-border" />
+                <span className="rounded-full border border-border bg-surface px-3 py-0.5">{day}</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
+            {m.role === "user" ? (
+              <div className="flex flex-col items-end">
                 <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-brand-soft px-4 py-2.5 text-[15px] text-ink">{m.text}</div>
+                {at && <span className="mt-1 pr-1 text-[11px] text-muted">{at}</span>}
               </div>
             ) : (
-              <div key={m.id} className="flex gap-3">
+              <div className="flex gap-3">
                 <LogoMark size={32} className="shrink-0" />
                 <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-border bg-surface px-5 py-4 text-[15px]">
                   {m.pending && !m.text ? (
@@ -195,10 +210,13 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
                   {m.charts?.map((c, i) => <ChartCard key={i} chart={c} />)}
                   {m.tasks?.map((id) => (taskById[id] ? <ProposedTaskCard key={id} task={taskById[id]} /> : null))}
                   {!m.pending && (m.tool_calls || m.provenance) && <AnswerProvenance m={m} tourTarget={!busy && m.id === messages.at(-1)?.id} />}
+                  {at && !m.pending && <p className="mt-2 text-right text-[11px] text-muted">{at}</p>}
                 </div>
               </div>
-            ),
-          )}
+            )}
+            </Fragment>
+            );
+          })}
           <div ref={bottomRef} />
         </div>
       </div>

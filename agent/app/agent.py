@@ -14,6 +14,7 @@ from google.adk.tools import ToolContext
 from google.genai import types
 
 from . import ai, resilience, scope
+from .ingest import message_text
 from .config import AGENT_MODEL, AGENT_THINKING, COMPANY, FAST_MODEL, TZ
 from .firebase import db, FieldFilter, firestore, user_profile
 from .search import search, user_chats
@@ -40,7 +41,7 @@ def _msg_row(chat: dict, snap) -> dict:
         "chat": chat.get("name"),
         "sender": m.get("sender_name"),
         "when": ai.fmt_ist(m.get("ts")),
-        "text": (m.get("text") or "")[:500],
+        "text": message_text(m)[:500] if not m.get("deleted") else "(message deleted)",
     }
     if m.get("file"):
         row["file"] = {"ref": f"file:{m['file'].get('id')}", "name": m["file"].get("name"), "doc": m["file"].get("doc")}
@@ -103,7 +104,8 @@ def catch_up(hours: int, tool_context: ToolContext) -> dict:
     out = []
     for chat in user_chats(uid).values():
         col = db.collection("chats").document(chat["id"]).collection("messages")
-        snaps = [s for s in col.where(filter=FieldFilter("ts", ">=", since)).order_by("ts").limit(40).stream() if not s.to_dict().get("system")]
+        snaps = [s for s in col.where(filter=FieldFilter("ts", ">=", since)).order_by("ts").limit(40).stream()
+                 if not s.to_dict().get("system") and not s.to_dict().get("deleted")]
         if snaps:
             out.append({"chat": chat.get("name"), "type": chat.get("type"), "messages": [_msg_row(chat, s) for s in snaps]})
     return {"since": ai.fmt_ist(since), "user": tool_context.state.get("user_name"), "chats": out}

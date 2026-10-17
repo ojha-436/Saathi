@@ -3,9 +3,9 @@ import type { Chat, StatusState, UserProfile } from "./types";
 
 const TZ = "Asia/Kolkata";
 
-export const toDate = (t?: Timestamp | null) => (t ? t.toDate() : null);
+export const toDate = (t?: Timestamp | Date | null) => (t ? (t instanceof Date ? t : t.toDate()) : null);
 
-export function timeShort(t?: Timestamp | null) {
+export function timeShort(t?: Timestamp | Date | null) {
   const d = toDate(t);
   if (!d) return "";
   const now = new Date();
@@ -19,6 +19,17 @@ export function dayLabel(t?: Timestamp | null) {
   const d = toDate(t);
   if (!d) return "";
   return d.toLocaleDateString("en-IN", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
+}
+
+/** Day separators: "Today", "Yesterday", then "Monday, 14 October". */
+export function dayHeading(t?: Timestamp | Date | null) {
+  const d = toDate(t);
+  if (!d) return "";
+  const key = (x: Date) => x.toLocaleDateString("en-IN", { timeZone: TZ });
+  const now = new Date();
+  if (key(d) === key(now)) return "Today";
+  if (key(d) === key(new Date(now.getTime() - 86_400_000))) return "Yesterday";
+  return d.toLocaleDateString("en-IN", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
 }
 
 export function clock(t?: Timestamp | null) {

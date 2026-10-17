@@ -44,6 +44,13 @@ class _ServerTimestamp:
 SERVER_TIMESTAMP = _ServerTimestamp()
 
 
+class _DeleteField:
+    """Stand-in for firestore.DELETE_FIELD: removes the field when written."""
+
+
+DELETE_FIELD = _DeleteField()
+
+
 def _resolve(v):
     """Replace SERVER_TIMESTAMP markers (recursively) with the current time."""
     if isinstance(v, _ServerTimestamp):
@@ -69,6 +76,7 @@ firestore = SimpleNamespace(
     ArrayRemove=ArrayRemove,
     Increment=Increment,
     SERVER_TIMESTAMP=SERVER_TIMESTAMP,
+    DELETE_FIELD=DELETE_FIELD,
     transactional=lambda fn: (lambda tx: _run_tx(fn, tx)),
 )
 
@@ -127,6 +135,8 @@ def _set_path(data: dict, dotted: str, value) -> None:
         cur[last] = [v for v in (cur.get(last) or []) if v not in value.values]
     elif isinstance(value, Increment):
         cur[last] = (cur.get(last) or 0) + value.value
+    elif isinstance(value, _DeleteField):
+        cur.pop(last, None)
     else:
         cur[last] = copy.deepcopy(_resolve(value))
 

@@ -268,7 +268,7 @@ def mark_seen(uid: str, chat_id: str, ts: datetime | None = None) -> None:
 
 
 def post_message(chat: dict, user: dict, text: str, file: dict | None = None, mentions: list[str] | None = None,
-                 parent_id: str | None = None, doc: dict | None = None) -> str:
+                 parent_id: str | None = None, doc: dict | None = None, forwarded: dict | None = None) -> str:
     msg_id = uuid.uuid4().hex[:20]
     ts = now()
     body = {"sender": user["uid"], "sender_name": user["name"], "text": text, "ts": ts}
@@ -278,6 +278,8 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
         body["mentions"] = mentions
     if doc:
         body["doc"] = doc  # formatted version (Tiptap JSON); `text` stays the plain text used for search and AI
+    if forwarded:
+        body["forwarded"] = forwarded
     col = db.collection("chats").document(chat["id"]).collection("messages")
     if parent_id:
         body["parent_id"] = parent_id
@@ -286,7 +288,7 @@ def post_message(chat: dict, user: dict, text: str, file: dict | None = None, me
             "thread_followers": firestore.ArrayUnion([user["uid"]]),
         })
     col.document(msg_id).set(body)
-    preview = ("↪ " if parent_id else "") + (text or (f"📎 {file['name']}" if file else ""))
+    preview = ("↪ " if parent_id else "") + (text or (f"📎 {file['name']}" if file else "") or (f"Forwarded: {forwarded.get('text', '')}" if forwarded else ""))
     db.collection("chats").document(chat["id"]).update({"last_ts": ts, "last_text": preview[:120], "last_sender": user["name"]})
     mark_seen(user["uid"], chat["id"], ts)
     return msg_id
@@ -657,7 +659,8 @@ def summarize_chat(chat_id: str, user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
     col = db.collection("chats").document(chat_id).collection("messages")
     snaps = list(col.order_by("ts", direction=firestore.Query.DESCENDING).limit(60).stream())
-    lines = [f"{s.get('sender_name')} ({ai.fmt_ist(s.get('ts'))}): {s.get('text') or ''} {('[file: ' + s.get('file')['name'] + ']') if s.to_dict().get('file') else ''}" for s in reversed(snaps)]
+    lines = [f"{s.get('sender_name')} ({ai.fmt_ist(s.get('ts'))}): {ingest.message_text(s.to_dict())} {('[file: ' + s.get('file')['name'] + ']') if s.to_dict().get('file') else ''}"
+             for s in reversed(snaps) if not s.to_dict().get("deleted")]
     if ai.client is None:  # offline: most recent messages as bullets
         bullets = "\n".join(f"- {ln}" for ln in [x for x in lines if x.strip()][-6:])
         return {"summary": f"Gemini is not configured, so here are the latest messages instead:\n{bullets}"}
@@ -703,6 +706,183 @@ def dismiss_promise(chat_id: str, msg_id: str, user=Depends(current_user)):
         {"promise.dismissed_by": firestore.ArrayUnion([user["uid"]])}
     )
     return {"ok": True}
+
+
+# ---------------- message actions: edit, delete, forward, save ----------------
+
+def _own_message(chat_id: str, msg_id: str, user: dict) -> tuple[dict, object, dict]:
+    """A message the caller sent, in a chat they're in now. Only the sender edits or deletes; a shared demo login only
+    its own messages from today, so the demo's conversations stay as they are for the next person."""
+    chat = get_chat_for_member(chat_id, user["uid"])
+    ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
+    snap = ref.get()
+    m = snap.to_dict() if snap.exists else None
+    if not m or m.get("system") or m.get("deleted"):
+        raise HTTPException(404, "Message not found")
+    if m.get("sender") != user["uid"]:
+        raise HTTPException(403, "You can only change messages you sent")
+    sent = m.get("ts")
+    if not (isinstance(sent, datetime) and now() - sent < timedelta(days=1)) or m.get("demo_shift") or m.get("demo_history"):
+        demo.guard(user, "Demo logins are shared by everyone trying Saathi, so they can change only messages they sent today.")
+    return chat, ref, m
+
+
+def _was_last(chat: dict, m: dict) -> bool:
+    last, sent = chat.get("last_ts"), m.get("ts")
+    return isinstance(last, datetime) and isinstance(sent, datetime) and abs((last - sent).total_seconds()) < 0.001
+
+
+class MessageEdit(BaseModel):
+    text: str
+    mentions: list[str] = []
+    doc: dict | None = None
+
+
+@app.patch("/api/chats/{chat_id}/messages/{msg_id}")
+def edit_message(chat_id: str, msg_id: str, body: MessageEdit, bg: BackgroundTasks, user=Depends(current_user)):
+    chat, ref, m = _own_message(chat_id, msg_id, user)
+    if m.get("research") or m.get("handover_id") or m.get("forwarded"):
+        raise HTTPException(400, "This message can't be edited")
+    text = body.text.strip()
+    if not text and not m.get("file"):
+        raise HTTPException(400, "A message can't be empty. Delete it instead.")
+    if len(text) > 4000:
+        raise HTTPException(400, "That message is too long")
+    rate_limit(user["uid"], "message", 60)
+    try:
+        doc = richdoc.clean_doc(body.doc) if body.doc else None
+    except richdoc.DocError as e:
+        raise HTTPException(400, str(e))
+    before = set(m.get("mentions") or [])
+    mentioned = [x for x in dict.fromkeys(body.mentions) if x in chat["members"] and x != user["uid"]]
+    mentions = mentioned + (["channel"] if "channel" in before else [])  # an @channel stays; an edit never notifies everyone again
+    update = {"text": text, "edited_at": now(), "doc": doc or firestore.DELETE_FIELD, "mentions": mentions or firestore.DELETE_FIELD}
+    if (m.get("promise") or {}) and not m["promise"].get("tracked_by"):
+        update["promise"] = firestore.DELETE_FIELD  # found again from the new text (a promise someone tracks stays)
+    ref.update(update)
+    if _was_last(chat, m) and not m.get("parent_id"):
+        db.collection("chats").document(chat_id).update({"last_text": (text or f"📎 {m['file']['name']}")[:120]})
+    where = chat.get("name") or "a direct message"
+    for u in set(mentioned) - before:  # people newly @mentioned by the edit hear about it, like a new message
+        notify(u, "mention", f"{user['name']} mentioned you in {where}", text, actor=user, source_ref=f"msg:{chat_id}/{msg_id}", chat_id=chat_id)
+    bg.add_task(ingest.process_message, chat_id, msg_id)  # search and the assistant see the new text
+    return {"ok": True}
+
+
+@app.delete("/api/chats/{chat_id}/messages/{msg_id}")
+def delete_message(chat_id: str, msg_id: str, user=Depends(current_user)):
+    """Removed for everyone; the conversation shows that a message was deleted. A file shared with it stays in the chat's
+    Files tab (like Teams). Search and the assistant forget the text at once."""
+    from . import archive
+
+    chat, ref, m = _own_message(chat_id, msg_id, user)
+    gone = firestore.DELETE_FIELD
+    ref.update({"deleted": True, "deleted_at": now(), "text": "", "doc": gone, "mentions": gone, "reactions": gone, "promise": gone,
+                "decision": gone, "forwarded": gone, "research": gone, "handover_id": gone})
+    db.collection("chunks").document(f"m_{msg_id}").delete()
+    archive.delete_chunks(chunk_ids=[f"m_{msg_id}"])
+    if _was_last(chat, m) and not m.get("parent_id"):
+        db.collection("chats").document(chat_id).update({"last_text": "Message deleted"})
+    audit(user, "message.deleted", f"msg:{chat_id}/{msg_id}", chat=chat.get("name") or chat.get("type"))
+    return {"ok": True}
+
+
+class ForwardIn(BaseModel):
+    to_chat_id: str
+    note: str = ""
+
+
+@app.post("/api/chats/{chat_id}/messages/{msg_id}/forward")
+def forward_message(chat_id: str, msg_id: str, body: ForwardIn, bg: BackgroundTasks, user=Depends(current_user)):
+    """Shares a message (and its file) into another chat or channel the caller is in, with an optional note. The copy says
+    who wrote it and, for a channel, where; a private chat's name is never carried over."""
+    src = get_chat_for_member(chat_id, user["uid"])
+    snap = db.collection("chats").document(chat_id).collection("messages").document(msg_id).get()
+    m = snap.to_dict() if snap.exists else None
+    if not m or m.get("system") or m.get("deleted"):
+        raise HTTPException(404, "Message not found")
+    target = get_chat_for_member(body.to_chat_id, user["uid"])
+    require_guest_dm(user, target)
+    rate_limit(user["uid"], "message", 60)
+    note = body.note.strip()[:2000]
+    if m.get("forwarded"):  # forwarding a forward keeps the original author
+        fwd = dict(m["forwarded"])
+    else:
+        fwd = {"sender": m.get("sender"), "sender_name": m.get("sender_name", ""), "ts": m.get("ts"), "text": (m.get("text") or "")[:4000],
+               "where": src.get("name", "") if src.get("type") == "channel" else ""}
+        if m.get("doc"):
+            fwd["doc"] = m["doc"]
+    meta = None
+    if m.get("file"):
+        fsnap = db.collection("files").document(m["file"]["id"]).get()
+        f = fsnap.to_dict() if fsnap.exists else None
+        if f and user["uid"] in (f.get("members") or []):  # the caller can open it, so they may share it
+            rate_limit(user["uid"], "upload", 10)
+            file_id = uuid.uuid4().hex[:20]
+            path = f"chats/{target['id']}/{file_id}/{f['name']}"
+            bucket.blob(path).upload_from_string(bucket.blob(f["gcs_path"]).download_as_bytes(), content_type=f.get("mime") or "application/octet-stream")
+            db.collection("files").document(file_id).set(
+                {"name": f["name"], "mime": f.get("mime"), "size": f.get("size"), "gcs_path": path, "chat_id": target["id"], "chat_name": target.get("name", ""),
+                 "members": target["members"], "uploaded_by": user["uid"], "uploaded_by_name": user["name"], "ts": now(), "status": "processing",
+                 "org_id": user["org_id"]})
+            meta = {"id": file_id, "name": f["name"], "mime": f.get("mime"), "size": f.get("size"), "status": "processing"}
+    if not (fwd.get("text") or "").strip() and not meta and not note:
+        raise HTTPException(400, "There's nothing in this message to forward")
+    new_id = post_message(target, user, note, file=meta, forwarded=fwd if (fwd.get("text") or "").strip() else None)
+    after_post(target, user, note or f"Forwarded: {fwd.get('text') or (meta or {}).get('name', '')}"[:300], new_id, [], False, None)
+    bg.add_task(ingest.process_message, target["id"], new_id)
+    if meta:
+        bg.add_task(ingest.process_file, target["id"], new_id, meta["id"])
+    return {"id": new_id, "chat_id": target["id"]}
+
+
+class SaveIn(BaseModel):
+    saved: bool = True
+
+
+_SAFE_ID = re.compile(r"[A-Za-z0-9_\-]{1,100}")
+
+
+@app.post("/api/chats/{chat_id}/messages/{msg_id}/save")
+def save_message(chat_id: str, msg_id: str, body: SaveIn, user=Depends(current_user)):
+    """Saved messages are private to the person (their settings document)."""
+    if not (_SAFE_ID.fullmatch(chat_id) and _SAFE_ID.fullmatch(msg_id)):
+        raise HTTPException(404, "Message not found")
+    get_chat_for_member(chat_id, user["uid"])
+    if body.saved and not db.collection("chats").document(chat_id).collection("messages").document(msg_id).get().exists:
+        raise HTTPException(404, "Message not found")
+    ref = db.collection("user_settings").document(user["uid"])
+    key = f"{chat_id}|{msg_id}"
+    if ref.get().exists:
+        ref.update({f"saved.{key}": now().isoformat() if body.saved else firestore.DELETE_FIELD})
+    elif body.saved:
+        ref.set({"org_id": user["org_id"], "saved": {key: now().isoformat()}})
+    return {"ok": True, "saved": body.saved}
+
+
+@app.get("/api/me/saved")
+def saved_messages(user=Depends(current_user)):
+    """The caller's saved messages, newest first, read live: only from chats they are still in, with the current text."""
+    saved = (db.collection("user_settings").document(user["uid"]).get().to_dict() or {}).get("saved") or {}
+    rows, allowed = [], {}
+    for key, at in sorted(saved.items(), key=lambda kv: str(kv[1]), reverse=True)[:100]:
+        chat_id, _, msg_id = key.partition("|")
+        if chat_id not in allowed:
+            try:
+                get_chat_for_member(chat_id, user["uid"])
+                allowed[chat_id] = True
+            except HTTPException:
+                allowed[chat_id] = False
+        if not allowed[chat_id] or not _SAFE_ID.fullmatch(msg_id or "-"):
+            continue
+        snap = db.collection("chats").document(chat_id).collection("messages").document(msg_id).get()
+        if not snap.exists:
+            continue
+        d = snap.to_dict()
+        rows.append({"chat_id": chat_id, "msg_id": msg_id, "saved_at": at, "sender": d.get("sender"), "sender_name": d.get("sender_name", ""),
+                     "ts": d["ts"].isoformat() if isinstance(d.get("ts"), datetime) else None, "deleted": bool(d.get("deleted")),
+                     "text": ingest.message_text(d)[:300], "file": None if d.get("deleted") else (d.get("file") or {}).get("name")})
+    return rows
 
 
 # ---------------- assistant ----------------

@@ -190,8 +190,28 @@ def search(user: dict, query: str, since_days: int = 0, k: int = 10) -> list[dic
         score = 1.0 - float(d["distance"])
         if d["ref"] and (d["ref"] not in best or score > best[d["ref"]][0]):
             best[d["ref"]] = (score, d)
-    ranked = sorted(best.values(), key=lambda x: x[0], reverse=True)[:k]
-    return [_result(d, s) for s, d in ranked]
+    ranked = sorted(best.values(), key=lambda x: x[0], reverse=True)
+    return [_result(d, s) for s, d in _current(ranked)[:k]]
+
+
+def _current(ranked: list[tuple[float, dict]]) -> list[tuple[float, dict]]:
+    """Archive rows are append-only, so a message edited or deleted since it was indexed would surface as it was. Messages
+    are re-read from Firestore: deleted ones drop out and edited ones carry their current text."""
+    from .firebase import db
+    from .ingest import message_text
+
+    out = []
+    for score, d in ranked:
+        ref = d.get("ref") or ""
+        if ref.startswith("msg:") and "/" in ref:
+            chat_id, msg_id = ref[4:].split("/", 1)
+            snap = db.collection("chats").document(chat_id).collection("messages").document(msg_id).get()
+            m = snap.to_dict() if snap.exists else None
+            if not m or m.get("deleted"):
+                continue
+            d = {**d, "text": message_text(m)[:4000]}
+        out.append((score, d))
+    return out
 
 
 def backfill(batch_size: int = 500) -> int:

@@ -15,6 +15,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
 from . import ai
+from .ingest import message_text
 from .config import TZ
 from .firebase import audit, current_user, db, get_chat_for_member, role_in, user_profile
 
@@ -138,12 +139,12 @@ def gather(chat: dict, shift: dict) -> dict:
     msgs = []
     for s in col.where(filter=FieldFilter("ts", ">=", shift["start"])).where(filter=FieldFilter("ts", "<", shift["end"])).order_by("ts").limit(200).stream():
         m = s.to_dict()
-        if m.get("system") or m.get("handover_id"):
+        if m.get("system") or m.get("handover_id") or m.get("deleted"):
             continue
         ref = f"msg:{chat_id}/{s.id}"
         refs.add(ref)
         extra = f" (file: {m['file'].get('name')})" if m.get("file") else ""
-        msgs.append(f"[{ref}] {ai.fmt_ist(m.get('ts'))} {m.get('sender_name')}: {(m.get('text') or '')[:400]}{extra}")
+        msgs.append(f"[{ref}] {ai.fmt_ist(m.get('ts'))} {m.get('sender_name')}: {message_text(m)[:400]}{extra}")
 
     recs = []
     area_toks = set(ai.keywords(area)) - {"shop", "floor", "project"}

@@ -3,7 +3,12 @@
 import clsx from "clsx";
 import {
   ArrowLeft,
+  Bookmark,
+  BookmarkFill,
   Check,
+  Forward,
+  Pencil,
+  Search,
   Copy,
   Eye,
   EyeOff,
@@ -50,10 +55,11 @@ import {
   RefreshCw,
   Reply,
 } from "@/lib/icons";
-import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, openFile } from "@/lib/api";
 import { useMessages } from "@/lib/hooks";
-import { DOC_LABEL, REACTION_EMOJI, chatTitle, reactionEmoji, reactionKey, clock, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
+import { DOC_LABEL, REACTION_EMOJI, chatTitle, reactionEmoji, reactionKey, clock, dayHeading, dayLabel, dueLabel, isUnread, timeShort } from "@/lib/format";
 import type { Chat, Message, Reaction, UserProfile } from "@/lib/types";
 import { ChatText } from "./ChatText";
 import { docToText, needsDoc, type DocNode } from "@/lib/richtext";
@@ -69,6 +75,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { EmojiPopover } from "./EmojiPopover";
 import { Avatar, ChatIcon, Menu, RoleBadge, Switch, UserAvatar, type MenuItem } from "./bits";
+import { Modal, ModalHeader } from "./Dialogs";
 import { guestCan, useWs } from "./ctx";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
@@ -101,6 +108,9 @@ type Panel = null | "about" | "members";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
+/** Editing happens in the composer of the pane the message is in (the conversation, or its thread). */
+const EditCtx = createContext<((m: Message) => void) | null>(null);
+
 export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: string }) {
   const { uid, users, chats, toast, open, showList, settings, reads, account } = useWs();
   const chat = chats[chatId];
@@ -113,6 +123,13 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
   const [flash, setFlash] = useState<string | undefined>(focusMsg);
   // Thread panel: an explicit choice, or (when opened from a link to a reply) the reply's parent. "" = closed by the user.
   const [threadSel, setThread] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
+  const [editChat, setEditChat] = useState(chatId);
+  if (editChat !== chatId) {
+    // another chat opened: an edit in progress ends (adjusted while rendering, so no extra render pass)
+    setEditChat(chatId);
+    setEditing(null);
+  }
   const focusParent = messages.find((m) => m.id === focusMsg)?.parent_id ?? null;
   const threadId = threadSel === "" ? null : (threadSel ?? focusParent);
   const mainMessages = useMemo(() => messages.filter((m) => !m.parent_id), [messages]);
@@ -345,7 +362,9 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
         {tab === "messages" && (
           <div className="scrollbar-thin flex-1 overflow-y-auto px-2 py-4 lg:px-5">
             <Welcome chat={chat} title={title} onAddPeople={() => setPanel("members")} empty={!messages.some((m) => !m.system)} />
-            <MessageList messages={mainMessages} chat={chat} title={title} flash={flash} onOpenThread={openThread} />
+            <EditCtx.Provider value={setEditing}>
+              <MessageList messages={mainMessages} chat={chat} title={title} flash={flash} onOpenThread={openThread} />
+            </EditCtx.Provider>
             <div ref={bottomRef} />
           </div>
         )}
@@ -398,7 +417,9 @@ export function ChatView({ chatId, focusMsg }: { chatId: string; focusMsg?: stri
           </div>
         )}
 
-        <Composer chat={chat} title={title} />
+        <EditCtx.Provider value={setEditing}>
+          <Composer chat={chat} title={title} editing={editing} onEditDone={() => setEditing(null)} />
+        </EditCtx.Provider>
       </section>
 
       {threadRoot && (
@@ -453,7 +474,7 @@ function MessageList({ messages, chat, title, flash, onOpenThread }: { messages:
   return (
     <div className="space-y-px">
       {messages.map((m, i) => {
-        const day = dayLabel(m.ts);
+        const day = dayHeading(m.ts);
         const showDay = day !== lastDay;
         lastDay = day;
         const prev = messages[i - 1];
@@ -488,11 +509,15 @@ function MessageRow({
   m: Message; mine: boolean; grouped: boolean; bubbles: boolean; highlight: boolean; chatId: string; chatName: string;
   onOpenThread?: (id: string) => void; domPrefix?: string;
 }) {
-  const { uid, users, showProfile, open } = useWs();
+  const { uid, users, showProfile, open, settings } = useWs();
   const right = bubbles && mine;
-  const body = (
+  const saved = !!settings.saved?.[`${chatId}|${m.id}`];
+  const body = m.deleted ? (
+    <p className="text-sm italic text-muted">This message was deleted</p>
+  ) : (
     <>
       {m.text && (m.doc ? <RichDoc doc={m.doc} plain={(t) => withMentions(t, m.mentions, users, uid)} /> : <ChatText text={m.text} plain={(t) => withMentions(t, m.mentions, users, uid)} />)}
+      {m.forwarded && <ForwardedCard f={m.forwarded} />}
       {m.file && <FileCard file={m.file} />}
       {m.file?.spec && <SpecBadge file={m.file} chatId={chatId} />}
       {m.research && (
@@ -551,6 +576,12 @@ function MessageRow({
             )}
             {!right && <RoleBadge role={users[m.sender]?.org_role === "guest" ? "guest" : undefined} />}
             <span className="text-muted">{clock(m.ts)}</span>
+            {m.edited_at && !m.deleted && <span className="text-muted" title={`Edited ${dueLabel(m.edited_at)}`}>Edited</span>}
+            {saved && (
+              <span role="img" aria-label="Saved" title="Saved" className="inline-flex self-center">
+                <BookmarkFill size={12} className="text-saffron-ink" />
+              </span>
+            )}
           </div>
         )}
         {bubbles ? (
@@ -558,18 +589,70 @@ function MessageRow({
         ) : (
           <div className="w-full max-w-3xl">{body}</div>
         )}
-        <Reactions m={m} chatId={chatId} />
+        {grouped && ((m.edited_at && !m.deleted) || saved) && (
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+            {saved && (
+              <span role="img" aria-label="Saved" title="Saved" className="inline-flex">
+                <BookmarkFill size={11} className="text-saffron-ink" />
+              </span>
+            )}
+            {m.edited_at && !m.deleted && <span title={`Edited ${dueLabel(m.edited_at)}`}>Edited</span>}
+          </p>
+        )}
+        {!m.deleted && <Reactions m={m} chatId={chatId} />}
         {onOpenThread && !!m.reply_count && <ThreadSummary m={m} onOpen={() => onOpenThread(m.id)} />}
       </div>
-      <MessageActions m={m} chatId={chatId} chatName={chatName} align={right ? "left" : "right"} onReply={onOpenThread && (() => onOpenThread(m.id))} />
+      {!m.deleted && <MessageActions m={m} chatId={chatId} chatName={chatName} align={right ? "left" : "right"} onReply={onOpenThread && (() => onOpenThread(m.id))} />}
+    </div>
+  );
+}
+
+/** A message shared from another chat: who wrote it and when (and the channel, never a private chat's name). */
+function ForwardedCard({ f }: { f: NonNullable<Message["forwarded"]> }) {
+  return (
+    <div className="relative mt-1 w-full max-w-2xl overflow-hidden rounded-lg bg-canvas py-1.5 pl-3.5 pr-2">
+      <span className="absolute inset-y-0 left-0 w-[3px] bg-brand/40" aria-hidden />
+      <p className="mb-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted">
+        <Forward size={12} aria-hidden /> Forwarded from <b className="font-semibold text-ink">{f.sender_name || "someone"}</b>
+        {f.where && <span>in #{f.where}</span>}
+        {f.ts && <span>· {timeShort(f.ts)}</span>}
+      </p>
+      {f.doc ? <RichDoc doc={f.doc} plain={(t) => t} /> : <ChatText text={f.text} plain={(t) => t} />}
     </div>
   );
 }
 
 function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; chatId: string; chatName: string; align: "left" | "right"; onReply?: () => void }) {
-  const { open, toast, newTask, uid, account } = useWs();
+  const { open, toast, newTask, uid, account, settings } = useWs();
   const [picking, setPicking] = useState(false);
+  const [forwarding, setForwarding] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
+  const startEdit = useContext(EditCtx);
+  const mine = m.sender === uid;
+  const isSaved = !!settings.saved?.[`${chatId}|${m.id}`];
+  async function toggleSave() {
+    try {
+      await api(`/api/chats/${chatId}/messages/${m.id}/save`, { json: { saved: !isSaved } });
+      toast(isSaved ? "Removed from Saved." : "Saved. Find it under Saved in the chat list.");
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  }
+  async function remove() {
+    if (!confirm("Delete this message for everyone? Files shared with it stay in the Files tab.")) return;
+    try {
+      await api(`/api/chats/${chatId}/messages/${m.id}`, { method: "DELETE" });
+      toast("Message deleted.");
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  }
+  const more: MenuItem[] = [
+    { label: isSaved ? "Remove from saved" : "Save message", icon: isSaved ? BookmarkFill : Bookmark, onSelect: toggleSave },
+    { label: "Forward…", icon: Forward, onSelect: () => setForwarding(true) },
+    ...(mine && startEdit && !m.research && !m.handover_id && !m.forwarded ? [{ label: "Edit", icon: Pencil, onSelect: () => startEdit(m) }] : []),
+    ...(mine ? (["sep", { label: "Delete", icon: Trash2, onSelect: remove, danger: true }] as MenuItem[]) : []),
+  ];
   async function react(r: Reaction) {
     try {
       await api(`/api/chats/${chatId}/messages/${m.id}/react`, { json: { reaction: r } });
@@ -631,7 +714,89 @@ function MessageActions({ m, chatId, chatName, align, onReply }: { m: Message; c
           <Copy size={14} />
         </button>
       )}
+      <Menu label="More actions" trigger={<MoreHorizontal size={16} />} items={more} align={align === "right" ? "right" : "left"} className={btn} />
+      {forwarding && createPortal(<ForwardDialog m={m} chatId={chatId} chatName={chatName} onClose={() => setForwarding(false)} />, document.body)}
     </div>
+  );
+}
+
+/** Forward a message (and its file) to another chat or channel, with an optional note. */
+function ForwardDialog({ m, chatId, chatName, onClose }: { m: Message; chatId: string; chatName: string; onClose: () => void }) {
+  const { chats, users, uid, toast } = useWs();
+  const from = chats[chatId];
+  const [q, setQ] = useState("");
+  const [to, setTo] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const list = useMemo(
+    () =>
+      Object.values(chats)
+        .filter((c) => c.id !== chatId)
+        .map((c) => ({ c, title: chatTitle(c, uid, users) }))
+        .filter((x) => x.title.toLowerCase().includes(q.trim().toLowerCase()))
+        .sort((a, b) => (b.c.last_ts?.toMillis() ?? 0) - (a.c.last_ts?.toMillis() ?? 0))
+        .slice(0, 60),
+    [chats, chatId, uid, users, q],
+  );
+  const target = to ? chats[to] : undefined;
+  const preview = m.forwarded?.text || m.text || "";
+  async function send() {
+    if (!to || busy) return;
+    setBusy(true);
+    try {
+      await api(`/api/chats/${chatId}/messages/${m.id}/forward`, { json: { to_chat_id: to, note } });
+      toast(`Forwarded to ${chatTitle(target, uid, users)}.`);
+      onClose();
+    } catch (e) {
+      toast((e as Error).message);
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="Forward message" onClose={onClose}>
+      <ModalHeader title="Forward message" sub={`From ${m.forwarded?.sender_name || m.sender_name}${from?.type === "channel" ? ` in #${chatName}` : from?.type === "group" ? ` in ${chatName}` : ""}`} onClose={onClose} />
+      <div className="space-y-3 overflow-y-auto px-5 py-4">
+        <div className="relative overflow-hidden rounded-lg bg-canvas py-2 pl-3.5 pr-3 text-sm">
+          <span className="absolute inset-y-0 left-0 w-[3px] bg-brand/40" aria-hidden />
+          <p className="line-clamp-3 whitespace-pre-line text-ink">{preview || "(no text)"}</p>
+          {m.file && <p className="mt-1 flex items-center gap-1 text-xs text-muted"><Paperclip size={12} aria-hidden /> {m.file.name}</p>}
+        </div>
+        <label className="relative block">
+          <span className="sr-only">Find a chat or channel</span>
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a chat or channel" autoFocus className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15" />
+        </label>
+        <ul className="scrollbar-thin max-h-56 space-y-0.5 overflow-y-auto" role="listbox" aria-label="Forward to">
+          {list.length === 0 && <li className="px-2 py-3 text-sm text-muted">No chats match.</li>}
+          {list.map(({ c, title }) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={to === c.id}
+                onClick={() => setTo(c.id)}
+                className={clsx("flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm", to === c.id ? "bg-brand-soft text-brand" : "hover:bg-hover")}
+              >
+                <ChatIcon chat={c} title={title} size={28} />
+                <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+                {to === c.id && <Check size={15} aria-hidden />}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <label className="block">
+          <span className="text-sm font-medium">Add a note (optional)</span>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} className="mt-1 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15" />
+        </label>
+        <p className="text-xs text-muted">Everyone in {target ? chatTitle(target, uid, users) : "the chat you pick"} will see the message{m.file ? " and its file" : ""}.</p>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
+        <button onClick={onClose} className="h-9 rounded-lg px-3 text-sm font-medium text-muted hover:bg-hover">Cancel</button>
+        <button onClick={send} disabled={!to || busy} className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-50">
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Forward size={15} />} Forward
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -712,7 +877,9 @@ const SLASH: SlashCmd[] = [
   { id: "redo", label: "Redo", hint: "/redo", keys: "redo forward", icon: Redo, run: ({ editor }) => editor.chain().focus().redo().run() },
 ];
 
-function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat; title: string; parentId?: string; inputId?: string }) {
+function Composer({
+  chat, title, parentId, inputId = "composer", editing, onEditDone,
+}: { chat: Chat; title: string; parentId?: string; inputId?: string; editing?: Message | null; onEditDone?: () => void }) {
   const { toast, users, uid, account } = useWs();
   const chatId = chat.id;
   const isChannel = chat.type === "channel";
@@ -881,20 +1048,47 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
     setMentioned({});
   }
 
+  // Editing: the message (with its formatting and mentions) goes into this editor; Enter saves, Esc cancels
+  const editingId = editing?.id;
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    // Only the editor changes here; its update event sets the plain-text copy
+    if (!editor) return;
+    if (!editing) {
+      if (wasEditing.current) editor.chain().clearContent(true).unsetAllMarks().run(); // edit ended elsewhere: don't leave its text as a draft
+      wasEditing.current = false;
+      return;
+    }
+    wasEditing.current = true;
+    const doc: DocNode = editing.doc ?? { type: "doc", content: editing.text.split("\n").map((l) => ({ type: "paragraph", content: l ? [{ type: "text", text: l }] : [] })) };
+    editor.chain().setContent(doc).focus("end").run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, editingId]);
+  function cancelEdit() {
+    clear();
+    onEditDone?.();
+  }
+
   async function send() {
     if (!editor || sending) return;
     const doc = editor.getJSON() as DocNode;
     const body = docToText(doc).trim();
-    if (!body) return;
+    if (!body && !editing?.file) return;
     setSending(true);
     try {
-      const mentions = Object.entries(mentioned)
+      const known = editing ? { ...Object.fromEntries((editing.mentions ?? []).filter((u) => users[u]).map((u) => [u, `@${users[u].name}`])), ...mentioned } : mentioned;
+      const mentions = Object.entries(known)
         .filter(([, tag]) => body.includes(tag))
         .map(([id]) => id);
-      await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, parent_id: parentId ?? null, ...(needsDoc(doc) ? { doc } : {}) } });
-      clear();
+      if (editing) {
+        await api(`/api/chats/${chatId}/messages/${editing.id}`, { method: "PATCH", json: { text: body, mentions, ...(needsDoc(doc) ? { doc } : {}) } });
+        cancelEdit();
+      } else {
+        await api(`/api/chats/${chatId}/messages`, { json: { text: body, mentions, parent_id: parentId ?? null, ...(needsDoc(doc) ? { doc } : {}) } });
+        clear();
+      }
     } catch (e) {
-      toast(`Message not sent: ${(e as Error).message}. Try again.`);
+      toast(editing ? `Edit not saved: ${(e as Error).message}` : `Message not sent: ${(e as Error).message}. Try again.`);
     } finally {
       setSending(false);
       editor.commands.focus();
@@ -1016,6 +1210,11 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
         return true;
       }
     }
+    if (e.key === "Escape" && editing) {
+      e.preventDefault();
+      cancelEdit();
+      return true;
+    }
     if (e.key === "Enter" && !e.isComposing) {
       // inside a list, quote or code block Enter adds the next line; Ctrl+Enter always sends
       const inBlock = editor.isActive("listItem") || editor.isActive("blockquote") || editor.isActive("codeBlock");
@@ -1043,6 +1242,16 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
 
   return (
     <div className="shrink-0 px-3 pb-3 pt-1 lg:px-5">
+      {editing && (
+        <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-brand-soft px-3 py-1.5 text-xs text-brand" role="status">
+          <Pencil size={13} aria-hidden />
+          <span className="font-semibold">Editing message</span>
+          <span className="hidden text-muted sm:inline">Enter to save · Esc to cancel</span>
+          <button type="button" onClick={cancelEdit} className="ml-auto flex h-6 w-6 items-center justify-center rounded-md hover:bg-surface" aria-label="Cancel editing">
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <div className="relative rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.05)] transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
         {fmt && ed && (
           <div className="relative border-b border-border">
@@ -1215,7 +1424,7 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
         )}
         <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
           <input ref={fileRef} type="file" className="hidden" accept=".pdf,image/*,.docx,.xlsx,.txt" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-          <button onClick={() => fileRef.current?.click()} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink" title="Attach a PDF or image" aria-label="Attach file">
+          <button onClick={() => fileRef.current?.click()} disabled={!!editing} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-ink disabled:opacity-35" title="Attach a PDF or image" aria-label="Attach file">
             <Paperclip size={17} />
           </button>
           <button
@@ -1254,11 +1463,12 @@ function Composer({ chat, title, parentId, inputId = "composer" }: { chat: Chat;
           </span>
           <button
             onClick={send}
-            disabled={sending || !text.trim()}
+            disabled={sending || (!text.trim() && !editing?.file)}
             className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white transition hover:bg-brand-strong disabled:bg-transparent disabled:text-muted/50"
-            aria-label="Send message"
+            aria-label={editing ? "Save edit" : "Send message"}
+            title={editing ? "Save edit" : undefined}
           >
-            {sending ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={17} />}
+            {sending ? <Loader2 size={16} className="animate-spin" /> : editing ? <Check size={17} /> : <SendHorizontal size={17} />}
           </button>
         </div>
       </div>
@@ -1636,10 +1846,12 @@ function ThreadSummary({ m, onOpen }: { m: Message; onOpen: () => void }) {
 function ThreadPanel({ chat, title, root, replies, flash, onClose }: { chat: Chat; title: string; root: Message; replies: Message[]; flash?: string; onClose: () => void }) {
   const { uid } = useWs();
   const endRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
   useEffect(() => {
     if (!flash) endRef.current?.scrollIntoView();
   }, [replies.length, flash]);
   return (
+    <EditCtx.Provider value={setEditing}>
     <aside className="ws-pop fixed inset-y-0 right-0 z-50 flex w-[26rem] max-w-[94vw] flex-col border-l border-border bg-surface shadow-2xl xl:static xl:z-auto xl:shadow-none" aria-label="Thread">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
         <MessagesSquare size={17} className="text-muted" aria-hidden />
@@ -1666,7 +1878,8 @@ function ThreadPanel({ chat, title, root, replies, flash, onClose }: { chat: Cha
         })}
         <div ref={endRef} />
       </div>
-      <Composer chat={chat} title={title} parentId={root.id} inputId="thread-composer" />
+      <Composer chat={chat} title={title} parentId={root.id} inputId="thread-composer" editing={editing} onEditDone={() => setEditing(null)} />
     </aside>
+    </EditCtx.Provider>
   );
 }

@@ -113,7 +113,7 @@ def capture_from_message(chat: dict, msg_id: str, msg: dict, flagged: str) -> No
         else:
             prior = list(reversed([s.to_dict() for s in q.stream()]))
         context = "\n".join(f"[{ai.fmt_ist(p.get('ts'))}] {p.get('sender_name')}: {(p.get('text') or '')[:400]}"
-                            + (f" (file: {p['file'].get('name')})" if p.get("file") else "") for p in prior if not p.get("system"))
+                            + (f" (file: {p['file'].get('name')})" if p.get("file") else "") for p in prior if not p.get("system") and not p.get("deleted"))
         dec_id = f"m_{msg_id}"
         cands = _candidates(chat["org_id"], f"{flagged} {msg.get('text', '')}", dec_id, chat.get("members", []))
         d = ai.generate_json(PROMPT.format(source=f"chat '{chat.get('name') or 'direct message'}'", flagged=flagged, context=context,
