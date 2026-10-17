@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
-from . import mailer, workspaces
+from . import demo, mailer, workspaces
 from .config import LOCAL_MODE, SIGNUP_DOMAINS, TZ, WEB_URL
 from .firebase import (
     GUEST_DEFAULTS, PUBLIC_DOMAINS, FieldFilter, _workspace_name, audit, auth, db, decode_token, ensure_general, firestore,
@@ -466,6 +466,9 @@ def accept(token: str, body: AcceptIn, request: Request, authorization: str = He
         raise HTTPException(410, {"code": state, "message": _state_message(state, snap.to_dict() if snap else None)})
     d = snap.to_dict()
     email = (decoded.get("email") or "").lower()
+    # A shared demo login stays in the demo workspace (anyone could otherwise pull it into theirs)
+    demo.guard({"uid": decoded.get("uid")}, "Demo logins are shared by everyone trying Saathi, so they can't join other workspaces. "
+                                             "Sign in with your own account to accept this invite.")
     if norm_email(email) != norm_email(d["email"]):
         raise HTTPException(403, {"code": "wrong_email", "email": d["email"],
                                   "message": f"This invite is for {d['email']}, but you're signed in as {email or 'another account'}."})

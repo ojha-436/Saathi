@@ -82,8 +82,13 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
     const q = new URLSearchParams(location.search);
     if (q.get("connected") !== "google") return "";
     const status = q.get("status");
+    if (status === "pending" && q.get("complete")) return "pending";
     return status === "ok" ? "Google connected. Syncing your calendar and email…" : status === "cancelled" ? "Google connection cancelled." : `Couldn't connect Google: ${q.get("detail") || "try again"}`;
   });
+  // Back from Google with ?status=pending&complete=<id>: this signed-in account finishes the connection (the API checks it's
+  // the account that started it)
+  const [oauthComplete] = useState(() => (oauthReturn === "pending" ? (new URLSearchParams(location.search).get("complete") ?? "") : ""));
+  const oauthCompleted = useRef(false);
   const [dlg, setDlg] = useState<DialogKind | null>(oauthReturn ? "settings" : null);
   const [settingsTab, setSettingsTab] = useState<string | undefined>(oauthReturn ? "apps" : undefined);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
@@ -186,9 +191,17 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   useEffect(() => {
     if (!oauthReturn) return;
     history.replaceState(null, "", "/app");
+    if (oauthComplete) {
+      if (oauthCompleted.current) return;
+      oauthCompleted.current = true;
+      api("/api/connectors/google/complete", { json: { id: oauthComplete } })
+        .then(() => toast("Google connected. Syncing your calendar and email…"))
+        .catch((e) => toast(`Couldn't connect Google: ${(e as Error).message}`));
+      return;
+    }
     const t = setTimeout(() => toast(oauthReturn), 0);
     return () => clearTimeout(t);
-  }, [oauthReturn, toast]);
+  }, [oauthReturn, oauthComplete, toast]);
 
   useEffect(() => {
     if (!deepLink) return;

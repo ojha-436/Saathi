@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import ai
 from .config import TZ
-from .firebase import audit, current_user, db, get_chat_for_member, user_profile
+from .firebase import audit, current_user, db, get_chat_for_member, role_in, user_profile
 
 router = APIRouter()
 log = logging.getLogger("saathi.handover")
@@ -130,6 +130,9 @@ def gather(chat: dict, shift: dict) -> dict:
     chat_id, org_id = chat["id"], chat["org_id"]
     area = chat.get("name") or "this area"
     refs: set[str] = set()
+    # With a guest (a vendor) in the chat, use only what was posted here: no records from elsewhere in the plant,
+    # no lessons from past incidents and no drawing-register lines (guests never see those anywhere else either)
+    guests = any(role_in(user_profile(m), org_id) == "guest" for m in chat.get("members") or [])
     col = db.collection("chats").document(chat_id).collection("messages")
 
     msgs = []
@@ -156,7 +159,7 @@ def gather(chat: dict, shift: dict) -> dict:
         in_area = bool(area_toks & set(ai.keywords(f"{f.get('location') or ''} {f.get('machine') or ''}")))
         if r.get("type") == "safety" and not in_chat:
             continue  # safety reports reach a handover only if they were posted to this chat
-        if not (in_chat or in_area):
+        if not (in_chat or in_area) or (guests and not in_chat):
             continue
         ref = f"rec:{s.id}"
         refs.add(ref)
@@ -191,7 +194,7 @@ def gather(chat: dict, shift: dict) -> dict:
             decs.append(f"[dec:{s.id}] {d['title']} (by {d.get('decided_by') or '?'}, {ai.fmt_ist(d['decided_at'])})")
 
     revs = []
-    for s in db.collection("drawings").where(filter=FieldFilter("org_id", "==", org_id)).stream():
+    for s in [] if guests else db.collection("drawings").where(filter=FieldFilter("org_id", "==", org_id)).stream():
         d = s.to_dict()
         for r in d.get("revisions") or []:
             when = _rev_date(r.get("date"))
@@ -205,7 +208,7 @@ def gather(chat: dict, shift: dict) -> dict:
         from .memory import similar
 
         text = " ".join(recs)[:1500] or " ".join(msgs)[:1500]
-        for l in similar(org_id, text, limit=2) if text else []:
+        for l in similar(org_id, text, limit=2) if text and not guests else []:
             if f"rec:{l['id']}" in refs:
                 continue
             refs.add(l["ref"])
@@ -288,6 +291,8 @@ def list_handovers(chat_id: str, user=Depends(current_user)):
     chat = get_chat_for_member(chat_id, user["uid"])
     shift = current_shift(chat["org_id"])
     rows = [_public(s.id, s.to_dict()) for s in db.collection("handovers").where(filter=FieldFilter("chat_id", "==", chat_id)).stream()]
+    if user.get("org_role") == "guest":  # a draft isn't checked by a person yet
+        rows = [r for r in rows if r["status"] != "draft"]
     rows.sort(key=lambda r: r["shift_start"] or "", reverse=True)
     return {"current_shift": {"name": shift["name"], "start": shift["start"].isoformat(), "end": shift["end"].isoformat(), "next": shift["next"],
                               "key": shift["key"], "id": f"{chat_id}_{shift['key']}"},
@@ -327,6 +332,8 @@ class HandoverPatch(BaseModel):
 
 @router.patch("/api/handovers/{hid}")
 def edit(hid: str, body: HandoverPatch, user=Depends(current_user)):
+    if user.get("org_role") == "guest":
+        raise HTTPException(403, "Guests can't write handovers")
     ref, h = _handover_for(hid, user)
     if h["status"] != "draft":
         raise HTTPException(409, "A signed handover can't be edited")
@@ -354,6 +361,8 @@ def edit(hid: str, body: HandoverPatch, user=Depends(current_user)):
 def sign(hid: str, user=Depends(current_user)):
     from .main import notify, post_message
 
+    if user.get("org_role") == "guest":
+        raise HTTPException(403, "Guests can't sign handovers")
     ref, h = _handover_for(hid, user)
     if h["status"] != "draft":
         raise HTTPException(409, "Already signed")

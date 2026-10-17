@@ -120,9 +120,22 @@ export async function signInForInvite(email: string, password: string): Promise<
 }
 
 export async function signOut(): Promise<void> {
-  if (!isLocal()) return fbSignOut(getFbAuth());
+  if (!isLocal()) {
+    await stopPush();
+    return fbSignOut(getFbAuth());
+  }
   localStorage.removeItem(KEY);
   emit();
+}
+
+/** A shared shop-floor device must not keep showing the signed-out person's messages: turn this browser's notifications off
+ * (while still signed in, so the API can drop the token). They can be turned on again after signing in. */
+async function stopPush(): Promise<void> {
+  try {
+    if (localStorage.getItem("saathi.push") !== "on") return;
+    const { disablePush } = await import("./push");
+    await disablePush();
+  } catch {}
 }
 
 export async function getToken(): Promise<string | undefined> {

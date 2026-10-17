@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from . import demo
 from .config import TZ
-from .firebase import audit, auth, current_user, db, firestore, forget_profile
+from .firebase import FieldFilter, audit, auth, current_user, db, firestore, forget_profile
 
 router = APIRouter(prefix="/api/me")
 
@@ -30,6 +31,7 @@ class ProfileIn(BaseModel):
 
 @router.post("/profile")
 def update_profile(body: ProfileIn, user=Depends(current_user)):
+    demo.guard(user, "Demo logins are shared by everyone trying Saathi, so their name and details stay as they are.")
     name = _clean(body.name)
     if len(name) < 2:
         raise HTTPException(400, "Enter your full name")
@@ -142,7 +144,12 @@ def update_settings(body: SettingsIn, user=Depends(current_user)):
 @router.post("/sessions/revoke")
 def sign_out_everywhere(user=Depends(current_user)):
     """Invalidates every refresh token: other devices are signed out within the hour (immediately for the API)."""
+    # A demo login is used by many people at once: this would sign all of them out
+    demo.guard(user, "Demo logins are shared by everyone trying Saathi, so they can't sign everyone out. Use Sign out instead.")
     auth.revoke_refresh_tokens(user["uid"])
+    ref = db.collection("user_settings").document(user["uid"])
+    if ref.get().exists:  # and stop notifications reaching those devices (a lost phone would keep showing messages)
+        ref.update({"push_tokens": []})
     audit(user, "user.sessions_revoked", user["uid"])
     return {"ok": True}
 
@@ -165,6 +172,11 @@ def register_push(body: PushIn, user=Depends(current_user)):
     elif body.enabled:
         ref.set({"org_id": user["org_id"], "push_tokens": [token]})
     if body.enabled:
+        # A browser's token belongs to whoever turned notifications on last: on a shared device the person signed in before
+        # must not keep getting theirs here
+        for other in db.collection("user_settings").where(filter=FieldFilter("push_tokens", "array_contains", token)).stream():
+            if other.id != user["uid"]:
+                other.reference.update({"push_tokens": firestore.ArrayRemove([token])})
         tokens = (ref.get().to_dict() or {}).get("push_tokens") or []
         if len(tokens) > 10:  # keep the 10 most recent devices
             ref.update({"push_tokens": tokens[-10:]})
@@ -189,6 +201,7 @@ _MAGIC = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG", "webp": b"RIFF"}
 @router.post("/photo")
 def set_photo(body: PhotoIn, user=Depends(current_user)):
     """Profile photo, stored on the profile (visible only to the workspace, like the rest of the directory)."""
+    demo.guard(user, "Demo logins are shared by everyone trying Saathi, so their photos stay as they are.")
     import base64
     import binascii
 
@@ -210,6 +223,7 @@ def set_photo(body: PhotoIn, user=Depends(current_user)):
 
 @router.delete("/photo")
 def remove_photo(user=Depends(current_user)):
+    demo.guard(user, "Demo logins are shared by everyone trying Saathi, so their photos stay as they are.")
     db.collection("users").document(user["uid"]).update({"photo": ""})
     forget_profile(user["uid"])
     return {"ok": True}

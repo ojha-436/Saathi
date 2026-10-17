@@ -146,6 +146,8 @@ _profiles: dict[str, tuple[float, dict]] = {}
 
 # What a guest may do besides reading and writing in their channels (admins change these per guest)
 GUEST_DEFAULTS = {"dm": True, "ai": True}
+# The shared demo logins from seed.seed (uid = the name before @saathi.demo). Their password is public: see demo.py
+DEMO_USERS = ("prince", "amit", "neha", "rahul", "suresh", "kavya")
 
 
 def memberships_of(data: dict) -> dict[str, dict]:

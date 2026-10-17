@@ -294,7 +294,10 @@ def revision_status(drawing_no: str, tool_context: ToolContext) -> dict:
     from .drawings import lookup
 
     uid = _uid(tool_context)
-    d = lookup(user_profile(uid)["org_id"], drawing_no, uid)
+    me = user_profile(uid)
+    if me["org_role"] == "guest":  # like the register screen: guests (vendors) never see our drawing register
+        return {"error": "The drawing register isn't available to guests."}
+    d = lookup(me["org_id"], drawing_no, uid)
     if not d:
         return {"error": f"{drawing_no} is not in the drawing register. Fall back to lookup_document."}
     return {"drawing_no": d["drawing_no"], "title": d["title"], "current_rev": d["current_rev"],
@@ -367,11 +370,12 @@ def shift_handover(area: str, tool_context: ToolContext) -> dict:
 
     uid = _uid(tool_context)
     chats = user_chats(uid)
+    guest = user_profile(uid)["org_role"] == "guest"
     toks = set(ai.keywords(area))
     rows = []
     for s in db.collection("handovers").where(filter=FieldFilter("members", "array_contains", uid)).stream():
         h = s.to_dict()
-        if h["chat_id"] not in chats or (toks and not toks & set(ai.keywords(h["area"]))):
+        if h["chat_id"] not in chats or (toks and not toks & set(ai.keywords(h["area"]))) or (guest and h.get("status") == "draft"):
             continue
         rows.append(_public(s.id, h))
     rows.sort(key=lambda r: r["shift_start"] or "", reverse=True)
