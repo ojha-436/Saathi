@@ -21,6 +21,16 @@ export function dayLabel(t?: Timestamp | null) {
   return d.toLocaleDateString("en-IN", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
 }
 
+/** "Sat 17 Oct · 1:03 pm" (the year too when it isn't this year): the date and time a message was sent. */
+export function stamp(t?: Timestamp | null) {
+  const d = toDate(t);
+  if (!d) return "";
+  const thisYear = d.toLocaleDateString("en-IN", { timeZone: TZ, year: "numeric" }) === new Date().toLocaleDateString("en-IN", { timeZone: TZ, year: "numeric" });
+  const date = d.toLocaleDateString("en-IN", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", ...(thisYear ? {} : { year: "numeric" }) });
+  const time = d.toLocaleTimeString("en-IN", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase();
+  return `${date.replace(",", "")} · ${time}`;
+}
+
 export function clock(t?: Timestamp | null) {
   const d = toDate(t);
   return d ? d.toLocaleTimeString("en-IN", { timeZone: TZ, hour: "numeric", minute: "2-digit" }) : "";

@@ -5,6 +5,7 @@ import { ArrowRight, ArrowUp, BarChart3, ChevronDown, FileSearch, Handshake, His
 import { LogoMark } from "./Logo";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { stamp } from "@/lib/format";
 import { useAssistant, useInOrg } from "@/lib/hooks";
 import type { AssistantMsg, Task } from "@/lib/types";
 import { useWs } from "./ctx";
@@ -171,8 +172,9 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
         <div className="mx-auto max-w-3xl space-y-6" aria-live="polite">
           {messages.map((m) =>
             m.role === "user" ? (
-              <div key={m.id} className="flex justify-end">
+              <div key={m.id} className="flex flex-col items-end">
                 <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-brand-soft px-4 py-2.5 text-[15px] text-ink">{m.text}</div>
+                {m.ts && <time className="mt-1 px-1 text-[11px] text-muted" dateTime={m.ts.toDate().toISOString()}>{stamp(m.ts)}</time>}
               </div>
             ) : (
               <div key={m.id} className="flex gap-3">
@@ -195,6 +197,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
                   {m.charts?.map((c, i) => <ChartCard key={i} chart={c} />)}
                   {m.tasks?.map((id) => (taskById[id] ? <ProposedTaskCard key={id} task={taskById[id]} /> : null))}
                   {!m.pending && (m.tool_calls || m.provenance) && <AnswerProvenance m={m} tourTarget={!busy && m.id === messages.at(-1)?.id} />}
+                  {!m.pending && m.ts && <time className="mt-2 block text-[11px] text-muted" dateTime={m.ts.toDate().toISOString()}>{stamp(m.ts)}</time>}
                 </div>
               </div>
             ),
