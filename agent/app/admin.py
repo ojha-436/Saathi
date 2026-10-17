@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import invites as inv, mailer, workspaces
+from . import demo, invites as inv, mailer, workspaces
 from .config import TZ
 from .firebase import (
     GUEST_DEFAULTS, ORG_ROLES, PUBLIC_DOMAINS, FieldFilter, audit, auth, current_user, db, forget_profile, membership_live,
@@ -19,6 +19,13 @@ router = APIRouter(prefix="/api/admin")
 def admin_user(user=Depends(current_user)) -> dict:
     require_admin(user)
     return user
+
+
+def changing_admin(admin=Depends(admin_user)) -> dict:
+    """Admin actions that change people, channels or settings. The shared demo admin login only looks: anyone can sign in
+    as it, so it must not be able to lock others out, hand out admin rights, delete channels or switch features off."""
+    demo.guard(admin)
+    return admin
 
 
 def _member(uid: str, admin: dict) -> dict:
@@ -65,7 +72,7 @@ class RoleIn(BaseModel):
 
 
 @router.post("/members/{uid}/role")
-def set_role(uid: str, body: RoleIn, admin=Depends(admin_user)):
+def set_role(uid: str, body: RoleIn, admin=Depends(changing_admin)):
     if body.org_role not in ORG_ROLES:
         raise HTTPException(400, "Unknown role")
     target = _member(uid, admin)
@@ -100,7 +107,7 @@ class ActiveIn(BaseModel):
 
 
 @router.post("/members/{uid}/active")
-def set_active(uid: str, body: ActiveIn, admin=Depends(admin_user)):
+def set_active(uid: str, body: ActiveIn, admin=Depends(changing_admin)):
     target = _member(uid, admin)
     if uid == admin["uid"]:
         raise HTTPException(400, "You can't deactivate yourself")
@@ -163,7 +170,7 @@ class GuestIn(BaseModel):
 
 
 @router.post("/members/{uid}/guest")
-def guest_access(uid: str, body: GuestIn, admin=Depends(admin_user)):
+def guest_access(uid: str, body: GuestIn, admin=Depends(changing_admin)):
     """A guest's access: direct messages, Saathi, and the end date (extend, shorten, remove the limit)."""
     target = _member(uid, admin)
     if target["org_role"] != "guest":
@@ -223,6 +230,8 @@ def invite(body: InviteIn, admin=Depends(admin_user)):
         raise HTTPException(400, "Enter a valid email address")
     if body.org_role not in ("admin", "member", "guest"):
         raise HTTPException(400, "Invite as admin, member or guest")
+    if body.org_role == "admin":
+        demo.guard(admin, "Demo logins are shared by everyone trying Saathi, so they can invite members and guests but not admins.")
     if body.org_role == "guest" and not body.channel_ids:
         raise HTTPException(400, "Pick at least one channel for a guest")
     note = ""
@@ -306,6 +315,8 @@ def invite_link(invite_id: str, body: LinkIn, admin=Depends(admin_user)):
     d = snap.to_dict()
     if d.get("status") == "accepted":
         raise HTTPException(400, f"{inv.email_of(snap)} has already joined")
+    if d.get("org_role") in ("admin", "owner"):
+        demo.guard(admin)
     if body.send_email and inv.recently_emailed(d):
         raise HTTPException(429, "An invite email just went to this address. Give it a minute before sending again.")
     ref = _move_to_link_invite(snap)
@@ -321,6 +332,8 @@ def revoke_invite(invite_id: str, admin=Depends(admin_user)):
     snap = _own_invite(invite_id, admin)
     if snap.to_dict().get("status") == "accepted":
         raise HTTPException(400, "This invite was already accepted. Deactivate the person in Members instead.")
+    if snap.to_dict().get("invited_by") not in demo.USERS:  # the demo admin withdraws only invites made from demo logins
+        demo.guard(admin)
     snap.reference.update({"status": "revoked", "revoked_by": admin["uid"], "revoked_at": datetime.now(TZ)})  # kept so the link says "withdrawn"
     audit(admin, "member.invite_revoked", inv.email_of(snap))
     return {"ok": True}
@@ -345,7 +358,7 @@ def channels(admin=Depends(admin_user)):
 
 
 @router.delete("/channels/{chat_id}")
-def delete_channel(chat_id: str, admin=Depends(admin_user)):
+def delete_channel(chat_id: str, admin=Depends(changing_admin)):
     from .main import delete_chat_everything
 
     snap = db.collection("chats").document(chat_id).get()
@@ -369,7 +382,7 @@ class OrgIn(BaseModel):
 
 
 @router.patch("/org")
-def update_org(body: OrgIn, admin=Depends(admin_user)):
+def update_org(body: OrgIn, admin=Depends(changing_admin)):
     ref = db.collection("orgs").document(admin["org_id"])
     org = ref.get().to_dict() or {}
     update: dict = {}
