@@ -232,6 +232,17 @@ If not a commitment, set committer and action to empty strings."""
         return None
 
 
+def message_text(m: dict) -> str:
+    """What a message says, for search and the assistant: its own text plus a forwarded message (with who wrote it).
+    A deleted message says nothing."""
+    if m.get("deleted"):
+        return ""
+    own = (m.get("text") or "").strip()
+    f = m.get("forwarded") or {}
+    fwd = f"(forwarded from {f.get('sender_name') or 'someone'}) {(f.get('text') or '').strip()}" if (f.get("text") or "").strip() else ""
+    return "\n".join(x for x in (own, fwd) if x)
+
+
 def process_message(chat_id: str, msg_id: str) -> None:
     chat_snap = db.collection("chats").document(chat_id).get()
     chat = {"id": chat_id, **(chat_snap.to_dict() or {})}
@@ -239,16 +250,19 @@ def process_message(chat_id: str, msg_id: str) -> None:
         return
     ref = db.collection("chats").document(chat_id).collection("messages").document(msg_id)
     msg = ref.get().to_dict() or {}
-    text = (msg.get("text") or "").strip()
-    if not text or msg.get("system"):
+    if msg.get("system"):
         return
+    whole = message_text(msg)
+    if not whole:
+        return
+    text = "" if msg.get("deleted") else (msg.get("text") or "").strip()  # the sender's own words: promises and decisions
     sender = msg.get("sender_name", "")
     sent_at = msg.get("ts") or datetime.now(TZ)
 
     _chunk_doc(
         f"m_{msg_id}",
-        text=text,
-        embed_text=f"[{chat.get('name', '')}] {sender}: {text}",
+        text=whole,
+        embed_text=f"[{chat.get('name', '')}] {sender}: {whole}",
         members=chat.get("members", []),
         chat=chat,
         extra={
@@ -260,6 +274,8 @@ def process_message(chat_id: str, msg_id: str) -> None:
         },
     )
 
+    if not text:  # a forward without a note: someone else's words are never the forwarder's promise or decision
+        return
     sig = classify_signals(text, sender, sent_at, chat)
     if not sig:
         return

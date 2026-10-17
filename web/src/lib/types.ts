@@ -57,6 +57,7 @@ export type UserSettings = {
   live_prompt?: boolean; // offer Saathi Live when a calendar meeting starts
   live_announce?: boolean; // play the spoken recording notice
   walkthrough?: boolean; // took the guided tour (stops it starting by itself)
+  saved?: Record<string, string>; // "chatId|msgId" -> when it was saved
   loaded?: boolean; // client-only: the first snapshot has arrived
 };
 
@@ -118,6 +119,10 @@ export type Message = {
   system?: boolean;
   mentions?: string[];
   doc?: import("./richtext").DocNode; // formatted version of `text` (Tiptap JSON)
+  edited_at?: Timestamp;
+  deleted?: boolean; // removed by its sender: the conversation shows that a message was deleted
+  // a message shared from another chat: who wrote it, when, and (only for a channel) where
+  forwarded?: { sender?: string; sender_name: string; ts?: Timestamp; text: string; doc?: import("./richtext").DocNode; where?: string };
   parent_id?: string;
   reply_count?: number;
   last_reply_ts?: Timestamp;
@@ -177,6 +182,9 @@ export type Notice = {
   read: boolean;
   source_ref?: string | null;
 };
+
+/** A saved message, read live by the API (only from chats the person is still in). */
+export type SavedMessage = { chat_id: string; msg_id: string; saved_at: string; sender?: string; sender_name: string; ts: string | null; deleted: boolean; text: string; file: string | null };
 
 export type AssistantMsg = {
   id: string;

@@ -131,6 +131,10 @@ export const FontColor = make("FontColor");
 export const CodeBlock = make("CodeBlock");
 export const Heading = make("Heading");
 export const Reply = make("Reply");
+export const Bookmark = make("Bookmark");
+export const BookmarkFill = make("BookmarkFill");
+export const Pencil = make("Pencil");
+export const Forward = make("Forward");
 export const MessagesSquare = make("MessagesSquare");
 export const Camera = make("Camera");
 

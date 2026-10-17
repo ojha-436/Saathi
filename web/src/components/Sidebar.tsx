@@ -1,11 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Bell, BellOff, ChevronDown, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus, Mail, CalendarDays, DriveIcon, Gavel, Radar, Workflow } from "@/lib/icons";
-import { useMemo, useState } from "react";
+import { BarChart3, Bell, BellOff, BookmarkFill, ChevronDown, Loader2, Compass, EyeOff, Hash, ListTodo, Lock, MessageSquare, MessageSquarePlus, ShieldCheck, Sparkles, Star, Sun, UserPlus, Mail, CalendarDays, DriveIcon, Gavel, Radar, Workflow } from "@/lib/icons";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { chatTitle, isUnread, timeShort } from "@/lib/format";
-import type { Chat, NotifyLevel, UserSettings } from "@/lib/types";
+import type { Chat, NotifyLevel, SavedMessage, UserSettings } from "@/lib/types";
 import { ChatIcon, Menu } from "./bits";
 import { guestCan, useWs, type View } from "./ctx";
 import { LogoMark } from "./Logo";
@@ -113,7 +113,7 @@ export function AppRail({ unreadChats, unreadAlerts, openTasks, active, onSelect
   );
 }
 
-type Filter = "all" | "unread" | "channels" | "chats";
+type Filter = "all" | "unread" | "channels" | "chats" | "saved";
 
 function useCollapsed() {
   // The workspace only renders client-side (after auth), so reading storage during the first render is safe.
@@ -267,19 +267,22 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
         )}
       </div>
 
-      <div className="flex gap-1.5 px-4 pb-2" role="group" aria-label="Filter">
-        {(["all", "unread", "channels", "chats"] as const).map((f) => (
+      <div className="flex flex-wrap gap-1 px-4 pb-2" role="group" aria-label="Filter">
+        {(["all", "unread", "channels", "chats", "saved"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             aria-pressed={filter === f}
-            className={clsx("h-7 rounded-full border px-2.5 text-xs font-medium capitalize transition", filter === f ? "border-brand bg-brand-soft text-brand" : "border-border bg-surface text-muted hover:text-ink")}
+            className={clsx("h-7 rounded-full border px-2 text-xs font-medium capitalize transition", filter === f ? "border-brand bg-brand-soft text-brand" : "border-border bg-surface text-muted hover:text-ink")}
           >
             {f}
           </button>
         ))}
       </div>
 
+      {filter === "saved" ? (
+        <SavedList onNavigate={onNavigate} />
+      ) : (
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-3" aria-label="Conversations">
         {guestCan(account, "ai") && (
         <button
@@ -328,6 +331,82 @@ export function ChatList({ chatList, onNavigate }: { chatList: Chat[]; onNavigat
         )}
         {filter === "unread" && !favorites.length && !channels.length && !chats.length && <p className="px-3 py-10 text-center text-sm text-muted">You&rsquo;re all caught up.</p>}
       </nav>
+      )}
     </aside>
+  );
+}
+
+/** Saved messages (private to the person), newest first. Read live from the API, so only chats they are still in show. */
+function SavedList({ onNavigate }: { onNavigate?: () => void }) {
+  const { chats, users, uid, settings, openRef, toast } = useWs();
+  const [rows, setRows] = useState<SavedMessage[] | null>(null);
+  const count = Object.keys(settings.saved ?? {}).length;
+  useEffect(() => {
+    let live = true;
+    api<SavedMessage[]>("/api/me/saved")
+      .then((r) => live && setRows(r))
+      .catch((e) => live && (setRows([]), toast((e as Error).message)));
+    return () => {
+      live = false;
+    };
+  }, [count, toast]);
+  async function unsave(r: SavedMessage) {
+    try {
+      await api(`/api/chats/${r.chat_id}/messages/${r.msg_id}/save`, { json: { saved: false } });
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  }
+  if (rows === null)
+    return (
+      <p className="flex items-center gap-2 px-5 py-6 text-sm text-muted">
+        <Loader2 size={14} className="animate-spin" /> Loading saved messages…
+      </p>
+    );
+  const shown = rows.filter((r) => chats[r.chat_id]);
+  return (
+    <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-3" aria-label="Saved messages">
+      {shown.length === 0 ? (
+        <p className="px-4 py-10 text-center text-sm text-muted">Nothing saved yet. Use ⋯ → Save message on any message to keep it here.</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {shown.map((r) => {
+            const chat = chats[r.chat_id];
+            const title = chatTitle(chat, uid, users);
+            return (
+              <li key={`${r.chat_id}|${r.msg_id}`} className="group relative">
+                <button
+                  onClick={() => {
+                    openRef(`msg:${r.chat_id}/${r.msg_id}`);
+                    onNavigate?.();
+                  }}
+                  className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 pr-9 text-left hover:bg-hover"
+                >
+                  <ChatIcon chat={chat} title={title} size={32} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline gap-2">
+                      <span className="truncate text-[13px] font-semibold">{r.sender_name || "Someone"}</span>
+                      <span className="ml-auto shrink-0 text-[11px] text-muted">{timeShort(r.ts ? new Date(r.ts) : null)}</span>
+                    </span>
+                    <span className="block truncate text-[11px] text-muted">{title}</span>
+                    <span className={clsx("mt-0.5 line-clamp-2 text-xs", r.deleted ? "italic text-muted" : "text-ink/80")}>
+                      {r.deleted ? "This message was deleted" : stripMarkers(r.text) || (r.file ? `📎 ${r.file}` : "")}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  onClick={() => unsave(r)}
+                  className="absolute right-1.5 top-2 flex h-7 w-7 items-center justify-center rounded-md text-saffron-ink opacity-70 hover:bg-surface hover:opacity-100"
+                  title="Remove from saved"
+                  aria-label={`Remove saved message from ${r.sender_name}`}
+                >
+                  <BookmarkFill size={14} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </nav>
   );
 }
