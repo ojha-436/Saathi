@@ -186,8 +186,12 @@ export type Notice = {
 /** A saved message, read live by the API (only from chats the person is still in). */
 export type SavedMessage = { chat_id: string; msg_id: string; saved_at: string; sender?: string; sender_name: string; ts: string | null; deleted: boolean; text: string; file: string | null };
 
+/** One Saathi conversation in the history list (from the API: titled, searchable, pinnable). */
+export type AssistantSession = { id: string; title: string; pinned: boolean; questions: number; preview: string; created_at: string | null; updated_at: string | null; match?: string | null };
+
 export type AssistantMsg = {
   id: string;
+  session_id?: string;
   role: "user" | "assistant";
   text: string;
   ts?: Timestamp;
@@ -486,6 +490,7 @@ export type ResearchRun = {
   uid: string;
   goal: string;
   title?: string;
+  pinned?: boolean;
   template: string;
   context?: Record<string, string>;
   status: ResearchStatus;

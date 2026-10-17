@@ -6,13 +6,14 @@ import { LogoMark } from "./Logo";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { clock, dayHeading, dueLabel } from "@/lib/format";
-import { useAssistant, useInOrg } from "@/lib/hooks";
+import { useAssistantSession, useInOrg } from "@/lib/hooks";
 import type { AssistantMsg, Task } from "@/lib/types";
 import { useWs } from "./ctx";
 import { ChartCard } from "./Knowledge";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
 import { SaathiTabs } from "./Research";
+import { newConversation } from "./SaathiSidebar";
 import { ProposedTaskCard } from "./Tasks";
 
 const STARTERS = [
@@ -31,9 +32,30 @@ const RANGES = [
   { label: "This week", hours: 168 },
 ];
 
-export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; prompt?: string; onPromptUsed: () => void }) {
-  const { uid, me, toast, dialog, account, open } = useWs();
-  const messages = useInOrg(useAssistant(uid), account.org_id);
+const RESUME_MS = 2 * 60 * 60 * 1000; // coming back to Saathi within two hours continues the same conversation
+
+function newSessionId() {
+  return "s_" + (crypto.randomUUID?.() ?? `${Date.now()}${Math.random()}`).replace(/[^a-z0-9]/gi, "").slice(0, 16);
+}
+
+/** Which conversation to show: the one picked, a new one, or the one in use in the last two hours. */
+function pickSession(session: string | undefined, prompt: string | undefined): string {
+  if (session && !session.startsWith("new")) return session;
+  if (session || prompt) return newSessionId(); // "New conversation", or a question asked from elsewhere
+  try {
+    const last = JSON.parse(sessionStorage.getItem("saathi.session") || "null") as { id: string; at: number } | null;
+    if (last && Date.now() - last.at < RESUME_MS) return last.id;
+  } catch {}
+  return newSessionId();
+}
+
+export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks: Task[]; prompt?: string; session?: string; onPromptUsed: () => void }) {
+  const { uid, me, toast, dialog, account, open, showList } = useWs();
+  const [sid] = useState(() => pickSession(session, prompt));
+  const messages = useInOrg(useAssistantSession(uid, sid), account.org_id);
+  useEffect(() => {
+    dispatchEvent(new CustomEvent("saathi:session", { detail: sid })); // the sidebar highlights it
+  }, [sid]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -59,7 +81,13 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
     setText("");
     dispatchEvent(new Event("saathi:asked")); // the guided tour waits for this
     try {
-      await api("/api/assistant", { json: { text: body } });
+      sessionStorage.setItem("saathi.session", JSON.stringify({ id: sid, at: Date.now() }));
+    } catch {}
+    try {
+      await api("/api/assistant", { json: { text: body, session_id: sid } });
+      // the history list picks up the conversation, then its title (written by Saathi a moment later)
+      dispatchEvent(new Event("saathi:answered"));
+      setTimeout(() => dispatchEvent(new Event("saathi:answered")), 5000);
     } catch (e) {
       toast(`Saathi couldn't answer: ${(e as Error).message}. Try again in a moment.`);
     } finally {
@@ -92,12 +120,16 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
         <SaathiTabs active="ask" />
         {messages.length > 0 && (
           <button
-            onClick={() => api("/api/assistant/clear", { method: "POST" })}
-            className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted hover:bg-hover hover:text-ink"
+            onClick={() => open(newConversation())}
+            className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted hover:bg-hover hover:text-ink sm:px-3"
+            title="Start a new conversation"
           >
-            <RotateCcw size={14} /> New conversation
+            <RotateCcw size={14} /> <span className="hidden sm:inline">New conversation</span>
           </button>
         )}
+        <button onClick={showList} className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted hover:bg-hover hover:text-ink lg:hidden" aria-label="Conversation history">
+          <History size={16} />
+        </button>
       </header>
 
       <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-6 lg:px-6">

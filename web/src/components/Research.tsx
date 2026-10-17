@@ -3,7 +3,6 @@
 import clsx from "clsx";
 import {
   AlertTriangle,
-  ArrowLeft,
   BarChart3,
   CalendarDays,
   Check,
@@ -84,7 +83,7 @@ const TOOL_LABEL: Record<string, { label: string; icon: typeof Search }> = {
   standards_library: { label: "Standards library", icon: FileSearch },
 };
 
-const STATUS: Record<ResearchRun["status"], { label: string; cls: string }> = {
+export const STATUS: Record<ResearchRun["status"], { label: string; cls: string }> = {
   planning: { label: "Planning", cls: "bg-brand-soft text-brand" },
   awaiting_plan: { label: "Review plan", cls: "bg-warn-soft text-warn-ink" },
   queued: { label: "Queued", cls: "bg-brand-soft text-brand" },
@@ -96,7 +95,7 @@ const STATUS: Record<ResearchRun["status"], { label: string; cls: string }> = {
   failed: { label: "Failed", cls: "bg-rust-soft text-rust" },
 };
 
-const READINESS: Record<ResearchReport["readiness"], { label: string; cls: string; icon: typeof Check } | null> = {
+export const READINESS: Record<ResearchReport["readiness"], { label: string; cls: string; icon: typeof Check } | null> = {
   ready: { label: "Ready", cls: "bg-moss-soft text-moss border-moss/30", icon: CheckCircle2 },
   at_risk: { label: "At risk", cls: "bg-warn-soft text-warn-ink border-warn-border/40", icon: AlertTriangle },
   not_ready: { label: "Not ready", cls: "bg-rust-soft text-rust border-rust/30", icon: Octagon },
@@ -137,11 +136,12 @@ function fmtDuration(ms?: number) {
 }
 
 export function ResearchView({ focusId }: { focusId?: string }) {
-  const { uid } = useWs();
+  const { uid, open, showList } = useWs();
   const runs = useResearchRuns(uid);
-  // The workspace re-mounts this view (key) when a different run is opened from a citation or notification
-  const [selected, setSelected] = useState<string | "new" | undefined>(focusId);
-  // selected: a run id, "new" for the form, or undefined (desktop: latest run; phones: the list)
+  // The list lives in the Saathi sidebar; the workspace re-mounts this view (key) when another run is opened
+  const selected: string | "new" | undefined = focusId;
+  const setSelected = (id: string | undefined) => open({ kind: "research", id });
+  // selected: a run id, "new" for the form, or undefined (the latest run)
   const current = selected && selected !== "new" ? runs.find((r) => r.id === selected) : undefined;
   const effective = selected === "new" ? undefined : (current ?? (!selected ? runs[0] : undefined));
   const loadingNew = !!selected && selected !== "new" && !current;
@@ -157,47 +157,13 @@ export function ResearchView({ focusId }: { focusId?: string }) {
           <p className="hidden truncate text-xs text-muted sm:block">Research agents gather evidence in parallel, verify every claim, and turn gaps into tasks</p>
         </div>
         <SaathiTabs active="research" />
+        <button onClick={showList} className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted hover:bg-hover hover:text-ink lg:hidden" aria-label="All research">
+          <History size={16} /> <span className="hidden sm:inline">History</span>
+        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className={clsx("w-full shrink-0 flex-col border-r border-border bg-canvas/40 lg:flex lg:w-72", selected ? "hidden" : "flex")} aria-label="Your research">
-          <div className="p-3">
-            <button
-              onClick={() => setSelected("new")}
-              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-brand text-[13px] font-semibold text-white transition hover:bg-brand-strong"
-            >
-              <Plus size={15} aria-hidden /> New research
-            </button>
-          </div>
-          <ul className="scrollbar-thin flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
-            {runs.length === 0 && <li className="px-3 py-6 text-center text-xs text-muted">Your research reports appear here.</li>}
-            {runs.map((r) => {
-              const on = (effective?.id ?? selected) === r.id && selected !== "new";
-              return (
-                <li key={r.id}>
-                  <button
-                    onClick={() => setSelected(r.id)}
-                    aria-current={on ? "page" : undefined}
-                    className={clsx("w-full rounded-lg px-2.5 py-2 text-left transition", on ? "bg-surface shadow-[0_1px_2px_rgba(11,27,43,0.08)]" : "hover:bg-hover")}
-                  >
-                    <span className="line-clamp-2 text-[13px] font-medium leading-snug">{r.title || r.goal}</span>
-                    <span className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
-                      <span className={clsx("rounded-full px-1.5 py-px font-semibold", STATUS[r.status].cls)}>{STATUS[r.status].label}</span>
-                      {timeShort(r.created_at)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
-
-        <div className={clsx("min-w-0 flex-1 flex-col lg:flex", selected ? "flex" : "hidden")}>
-          {selected && (
-            <button onClick={() => setSelected(undefined)} className="flex h-10 items-center gap-1.5 border-b border-border px-3 text-sm text-muted lg:hidden">
-              <ArrowLeft size={16} /> All research
-            </button>
-          )}
+        <div className="flex min-w-0 flex-1 flex-col">
           {effective ? (
             <RunView key={effective.id} run={effective} onDeleted={() => setSelected(undefined)} onRetry={(id) => setSelected(id)} />
           ) : loadingNew ? (
