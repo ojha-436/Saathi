@@ -657,6 +657,11 @@ def create_tasks(run_id: str, body: TasksIn, user=Depends(current_user)):
         owner = (same_org(user, [owner]) or [None])[0] if owner else None
         source = next((r for r in g.get("refs", []) if r.startswith("msg:")), None)
         chat_id = source[4:].split("/")[0] if source else None
+        if chat_id:
+            try:  # the task links to (and later posts in) that chat only if the user is in it: a gap's refs come from the model
+                get_chat_for_member(chat_id, user["uid"])
+            except HTTPException:
+                source = chat_id = None
         title = (pick.get("title") or g["title"]).strip()[:200]
         task_id = new_task(user, title, assignee=owner, due_at=ai.parse_iso(pick.get("due_at") or g.get("due_at") or ""), kind="follow_up",
                            source_ref=source or f"research:{run_id}", chat_id=chat_id, watchers=[user["uid"]] if owner and owner != user["uid"] else None)

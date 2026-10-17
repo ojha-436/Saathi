@@ -1,7 +1,8 @@
 """Connected apps. Phase 2 ships Google (Calendar + Gmail, read-only); Microsoft Graph and Zoom plug into the same shape.
 
 Security model
-- OAuth runs server-side with a one-time `state` nonce; the browser never sees Google tokens.
+- OAuth runs server-side with a one-time `state` nonce; the browser never sees Google tokens. The connection is saved only
+  when the browser that comes back from Google finishes it signed in as the same Saathi user who started it.
 - Refresh tokens are envelope-encrypted with Cloud KMS (asia-south1) and stored in `connections`, which security rules
   keep server-only. Access tokens live only in memory for one sync.
 - Everything synced is personal: calendar events and emails are readable and searchable only by the person who
@@ -138,13 +139,13 @@ def start(body: StartIn, user=Depends(current_user)):
     return {"url": "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)}
 
 
-def _back(status: str, detail: str = "") -> RedirectResponse:
-    q = urlencode({"connected": "google", "status": status, **({"detail": detail[:120]} if detail else {})})
+def _back(status: str, detail: str = "", complete: str = "") -> RedirectResponse:
+    q = urlencode({"connected": "google", "status": status, **({"detail": detail[:120]} if detail else {}), **({"complete": complete} if complete else {})})
     return RedirectResponse(f"{WEB_URL}/app?{q}", status_code=302)
 
 
 @router.get("/google/callback")
-def callback(bg: BackgroundTasks, state: str = "", code: str = "", error: str = ""):
+def callback(state: str = "", code: str = "", error: str = ""):
     ref = db.collection("oauth_states").document(state or "-")
     snap = ref.get()
     if not state or not snap.exists:
@@ -155,34 +156,70 @@ def callback(bg: BackgroundTasks, state: str = "", code: str = "", error: str = 
         return _back("error", "This sign-in link has expired. Try connecting again.")
     if error or not code:
         return _back("cancelled")
+    # Nothing is saved yet. The browser that came back finishes the connection with its own Saathi sign-in (complete()),
+    # and only if that is the person who started it: otherwise anyone could send their connect link to a colleague and
+    # receive the colleague's Gmail, Calendar and Drive.
+    done = secrets.token_urlsafe(24)
+    db.collection("oauth_pending").document(done).set({"uid": st["uid"], "services": st.get("services", []), "code": code, "ts": datetime.now(TZ)})
+    return _back("pending", complete=done)
+
+
+class CompleteIn(BaseModel):
+    id: str
+
+
+@router.post("/google/complete")
+def complete(body: CompleteIn, bg: BackgroundTasks, user=Depends(current_user)):
+    """Second half of the callback, called by the web app with the signed-in user's token."""
+    expired = "This sign-in link has expired. Try connecting again."
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", body.id):
+        raise HTTPException(410, expired)
+    ref = db.collection("oauth_pending").document(body.id)
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(410, expired)
+    st = snap.to_dict()
+    ref.delete()  # one-time use
+    if st["uid"] != user["uid"]:
+        audit(user, "connector.rejected", "google", reason="started by another account")
+        raise HTTPException(403, "This Google sign-in was started from a different Saathi account. Connect Google again from your own account.")
+    if datetime.now(TZ) - st["ts"] > timedelta(minutes=10):
+        raise HTTPException(410, expired)
+    if user.get("org_role") == "guest":
+        raise HTTPException(403, "Guests can't connect apps")
+    if _is_demo(user):
+        raise HTTPException(403, DEMO_SHARED)
+    if not _google_allowed(user):
+        raise HTTPException(403, "Your workspace admin has turned off Google connections")
     c = _client()
     tok = requests.post("https://oauth2.googleapis.com/token", timeout=20, data={
-        "code": code, "client_id": c["client_id"], "client_secret": c["client_secret"], "redirect_uri": _redirect_uri(), "grant_type": "authorization_code",
+        "code": st["code"], "client_id": c["client_id"], "client_secret": c["client_secret"], "redirect_uri": _redirect_uri(), "grant_type": "authorization_code",
     }).json()
     if "access_token" not in tok:
         log.warning("google token exchange failed: %s", tok.get("error"))
-        return _back("error", "Google didn't accept the sign-in. Try again.")
+        raise HTTPException(502, "Google didn't accept the sign-in. Try again.")
     granted = set((tok.get("scope") or "").split())
     # include_granted_scopes=true: the token covers everything granted before, so adding Drive keeps Calendar/Gmail
     services = [s for s in SCOPES if SCOPES[s] in granted]
     if not services:
-        return _back("error", "No permissions were granted. Tick Calendar and/or Gmail on Google's screen.")
+        raise HTTPException(400, "No permissions were granted. Tick Calendar and/or Gmail on Google's screen.")
     info = requests.get("https://openidconnect.googleapis.com/v1/userinfo", timeout=20, headers={"Authorization": f"Bearer {tok['access_token']}"}).json()
-    uid = st["uid"]
-    user = user_profile(uid)
+    uid = user["uid"]
     old = db.collection("connections").document(f"{uid}_google").get().to_dict() or {}
-    refresh = tok.get("refresh_token") or (old.get("enc_refresh") and _decrypt(old["enc_refresh"]))
+    # The stored refresh token (and sync position) carry over only when it is the same Google account reconnecting
+    same = old.get("sub") == info.get("sub") if old.get("sub") else (old.get("email") or "").lower() == (info.get("email") or "").lower()
+    refresh = tok.get("refresh_token") or (same and old.get("enc_refresh") and _decrypt(old["enc_refresh"]))
     if not refresh:
-        return _back("error", "Google didn't return offline access. Remove Saathi at myaccount.google.com/permissions and connect again.")
+        raise HTTPException(400, "Google didn't return offline access. Remove Saathi at myaccount.google.com/permissions and connect again.")
     db.collection("connections").document(f"{uid}_google").set({
-        "uid": uid, "org_id": user["org_id"], "provider": "google", "email": info.get("email", ""), "services": services,
+        "uid": uid, "org_id": user["org_id"], "provider": "google", "email": info.get("email", ""), "sub": info.get("sub", ""), "services": services,
         "enc_refresh": _encrypt(refresh), "status": "active", "error": None, "created_at": old.get("created_at") or datetime.now(TZ),
-        "last_sync": None, "cursor": old.get("cursor", {}), "stats": {},
+        "last_sync": None, "cursor": old.get("cursor", {}) if same else {}, "stats": {},
     })
     _set_connected(uid, services)
     audit(user, "connector.connected", "google", services=services, account=info.get("email", ""))
     bg.add_task(sync_user, uid, {"access_token": tok["access_token"]})
-    return _back("ok")
+    return {"ok": True, "services": services}
 
 
 @router.post("/google/disconnect")

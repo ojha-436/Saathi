@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice, workspaces
+from . import admin, ai, connectors, decisions, demo, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice, workspaces
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
@@ -487,6 +487,10 @@ def delete_channel(chat_id: str, user=Depends(current_user)):
     if chat.get("type") != "channel":
         raise HTTPException(400, "Only channels can be deleted")
     _channel_owner(chat, user["uid"])
+    # A shared demo login deletes only a channel it made itself today, never the demo workspace's own channels
+    made = chat.get("created_at")
+    if not (chat.get("created_by") == user["uid"] and isinstance(made, datetime) and now() - made < timedelta(days=1)):
+        demo.guard(user, "Demo logins are shared by everyone trying Saathi, so they can't delete the demo's channels.")
     delete_chat_everything(chat_id)
     audit(user, "channel.deleted", chat_id, name=chat.get("name"))
     return {"ok": True}
@@ -829,6 +833,7 @@ def task_action(task_id: str, action: str, user=Depends(current_user)):
             notify(w, "task_update", f"{user['name']} {verb} a task", t["title"], actor=user, source_ref=t.get("source_ref"), task_id=task_id)
         if action == "done" and t.get("chat_id"):
             try:
+                get_chat_for_member(t["chat_id"], user["uid"])  # only into a chat they're in
                 post_system(t["chat_id"], f"{user['name']} marked “{t['title'][:80]}” done", user["uid"])
             except Exception:
                 logging.warning("could not post task status to chat %s", t.get("chat_id"))
@@ -938,6 +943,10 @@ def fire_reminders(x_cron_secret: str = Header(default="")):
         ho["live_prompts"] = live.prompt_starting_meetings()
     except Exception:
         logging.exception("live prompt failed")
+    try:
+        ho["demo_logins_restored"] = demo.heal()
+    except Exception:
+        logging.exception("demo login check failed")
     return {"fired": fired, "statuses_cleared": cleared, **ho}
 
 
