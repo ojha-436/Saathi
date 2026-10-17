@@ -143,6 +143,12 @@ export const useNotices = (uid?: string) =>
 export const useAssistant = (uid?: string) =>
   useLive<AssistantMsg>(uid ? { path: `assistant/${uid}/messages`, orderBy: ["ts", "asc"], limit: 200 } : null, `assistant:${uid}`);
 
+/** One Saathi conversation's messages, oldest first (one equality filter: no composite index needed; sorted here). */
+export function useAssistantSession(uid?: string, sid?: string): AssistantMsg[] {
+  const rows = useLive<AssistantMsg>(uid && sid ? { path: `assistant/${uid}/messages`, where: [["session_id", "==", sid]], limit: 400 } : null, `assistant:${uid}:${sid}`);
+  return useMemo(() => [...rows].sort((a, b) => (a.ts?.toMillis() ?? Number.MAX_SAFE_INTEGER) - (b.ts?.toMillis() ?? Number.MAX_SAFE_INTEGER)), [rows]);
+}
+
 export const useEvents = (uid?: string) =>
   useLive<CalendarEvent>(uid ? { path: "events", where: [["uid", "==", uid]], limit: 200 } : null, `events:${uid}`);
 
@@ -169,7 +175,7 @@ export function useRegister(enabled: boolean, version: number): Drawing[] {
 }
 
 export const useResearchRuns = (uid?: string) =>
-  useLive<ResearchRun>(uid ? { path: "research_runs", where: [["uid", "==", uid]], orderBy: ["created_at", "desc"], limit: 30 } : null, `research:${uid}`);
+  useLive<ResearchRun>(uid ? { path: "research_runs", where: [["uid", "==", uid]], orderBy: ["created_at", "desc"], limit: 60 } : null, `research:${uid}`);
 
 /** Live progress of one research run (the agents' tool calls and results, in order). */
 export const useResearchEvents = (runId?: string) =>

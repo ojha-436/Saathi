@@ -620,6 +620,28 @@ def cancel(run_id: str, user=Depends(current_user)):
     return {"ok": True}
 
 
+class RunPatch(BaseModel):
+    title: str | None = None
+    pinned: bool | None = None
+
+
+@router.patch("/api/research/{run_id}")
+def update_run(run_id: str, body: RunPatch, user=Depends(current_user)):
+    """Rename or pin a report in the person's research list."""
+    ref, _ = _own(run_id, user)
+    upd: dict = {}
+    if body.title is not None:
+        title = re.sub(r"\s+", " ", body.title).strip()[:120]
+        if not title:
+            raise HTTPException(400, "Give the research a name")
+        upd["title"] = title
+    if body.pinned is not None:
+        upd["pinned"] = body.pinned
+    if upd:
+        ref.update(upd)
+    return {"ok": True}
+
+
 @router.delete("/api/research/{run_id}")
 def delete(run_id: str, user=Depends(current_user)):
     ref, run = _own(run_id, user)

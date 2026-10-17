@@ -41,6 +41,7 @@ import { MeetingView, NewMeetingDialog } from "./Meetings";
 import { MyDayView } from "./MyDay";
 import { ProfileCard, SettingsDialog, StatusDialog, StatusIcon } from "./People";
 import { AppRail, ChatList, notifyLevel, railKey } from "./Sidebar";
+import { SaathiSidebar } from "./SaathiSidebar";
 import { ActivityView, TaskDialog, TasksView } from "./Tasks";
 
 const QUICK_STATUS: StatusState[] = ["available", "busy", "dnd", "away", "offline"];
@@ -290,7 +291,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
   const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid, reads) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
-  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant";
+  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant" || view.kind === "research";
   const admin = isAdmin(account);
   const myState = presence(me);
 
@@ -454,13 +455,19 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
           {listPane && (
             <div className={clsx("w-full shrink-0 lg:block lg:w-80", mobileList ? "block" : "hidden")}>
-              <ChatList chatList={chatList} onNavigate={() => setMobileList(false)} />
+              {view.kind === "assistant" || view.kind === "research" ? (
+                <SaathiSidebar key={view.kind} mode={view.kind === "research" ? "research" : "ask"} activeId={view.kind === "research" ? view.id : view.session} onNavigate={() => setMobileList(false)} />
+              ) : (
+                <ChatList chatList={chatList} onNavigate={() => setMobileList(false)} />
+              )}
             </div>
           )}
 
           <main id="workspace-main" ref={mainRef} tabIndex={-1} className={clsx("min-w-0 flex-1 flex-col bg-surface outline-none lg:flex", listPane && mobileList ? "hidden" : "flex")}>
             {view.kind === "home" && <MyDayView tasks={tasks} notices={notices} />}
-            {view.kind === "assistant" && canAI && <AssistantView tasks={tasks} prompt={view.prompt} onPromptUsed={() => setView({ kind: "assistant" })} />}
+            {view.kind === "assistant" && canAI && (
+              <AssistantView key={view.session ?? "resume"} tasks={tasks} prompt={view.prompt} session={view.session} onPromptUsed={() => setView({ kind: "assistant" })} />
+            )}
             {view.kind === "research" && <ResearchView key={view.id ?? "research"} focusId={view.id} />}
             {view.kind === "insights" && <InsightsView />}
             {view.kind === "tasks" && <TasksView tasks={tasks} />}

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, demo, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice, workspaces
+from . import admin, ai, connectors, decisions, demo, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, sessions, specs, voice, workspaces
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
@@ -35,6 +35,7 @@ app.include_router(handover.router)
 app.include_router(knowledge.router)
 app.include_router(live.router)
 app.include_router(research.router)
+app.include_router(sessions.router)
 app.include_router(dossier.router)
 app.include_router(specs.router)
 app.include_router(voice.router)
@@ -901,8 +902,13 @@ def log_event_bigquery(row: dict) -> None:
         logging.exception("bigquery insert failed")
 
 
+class AskIn(BaseModel):
+    text: str
+    session_id: str | None = None  # the conversation (the browser names a new one, so it can watch the answer stream in)
+
+
 @app.post("/api/assistant")
-async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user)):
+async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Empty message")
@@ -911,12 +917,13 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
     if not (org_of(user).get("settings") or {}).get("ai_enabled", True):
         raise HTTPException(403, "Your workspace admin has turned off the AI assistant")
     col = db.collection("assistant").document(user["uid"]).collection("messages")
-    # Conversations are per workspace: someone in two workspaces never carries one company's context into the other
-    recent = [s.to_dict() for s in col.order_by("ts", direction=firestore.Query.DESCENDING).limit(30).stream()]
-    history = [{"role": d.get("role"), "text": d.get("text") or ""} for d in reversed(recent) if d.get("org_id") in (None, "", user["org_id"])][-6:]
-    col.document().set({"role": "user", "text": text, "ts": now(), "org_id": user["org_id"]})
+    # Saathi's context is this conversation's recent turns (conversations are per person and per workspace)
+    sid = body.session_id if sessions.valid(body.session_id) else sessions.new_id()
+    is_new = sessions.touch(user, sid, text)
+    history = [] if is_new else sessions.history(user["uid"], sid)
+    col.document().set({"role": "user", "text": text, "ts": now(), "org_id": user["org_id"], "session_id": sid})
     pending = col.document()
-    pending.set({"role": "assistant", "text": "", "pending": True, "ts": now(), "org_id": user["org_id"]})
+    pending.set({"role": "assistant", "text": "", "pending": True, "ts": now(), "org_id": user["org_id"], "session_id": sid})
     started = time.monotonic()
     last = [0.0]
 
@@ -947,15 +954,19 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
         "answer_chars": len(result["text"]), "cited_sources": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"]))),
         "ts": now().isoformat(),
     })
-    return result
+    if is_new:
+        bg.add_task(sessions.name, user["uid"], sid, text, result["text"])
+    return {**result, "session_id": sid}
 
 
 @app.post("/api/assistant/clear")
 def clear_assistant(user=Depends(current_user)):
+    demo.guard(user)  # would wipe a shared demo login's history for everyone
     col = db.collection("assistant").document(user["uid"]).collection("messages")
-    for s in col.stream():
-        if s.to_dict().get("org_id") in (None, "", user["org_id"]):
-            s.reference.delete()
+    for c in (col, db.collection("assistant").document(user["uid"]).collection("sessions")):
+        for s in c.stream():
+            if s.to_dict().get("org_id") in (None, "", user["org_id"]):
+                s.reference.delete()
     return {"ok": True}
 
 

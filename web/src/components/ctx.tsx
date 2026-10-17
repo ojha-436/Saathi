@@ -5,7 +5,7 @@ import type { Account, CalendarEvent, Chat, Drawing, DriveFile, EmailItem, FileD
 
 export type View =
   | { kind: "home" }
-  | { kind: "assistant"; prompt?: string }
+  | { kind: "assistant"; prompt?: string; session?: string } // session: a conversation id, or "new…" to start one
   | { kind: "research"; id?: string }
   | { kind: "insights" }
   | { kind: "tasks" }
