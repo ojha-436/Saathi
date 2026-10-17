@@ -54,6 +54,13 @@ service cloud.firestore {
     match /assistant/{uid}/messages/{id} {
       allow read: if signedIn() && request.auth.uid == uid;
     }
+    // Assistant conversations and project folders: private to their owner
+    match /assistant/{uid}/threads/{id} {
+      allow read: if signedIn() && request.auth.uid == uid;
+    }
+    match /assistant/{uid}/projects/{id} {
+      allow read: if signedIn() && request.auth.uid == uid;
+    }
     // Voice transcripts (text only; audio is never stored): private to the speaker, deleted after 30 days (TTL on expire_at)
     match /voice_sessions/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;

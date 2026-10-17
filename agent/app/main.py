@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from . import admin, ai, connectors, decisions, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, voice, workspaces
+from . import admin, ai, connectors, decisions, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, specs, threads, voice, workspaces
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
@@ -38,6 +38,7 @@ app.include_router(research.router)
 app.include_router(dossier.router)
 app.include_router(specs.router)
 app.include_router(voice.router)
+app.include_router(threads.router)
 if SAATHI_ROLE in ("worker", "all"):
     app.include_router(jobs.router)  # Cloud Tasks targets; the worker service is private
 app.add_middleware(
@@ -207,7 +208,7 @@ if LOCAL_MODE:
             allowed = has("participants", "array-contains", uid)
         elif parts in (["events"], ["external_items"], ["notifications"]):
             allowed = has("uid", "==", uid)
-        elif len(parts) == 3 and parts[0] == "assistant" and parts[2] == "messages":
+        elif len(parts) == 3 and parts[0] == "assistant" and parts[2] in ("messages", "threads", "projects"):
             allowed = parts[1] == uid
         elif parts == ["research_runs"]:
             allowed = has("uid", "==", uid)
@@ -717,8 +718,13 @@ def log_event_bigquery(row: dict) -> None:
         logging.exception("bigquery insert failed")
 
 
+class AskIn(BaseModel):
+    text: str = Field(max_length=4000)
+    thread_id: str | None = Field(default=None, max_length=40)  # none: a new conversation is started
+
+
 @app.post("/api/assistant")
-async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user)):
+async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Empty message")
@@ -726,44 +732,7 @@ async def assistant(body: TextIn, bg: BackgroundTasks, user=Depends(current_user
     rate_limit(user["uid"], "assistant", 20)
     if not (org_of(user).get("settings") or {}).get("ai_enabled", True):
         raise HTTPException(403, "Your workspace admin has turned off the AI assistant")
-    col = db.collection("assistant").document(user["uid"]).collection("messages")
-    # Conversations are per workspace: someone in two workspaces never carries one company's context into the other
-    recent = [s.to_dict() for s in col.order_by("ts", direction=firestore.Query.DESCENDING).limit(30).stream()]
-    history = [{"role": d.get("role"), "text": d.get("text") or ""} for d in reversed(recent) if d.get("org_id") in (None, "", user["org_id"])][-6:]
-    col.document().set({"role": "user", "text": text, "ts": now(), "org_id": user["org_id"]})
-    pending = col.document()
-    pending.set({"role": "assistant", "text": "", "pending": True, "ts": now(), "org_id": user["org_id"]})
-    started = time.monotonic()
-    last = [0.0]
-
-    def on_partial(t: str) -> None:  # stream into the message the browser is already listening to (~4 writes/s max)
-        if time.monotonic() - last[0] >= 0.25:
-            last[0] = time.monotonic()
-            try:
-                pending.update({"text": t})
-            except Exception:
-                logging.warning("partial update failed")
-
-    try:
-        result = await ask(user, text, history, on_partial=on_partial)
-    except Exception as e:
-        logging.exception("assistant failed")
-        pending.update({"text": "Sorry, something went wrong while I was working on that. Please try again.", "pending": False, "error": str(e)[:300]})
-        raise HTTPException(500, "Assistant failed")
-    latency = int((time.monotonic() - started) * 1000)
-    pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
-                    "charts": result.get("charts") or [], "provenance": {"model": result.get("model"), "latency_ms": latency,
-                    "first_token_ms": result.get("first_token_ms"), "prefetched": result.get("prefetched", [])}})
-    tools = [c["tool"] for c in result["tool_calls"]]
-    db.collection("audit_log").add({"uid": user["uid"], "org_id": user["org_id"], "kind": "assistant", "query": text, "tool_calls": result["tool_calls"],
-                                    "tools": tools, "latency_ms": latency, "first_token_ms": result.get("first_token_ms"), "ts": now(),
-                                    "cited": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"])))})
-    bg.add_task(log_event_bigquery, {
-        "uid": user["uid"], "query": text[:1000], "tools": json.dumps(tools), "latency_ms": latency,
-        "answer_chars": len(result["text"]), "cited_sources": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"]))),
-        "ts": now().isoformat(),
-    })
-    return result
+    return await threads.answer(user, body.thread_id, text, bg)
 
 
 @app.post("/api/assistant/clear")
@@ -772,6 +741,9 @@ def clear_assistant(user=Depends(current_user)):
     for s in col.stream():
         if s.to_dict().get("org_id") in (None, "", user["org_id"]):
             s.reference.delete()
+    for t in db.collection("assistant").document(user["uid"]).collection("threads").stream():
+        if t.to_dict().get("org_id") in (None, "", user["org_id"]):
+            t.reference.delete()
     return {"ok": True}
 
 

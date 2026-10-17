@@ -6,7 +6,7 @@ import { api } from "./api";
 import { getToken, isLocal } from "./auth";
 import { apiUrl, getDb } from "./firebase";
 import { reviveTs } from "./localts";
-import type { AssistantMsg, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, ResearchEvent, ResearchRun, Task, UserProfile, UserSettings } from "./types";
+import type { AssistantMsg, AssistantProject, AssistantThread, CalendarEvent, Chat, Drawing, EmailItem, FileDoc, Meeting, Message, Notice, PlantRecord, ResearchEvent, ResearchRun, Task, UserProfile, UserSettings } from "./types";
 
 type Spec = { path: string; where?: [string, string, unknown][]; orderBy?: [string, "asc" | "desc"]; limit?: number };
 
@@ -140,8 +140,36 @@ export const useTasks = (uid?: string) =>
 export const useNotices = (uid?: string) =>
   useLive<Notice>(uid ? { path: "notifications", where: [["uid", "==", uid]], orderBy: ["ts", "desc"], limit: 30 } : null, `notices:${uid}`);
 
-export const useAssistant = (uid?: string) =>
-  useLive<AssistantMsg>(uid ? { path: `assistant/${uid}/messages`, orderBy: ["ts", "asc"], limit: 200 } : null, `assistant:${uid}`);
+const tsMs = (t?: { toMillis?: () => number } | null) => t?.toMillis?.() ?? Number.MAX_SAFE_INTEGER; // not yet stamped: newest
+
+/** Messages of one assistant conversation. "legacy" is the one long conversation from before conversations existed. */
+export function useAssistant(uid?: string, threadId?: string | null): AssistantMsg[] {
+  const live = useLive<AssistantMsg>(
+    uid && threadId
+      ? threadId === "legacy"
+        ? { path: `assistant/${uid}/messages`, orderBy: ["ts", "asc"], limit: 200 }
+        : { path: `assistant/${uid}/messages`, where: [["thread_id", "==", threadId]], limit: 200 }
+      : null,
+    `assistant:${uid}:${threadId}`,
+  );
+  return useMemo(() => {
+    const rows = threadId === "legacy" ? live.filter((m) => !m.thread_id) : live;
+    return [...rows].sort((a, b) => tsMs(a.ts) - tsMs(b.ts)); // a single-field query comes back unordered
+  }, [live, threadId]);
+}
+
+/** Does the person have messages from before conversations existed? (they show up as "Earlier conversation") */
+export function useHasLegacyAssistant(uid?: string): boolean {
+  const live = useLive<AssistantMsg>(uid ? { path: `assistant/${uid}/messages`, orderBy: ["ts", "asc"], limit: 200 } : null, `assistant-legacy:${uid}`);
+  return useMemo(() => live.some((m) => !m.thread_id), [live]);
+}
+
+export const useAssistantThreads = (uid?: string) =>
+  useLive<AssistantThread>(uid ? { path: `assistant/${uid}/threads`, limit: 300 } : null, `assistant-threads:${uid}`);
+
+export const useAssistantProjects = (uid?: string) =>
+  useLive<AssistantProject>(uid ? { path: `assistant/${uid}/projects`, limit: 60 } : null, `assistant-projects:${uid}`);
+
 
 export const useEvents = (uid?: string) =>
   useLive<CalendarEvent>(uid ? { path: "events", where: [["uid", "==", uid]], limit: 200 } : null, `events:${uid}`);

@@ -1,14 +1,15 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowRight, ArrowUp, BarChart3, ChevronDown, FileSearch, Handshake, History, Loader2, Radar, RotateCcw, ShieldCheck, Sparkles, Timer, Workflow } from "@/lib/icons";
+import { ArrowRight, ArrowUp, BarChart3, ChevronDown, FileSearch, Handshake, History, Loader2, Menu, Radar, ShieldCheck, Sparkles, Timer, Workflow, X } from "@/lib/icons";
 import { LogoMark } from "./Logo";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { stamp } from "@/lib/format";
-import { useAssistant, useInOrg } from "@/lib/hooks";
+import { useAssistant, useAssistantProjects, useAssistantThreads, useHasLegacyAssistant, useInOrg } from "@/lib/hooks";
 import type { AssistantMsg, Task } from "@/lib/types";
 import { useWs } from "./ctx";
+import { AssistantSidebar, type ActiveChat } from "./AssistantSidebar";
 import { ChartCard } from "./Knowledge";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
@@ -33,7 +34,20 @@ const RANGES = [
 
 export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; prompt?: string; onPromptUsed: () => void }) {
   const { uid, me, toast, dialog, account, open } = useWs();
-  const messages = useInOrg(useAssistant(uid), account.org_id);
+  const [activeId, setActiveId] = useState<ActiveChat>(() => {
+    try {
+      return sessionStorage.getItem("saathi.askChat") || "new";
+    } catch {
+      return "new";
+    }
+  });
+  const justMade = useRef<Record<string, number>>({});
+  const [navOpen, setNavOpen] = useState(false); // the chat list as a drawer on small screens
+  const threads = useInOrg(useAssistantThreads(uid), account.org_id);
+  const projects = useInOrg(useAssistantProjects(uid), account.org_id);
+  const hasLegacy = useHasLegacyAssistant(uid);
+  const showing = activeId === "new" ? null : activeId;
+  const messages = useInOrg(useAssistant(uid, showing), account.org_id);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -45,21 +59,41 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
   }, [messages.length, messages.at(-1)?.text]);
 
   useEffect(() => {
+    try {
+      sessionStorage.setItem("saathi.askChat", activeId);
+    } catch {}
+  }, [activeId]);
+
+  // a chat that was deleted (here or on another device) falls back to a blank new chat
+  useEffect(() => {
+    if (threads.length === 0 || !showing || showing === "legacy" || threads.some((t) => t.id === showing)) return;
+    if (Date.now() - (justMade.current[showing] ?? 0) < 20_000) return; // a chat we just created reaches the list a moment later
+    setActiveId("new");
+  }, [threads, showing]);
+
+  useEffect(() => {
     if (prompt) {
-      ask(prompt);
+      ask(prompt, true); // a question sent from elsewhere ("Ask Saathi about this message") opens its own chat
       onPromptUsed();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt]);
 
-  async function ask(q: string) {
+  async function ask(q: string, fresh = false) {
     const body = q.trim();
     if (!body || busy) return;
     setBusy(true);
     setText("");
     dispatchEvent(new Event("saathi:asked")); // the guided tour waits for this
     try {
-      await api("/api/assistant", { json: { text: body } });
+      // a blank chat (or the old archive) becomes a real conversation before the first question goes out
+      let tid: string | null = fresh || activeId === "new" || activeId === "legacy" ? null : activeId;
+      if (!tid) {
+        tid = (await api<{ id: string }>("/api/assistant/threads", { method: "POST", json: {} })).id;
+        justMade.current[tid] = Date.now();
+        setActiveId(tid);
+      }
+      await api("/api/assistant", { json: { text: body, thread_id: tid } });
     } catch (e) {
       toast(`Saathi couldn't answer: ${(e as Error).message}. Try again in a moment.`);
     } finally {
@@ -73,8 +107,23 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
   const greet = +hour < 12 ? "Good morning" : +hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-surface" aria-label="Ask Saathi">
+    <section className="flex min-h-0 flex-1 bg-surface" aria-label="Ask Saathi">
+      <div className="hidden lg:block">
+        <AssistantSidebar threads={threads} projects={projects} hasLegacy={hasLegacy} active={activeId} onSelect={setActiveId} />
+      </div>
+      {navOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <AssistantSidebar threads={threads} projects={projects} hasLegacy={hasLegacy} active={activeId} onSelect={setActiveId} onClose={() => setNavOpen(false)} />
+          <button className="flex-1 bg-ink/40" aria-label="Close chat list" onClick={() => setNavOpen(false)}>
+            <X size={20} className="m-3 text-white" />
+          </button>
+        </div>
+      )}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
+        <button onClick={() => setNavOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-ink lg:hidden" aria-label="Open chat list">
+          <Menu size={18} />
+        </button>
         <LogoMark size={32} />
         <div className="min-w-0 flex-1">
           <h1 className="text-[15px] font-bold leading-tight">Ask Saathi</h1>
@@ -90,17 +139,15 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
           </button>
         )}
         <SaathiTabs active="ask" />
-        {messages.length > 0 && (
-          <button
-            onClick={() => api("/api/assistant/clear", { method: "POST" })}
-            className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted hover:bg-hover hover:text-ink"
-          >
-            <RotateCcw size={14} /> New conversation
-          </button>
-        )}
       </header>
 
+      <>
       <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-6 lg:px-6">
+        {activeId === "legacy" && (
+          <p className="mx-auto mb-4 max-w-3xl rounded-xl bg-canvas px-4 py-2.5 text-sm text-muted">
+            This is your earlier conversation, from before chats were separate. Ask below to start a new chat.
+          </p>
+        )}
         {messages.length === 0 && (
           <div className="mx-auto max-w-3xl">
             <p className="rise font-mono text-xs uppercase tracking-[0.16em] text-saffron-ink">{greet}</p>
@@ -238,6 +285,8 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
             {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
           </button>
         </form>
+      </div>
+      </>
       </div>
     </section>
   );

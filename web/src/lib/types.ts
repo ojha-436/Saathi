@@ -182,6 +182,7 @@ export type AssistantMsg = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  thread_id?: string;
   ts?: Timestamp;
   pending?: boolean;
   tasks?: string[];
@@ -578,3 +579,17 @@ export type SpecLimit = {
   page: number;
   status: "proposed" | "approved" | "rejected";
 };
+
+/** One assistant conversation (a "chat" in the Ask Saathi sidebar). */
+export type AssistantThread = {
+  id: string;
+  title: string;
+  pinned?: boolean;
+  project_id?: string | null;
+  org_id?: string;
+  created_at?: Timestamp;
+  updated_at?: Timestamp;
+};
+
+export type AssistantProject = { id: string; name: string; org_id?: string; created_at?: Timestamp };
+

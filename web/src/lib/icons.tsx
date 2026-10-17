@@ -143,3 +143,9 @@ export function DriveIcon({ size = 24, className, ...rest }: IconProps) {
     </svg>
   );
 }
+export const Folder = make("Folder");
+export const FolderPlus = make("FolderPlus");
+export const Pin = make("Pin");
+export const ChevronRight = make("ChevronRight");
+export const Play = make("Play");
+export const Pencil = make("Pencil");

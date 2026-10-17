@@ -277,7 +277,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
   const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid, reads) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
-  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant";
+  const listPane = view.kind === "chat" || view.kind === "chats"; // the assistant has its own chat list
   const admin = isAdmin(account);
   const myState = presence(me);
 
