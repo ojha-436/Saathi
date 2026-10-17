@@ -13,8 +13,8 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools import ToolContext
 from google.genai import types
 
-from . import ai, resilience
-from .config import AGENT_MODEL, AGENT_THINKING, COMPANY, TZ
+from . import ai, resilience, scope
+from .config import AGENT_MODEL, AGENT_THINKING, COMPANY, FAST_MODEL, TZ
 from .firebase import db, FieldFilter, firestore, user_profile
 from .search import search, user_chats
 
@@ -396,6 +396,13 @@ def _instruction(ctx: ReadonlyContext) -> str:
     return f"""You are Saathi, the personal work assistant of {s.get('user_name')} ({s.get('role')}) at {company}{about}.
 Current time: {now} (Asia/Kolkata).
 
+Scope: you help with {s.get('user_name')}'s work at {company}, from this workspace's sources only (chats, files, drawings,
+records, decisions, tasks, meetings, standards, plant data, and their connected email, calendar and Drive). You are not a
+general chatbot. If a request isn't about that work (general knowledge, current affairs, writing or fixing code, scripts, SQL,
+HTML or web pages, homework, poems or essays, personal advice), don't answer it, even partly and even if you know the answer:
+say in one sentence that you only help with work in this workspace and suggest something you can look up. Never write code.
+Greetings, thanks and "what can you do" are fine: answer briefly.
+
 How to work:
 - For ANY question about work content (files, drawings, what someone said, decisions, status, vendors, jobs), call tools first. Never answer from memory.
 - Cite facts with the ref from tool results in square brackets, exactly like [msg:abc/def], [file:xyz], [meet:xyz], [dec:xyz], [rec:xyz], [ho:xyz], [kn:xyz], [std:xyz], [mail:xyz] or [drive:xyz]. Only cite refs that tools returned. Put a citation at the end of the bullet or sentence it supports, and do not repeat the same ref on consecutive lines.
@@ -476,12 +483,28 @@ async def ask(user: dict, text: str, history: list[dict], on_partial=None) -> di
         note = "_Offline mode (no Gemini key): showing the closest matches from your chats and files._"
         return {"text": f"{note}\n\n{bullets}", "tool_calls": calls, "proposed_tasks": []}
     started = time.monotonic()
-    found = await asyncio.to_thread(prefetch, user["uid"], text)
+    org_name = (db.collection("orgs").document(user.get("org_id") or "-").get().to_dict() or {}).get("name", "")
+    company = org_name or COMPANY
+    about = ", a railway rolling-stock component manufacturer in India" if company == COMPANY else ""
+
+    async def in_scope() -> dict:
+        try:  # never hold an answer up for long: past 4 s the question goes through
+            return await asyncio.wait_for(asyncio.to_thread(scope.check, text, history, company=company, about=about, user=user["name"],
+                                                            role=user.get("role", "")), timeout=4)
+        except Exception:
+            return {"about_work": True, "kind": "work", "hinglish": False}
+
+    # The scope check runs alongside the workspace search, so a work question waits no longer than before
+    found, verdict = await asyncio.gather(asyncio.to_thread(prefetch, user["uid"], text), in_scope())
+    if not verdict["about_work"]:
+        return {"text": scope.refusal(company, verdict["kind"], verdict["hinglish"]), "tool_calls": [{"tool": "scope_check", "args": {"kind": verdict["kind"]}}],
+                "proposed_tasks": [], "charts": [], "prefetched": [], "first_token_ms": int((time.monotonic() - started) * 1000),
+                "model": f"{FAST_MODEL} (scope check)", "out_of_scope": verdict["kind"]}
     session = await session_service.create_session(
         app_name=APP_NAME,
         user_id=user["uid"],
         state={"uid": user["uid"], "user_name": user["name"], "role": user["role"], "proposed_tasks": [], "charts": [],
-               "org_name": (db.collection("orgs").document(user.get("org_id") or "-").get().to_dict() or {}).get("name", "")},
+               "org_name": org_name},
     )
     convo = "\n".join(f"{h['role']}: {h['text'][:800]}" for h in history[-6:])
     pre = ""

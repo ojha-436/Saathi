@@ -241,6 +241,7 @@ export function AssistantView({ tasks, prompt, onPromptUsed }: { tasks: Task[]; 
 }
 
 const TOOL_NAME: Record<string, string> = {
+  scope_check: "Checked the question is about your work",
   search_workspace: "Searched chats and files",
   get_message_context: "Read the surrounding conversation",
   catch_up: "Collected recent activity",
