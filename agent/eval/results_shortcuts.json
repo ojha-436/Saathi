@@ -1,120 +1,125 @@
 {
-  "ran_at": "2026-10-18T09:53:09.060087+05:30",
+  "ran_at": "2026-10-18T10:17:29.600786+05:30",
   "draft": [
     {
       "description": "Check a PO's delivery schedule, its latest certificate and open NCRs for that vendor",
       "ok": true,
       "draft": {
-        "name": "Check PO Delivery and Vendor NCRs",
+        "name": "Check PO Schedule Certificate and NCRs",
         "command": "po-status-check",
-        "instruction": "1. Search emails, chats, and Drive for the delivery schedule related to {PO number}. 2. Read the latest material test certificate for {PO number}. 3. Search past non-conformance reports (NCRs) for {vendor name}. 4. Present the delivery schedule, certificate status, and open NCRs concisely with citations.",
+        "instruction": "1. Search emails and files for the delivery schedule of {PO number}.\n2. Read the latest material test certificate for {PO number}.\n3. Search past NCRs for the vendor associated with {PO number}.\n4. Present the delivery schedule, certificate status, and open NCRs concisely with citations.",
         "inputs": [
-          "PO number",
-          "vendor name"
+          "PO number"
         ],
-        "minutes_saved": 20
+        "minutes_saved": 25
       },
       "hardcoded_ids": [],
-      "ms": 3019
+      "ms": 2996
     },
     {
       "description": "Before an inspection, check which certificate values for a heat number are out of spec",
       "ok": true,
       "draft": {
-        "name": "Check Heat Certificate Spec",
-        "command": "heat-spec-check",
-        "instruction": "1. Search for the material test certificate matching {heat number}. 2. Read the certificate values and compare them against the standards library using Spec Check. 3. List any out-of-spec values found. Present the result clearly with short citations.",
+        "name": "Check Heat Number Spec",
+        "command": "check-heat-spec",
+        "instruction": "1. Search material test certificates for the given {heat number}.\n2. Read the test certificate values and verify them against the standards library using Spec Check.\n3. Present the out-of-spec certificate values clearly with citations.",
         "inputs": [
           "heat number"
         ],
         "minutes_saved": 25
       },
       "hardcoded_ids": [],
-      "ms": 2982
+      "ms": 2847
     },
     {
       "description": "Tell me the latest revision of a drawing, who approved it and what changed",
       "ok": true,
       "draft": {
-        "name": "Check Drawing Revision History",
+        "name": "Check Drawing Revision and Changes",
         "command": "drawing-revision",
-        "instruction": "1. Search files and the drawing revision register for {Drawing number}. 2. Identify the latest revision number and date. 3. Read the drawing revision register entry to find who approved the latest revision and the description of what changed. 4. Present the results concisely with citations to the drawing and register.",
+        "instruction": "1. Search the drawing revision register for {drawing number}.\n2. Identify the latest revision number, the approver, and the documented changes.\n3. Present the result in short, cited form.",
         "inputs": [
-          "Drawing number"
+          "drawing number"
         ],
         "minutes_saved": 15
       },
       "hardcoded_ids": [],
-      "ms": 3143
+      "ms": 3018
     },
     {
       "description": "Every Monday: which vendors are late on their promises and what they owe me",
       "ok": true,
       "draft": {
-        "name": "Weekly Vendor Promise Review",
-        "command": "vendor-promises-due",
-        "instruction": "1. Search my emails, chats, and files for vendor promise records due up to today. 2. Compare the due dates and promised deliverables with the actual status of materials or components. 3. List each vendor who is late on their promise and detail what items they currently owe me. 4. Present the result clearly with sources and short citations.",
-        "inputs": [],
+        "name": "Weekly Vendor Promise Delay Check",
+        "command": "vendor-promise-check",
+        "instruction": "1. Search vendor and colleague promise records for any overdue promises due by {target date}.\n2. Cross-reference with the decision log and past NCRs for related delays.\n3. Present the late vendors and what they owe in a short, cited summary.",
+        "inputs": [
+          "target date"
+        ],
         "minutes_saved": 45
       },
       "hardcoded_ids": [],
-      "ms": 2104
+      "ms": 2391
     },
     {
       "description": "har Monday dekho kaun se vendor late hain aur unke promises kya the",
       "ok": true,
       "draft": {
         "name": "Somwar Ki Vendor Late List",
-        "command": "vendor-late-list",
-        "instruction": "1. Check the vendor and colleague promise records for the last week to identify which vendors are late. 2. Search past chats, emails, and files for any updates or new commitments from those late vendors. 3. Look up plant data and shift handovers to see the impact of these delays on production. 4. Present the results as a short, cited summary of late vendors and their broken promises.",
-        "inputs": [],
-        "minutes_saved": 45
+        "command": "vendor-late-check",
+        "instruction": "1. Search vendor promise records and past emails for late vendors for {date range}.\n2. Check vendor and colleague promise records for missed delivery deadlines.\n3. Look up vendor communication history regarding delays.\n4. Present the summary of late vendors and their promises clearly, short and cited.",
+        "inputs": [
+          "date range"
+        ],
+        "minutes_saved": 30
       },
       "hardcoded_ids": [],
-      "ms": 2254
+      "ms": 2495
     },
     {
       "description": "Kisi machine ka downtime history aur pichhle fixes batao",
       "ok": true,
       "draft": {
-        "name": "Machine Downtime History Checker",
-        "command": "machine-downtime-history",
-        "instruction": "1. Search chat, files, and email for downtime records related to {Machine Name}. 2. Look up past NCRs and downtime logs with their fixes for {Machine Name}. 3. Present the result concisely with citations.",
+        "name": "Machine Downtime aur Fix History",
+        "command": "machine-downtime",
+        "instruction": "1. Search chat, files, and past records for downtime and fixes related to {Machine Name}.\n2. Check the decision log and past NCRs for {Machine Name}.\n3. Present the downtime history and fixes concisely with citations.",
         "inputs": [
           "Machine Name"
         ],
-        "minutes_saved": 20
+        "minutes_saved": 25
       },
       "hardcoded_ids": [],
-      "ms": 2061
+      "ms": 2178
     },
     {
       "description": "Prep me for my next meeting: who is attending, open tasks with them and recent decisions",
       "ok": true,
       "draft": {
-        "name": "Meeting Preparation Assistant",
-        "command": "prep-meeting",
-        "instruction": "1. Search calendar to find the next upcoming meeting and list its attendees. 2. Search chats, emails, and files for any open tasks assigned to or shared with the attendees. 3. Search the decision log for recent decisions involving the attendees. 4. Present the result as a short, cited summary.",
-        "inputs": [],
+        "name": "Meeting Preparation Brief",
+        "command": "meeting-prep",
+        "instruction": "1. Check my calendar to find the details of the upcoming meeting {Meeting Title}.\n2. Identify all attendees and search my chats, emails, and Drive for recent discussions with them.\n3. Look up my tasks and the decision log for any open tasks or recent decisions involving these attendees.\n4. Present the summary of attendees, open tasks, and recent decisions in a short, cited format.",
+        "inputs": [
+          "Meeting Title"
+        ],
         "minutes_saved": 15
       },
       "hardcoded_ids": [],
-      "ms": 2322
+      "ms": 2388
     },
     {
       "description": "Find the decisions taken about a part and why they were taken",
       "ok": true,
       "draft": {
-        "name": "Find Part Decision History",
-        "command": "part-decision-history",
-        "instruction": "1. Search the decision log for all entries related to {Part Name}. 2. Cross-reference past NCRs and downtime logs for {Part Name} to identify related issues. 3. Summarize the decisions taken and their recorded rationales. 4. Present the result concisely with citations to the log entries.",
+        "name": "Retrieve Part Decisions Log",
+        "command": "part-decisions",
+        "instruction": "1. Search the decision log for all entries related to {part}.\n2. Identify the specific decisions made regarding this part.\n3. Retrieve the rationale and context for each decision from the past logs.\n4. Present the results in a short, cited summary.",
         "inputs": [
-          "Part Name"
+          "part"
         ],
-        "minutes_saved": 30
+        "minutes_saved": 15
       },
       "hardcoded_ids": [],
-      "ms": 2205
+      "ms": 19558
     },
     {
       "description": "For a vendor, compare promised and actual dispatch dates this month",
@@ -122,54 +127,54 @@
       "draft": {
         "name": "Vendor Dispatch Date Audit",
         "command": "vendor-dispatch-audit",
-        "instruction": "1. Search emails, chats, and vendor promise records for {vendor name} regarding dispatch dates scheduled for {month}. 2. Compare the promised dispatch dates with the actual dispatch logs and plant data. 3. Identify any discrepancies or delays between promised and actual dates. 4. Present a short, cited summary of the comparison results.",
+        "instruction": "1. Search emails, chats, and vendor promise records for {vendor name} regarding dispatch dates scheduled for {date range}.\n2. Compare the promised dispatch dates against actual dispatch records and plant data.\n3. Look up past non-conformance reports or vendor communication logs related to delayed shipments.\n4. Present the comparison results clearly with source citations and a short summary.",
         "inputs": [
           "vendor name",
-          "month"
+          "date range"
         ],
-        "minutes_saved": 35
+        "minutes_saved": 45
       },
       "hardcoded_ids": [],
-      "ms": 2157
+      "ms": 2093
     },
     {
       "description": "Draft a reminder task to follow up with the vendor on a PO tomorrow morning",
       "ok": true,
       "draft": {
         "name": "Vendor PO Follow-up Reminder",
-        "command": "vendor-po-reminder",
-        "instruction": "1. Search chats, email, and Drive for the given {PO number} and {vendor name}. 2. Check the vendor promise records for delivery timelines. 3. Look up past non-conformance reports or delays associated with this {vendor name}. 4. Draft a reminder task for tomorrow morning to follow up with the vendor regarding the {PO number}. Present the result as a short, cited summary of the drafted task.",
+        "command": "po-followup",
+        "instruction": "1. Search emails and chat messages for discussions regarding {PO number} and {vendor}.\n2. Check vendor and colleague promise records for the committed delivery date.\n3. Draft a task for me to follow up with {vendor} regarding {PO number} for tomorrow morning, and present the result concisely with citations.",
         "inputs": [
           "PO number",
-          "vendor name"
+          "vendor"
         ],
         "minutes_saved": 15
       },
       "hardcoded_ids": [],
-      "ms": 1296
+      "ms": 1377
     },
     {
       "description": "Check PO-7781 delivery and certificates",
       "ok": true,
       "draft": {
         "name": "Check PO Delivery and Certificates",
-        "command": "check-po-status",
-        "instruction": "1. Search chats, files, and emails for delivery updates and status for {PO number}. 2. Locate material test certificates associated with {PO number}. 3. Run a Spec Check on the certificates against the standards library. 4. Check vendor promise records for {PO number} commitments. 5. Present a short, cited summary of the delivery status, certificate verdict, and vendor commitments.",
+        "command": "po-delivery-check",
+        "instruction": "1. Search chats, emails, and Drive for PO number {PO number}.\n2. Locate the corresponding material test certificates and check their Spec Check verdicts.\n3. Look up vendor promise records for {PO number}.\n4. Check plant data and shift handovers regarding this delivery.\n5. Present the delivery status, certificate verdicts, and vendor commitments in a short, cited response.",
         "inputs": [
           "PO number"
         ],
         "minutes_saved": 25
       },
       "hardcoded_ids": [],
-      "ms": 1269
+      "ms": 1182
     },
     {
       "description": "Heat K-55210 ka certificate S355J2 ke limits ke against check karo",
       "ok": true,
       "draft": {
-        "name": "Heat Certificate Check",
-        "command": "heat-cert-check",
-        "instruction": "1. Search for the material test certificate for {heat number}. 2. Read the certificate and run a Spec Check verdict against the standards library for {grade}. 3. Present the result concisely with citations.",
+        "name": "Heat Certificate Compliance Check",
+        "command": "check-heat-cert",
+        "instruction": "1. Search files and email for the material test certificate of {heat number}.\n2. Read the certificate values and compare them against the standards library limits for {grade}.\n3. Run a Spec Check verdict on the certificate data.\n4. Present the result as a short, cited summary.",
         "inputs": [
           "heat number",
           "grade"
@@ -177,7 +182,7 @@
         "minutes_saved": 15
       },
       "hardcoded_ids": [],
-      "ms": 2155
+      "ms": 2151
     }
   ],
   "off_topic": [

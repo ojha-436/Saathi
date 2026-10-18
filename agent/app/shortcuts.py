@@ -105,8 +105,27 @@ def parse(text: str) -> tuple[str, str] | None:
     return (m.group(1).lower(), (m.group(2) or "").strip()) if m else None
 
 
+def _today(d: dict) -> bool:
+    made = d.get("created_at")
+    return isinstance(made, datetime) and datetime.now(TZ) - made < timedelta(days=1)
+
+
 def mine(user: dict) -> list[dict]:
-    rows = [_row(s.id, s.to_dict()) for s in _col(user["uid"]).stream() if _here(s.to_dict(), user["org_id"])]
+    rows, stale = [], []
+    shared = demo.is_demo(user)
+    for s in _col(user["uid"]).stream():
+        d = s.to_dict()
+        if not _here(d, user["org_id"]):
+            continue
+        if shared and not d.get("demo") and not _today(d):
+            stale.append(s.reference)  # a shared demo login keeps its examples and today's visitors' shortcuts, so it never fills up
+            continue
+        rows.append(_row(s.id, d))
+    for ref in stale:
+        try:
+            ref.delete()
+        except Exception:
+            log.warning("couldn't clear an old demo shortcut")
     return sorted(rows, key=lambda r: (-r["runs"], r["name"].lower()))
 
 
@@ -238,8 +257,7 @@ def _own(user: dict, sc_id: str):
     if not snap or not snap.exists or not _here(snap.to_dict(), user["org_id"]):
         raise HTTPException(404, "Shortcut not found")
     d = snap.to_dict()
-    made = d.get("created_at")
-    if d.get("demo") or not (isinstance(made, datetime) and datetime.now(TZ) - made < timedelta(days=1)):
+    if d.get("demo") or not _today(d):
         demo.guard(user, DEMO_RULE)  # the next person trying the demo login still finds the examples
     return ref, d
 

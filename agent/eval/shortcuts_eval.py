@@ -159,6 +159,12 @@ def unit() -> list[tuple[str, bool]]:
           and status(lambda: s.remove(mine_demo["id"], user=demo_user)) == 403)
     ref.update({"demo": False, "created_at": datetime.now(TZ) - timedelta(days=2)})
     check("a demo login can't change an older one", lambda: status(lambda: s.update(mine_demo["id"], s.ShortcutPatch(name="X"), user=demo_user)) == 403)
+    check("a shared demo login drops visitors' shortcuts from earlier days, so they never fill its 20",
+          lambda: all(x["id"] != mine_demo["id"] for x in s.mine(demo_user)) and not ref.get().exists)
+    seeded = s.create(new(command="seeded-example", name="Seeded example"), user=demo_user)
+    db.collection("assistant").document("rahul").collection("shortcuts").document(seeded["id"]).update(
+        {"demo": True, "created_at": datetime.now(TZ) - timedelta(days=5)})
+    check("a demo login keeps its seeded examples", lambda: any(x["id"] == seeded["id"] for x in s.mine(demo_user)))
     db.collection("assistant").document("u1").collection("shortcuts").document(sc["id"]).update({"created_at": datetime.now(TZ) - timedelta(days=2)})
     check("anyone else can change an older one", lambda: status(lambda: s.update(sc["id"], s.ShortcutPatch(minutes_saved=20), user=u)) == 200)
     check("someone else's shortcut is a 404", lambda: status(lambda: s.update(sc["id"], s.ShortcutPatch(name="X"), user=demo_user)) == 404)
