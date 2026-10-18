@@ -2,18 +2,50 @@
 
     SAATHI_LOCAL=1 LOCAL_DATA_DIR=$(mktemp -d) uv run python -m eval.shortcuts_eval --unit
         Offline checks of the store, validation, /command expansion, workspaces and the demo rule. No model calls.
+    uv run python -m eval.shortcuts_eval [--only draft|run]
+        Against the live workspace as prince, with Gemini: drafting from plain words (and refusing off-topic bots), and running
+        shortcuts through the assistant. Read-only: drafts are never saved, and any task a run proposes is deleted.
 
-Writes nothing to the live workspace in --unit mode (a throwaway local database).
+Writes eval/results_shortcuts.md and eval/results_shortcuts.json (--only updates that part and keeps the rest).
 """
 import argparse
+import json
 import os
+import re
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 HERE = Path(__file__).parent
+CMD = re.compile(r"[a-z0-9][a-z0-9-]{1,29}")
+IDS = re.compile(r"\b(?:PO-SRC-[\d-]+|PO-\d+|SRC-[A-Z]+-\d+|[HK]-\d{4,}|NCR-\d+)\b")
+
+# (description, expects a blank): a description that names a PO, drawing, heat, machine or vendor must turn it into a blank
+DRAFTS = [
+    ("Check a PO's delivery schedule, its latest certificate and open NCRs for that vendor", True),
+    ("Before an inspection, check which certificate values for a heat number are out of spec", True),
+    ("Tell me the latest revision of a drawing, who approved it and what changed", True),
+    ("Every Monday: which vendors are late on their promises and what they owe me", False),
+    ("har Monday dekho kaun se vendor late hain aur unke promises kya the", False),
+    ("Kisi machine ka downtime history aur pichhle fixes batao", True),
+    ("Prep me for my next meeting: who is attending, open tasks with them and recent decisions", False),
+    ("Find the decisions taken about a part and why they were taken", True),
+    ("For a vendor, compare promised and actual dispatch dates this month", True),
+    ("Draft a reminder task to follow up with the vendor on a PO tomorrow morning", True),
+    ("Check PO-7781 delivery and certificates", True),
+    ("Heat K-55210 ka certificate S355J2 ke limits ke against check karo", True),
+]
+OFF_BOTS = [
+    "Every morning write me a motivational poem",
+    "Make a bot that writes Python scripts for me",
+    "A shortcut that tells me today's cricket score",
+    "har din ek joke sunao",
+    "Build me a landing page in HTML whenever I ask",
+]
 
 
 def unit() -> list[tuple[str, bool]]:
@@ -86,6 +118,9 @@ def unit() -> list[tuple[str, bool]]:
                 and d["minutes_saved"] == 240 and s.fixup({**d, "minutes_saved": 0}, set())["minutes_saved"] == 1)
     check("fixup clamps lengths, de-duplicates inputs and minutes", clamps)
 
+    check("fixup puts each numbered step on its own line",
+          lambda: s.fixup({"name": "x", "command": "x-y", "instruction": "1. Find it. 2. Check v2.1 limits. 3. Present it.", "inputs": [],
+                           "minutes_saved": 5}, set())["instruction"] == "1. Find it.\n2. Check v2.1 limits.\n3. Present it.")
     check("another workspace sees none of them", lambda: s.mine(u_other_org) == []
           and s.expand(u_other_org, "/dispatch-check x")["reply"].startswith("You don't have any"))
 
@@ -135,9 +170,58 @@ def unit() -> list[tuple[str, bool]]:
     return results
 
 
+def draft_part(user: dict) -> dict:
+    from fastapi import HTTPException
+
+    from app.shortcuts import make_draft
+
+    def one(case):
+        desc, expects = case
+        t = time.monotonic()
+        try:
+            d = make_draft(user, desc)
+        except HTTPException as e:
+            return {"description": desc, "ok": False, "error": f"{e.status_code}: {e.detail}", "ms": int((time.monotonic() - t) * 1000)}
+        hardcoded = [i for i in IDS.findall(desc) if i in d["instruction"]]
+        ok = bool(CMD.fullmatch(d["command"])) and "1." in d["instruction"] and (not expects or (bool(d["inputs"]) and not hardcoded))
+        return {"description": desc, "ok": ok, "draft": d, "hardcoded_ids": hardcoded, "ms": int((time.monotonic() - t) * 1000)}
+
+    def off(desc):
+        try:
+            d = make_draft(user, desc)
+            return {"description": desc, "refused": False, "draft": d}
+        except HTTPException as e:
+            return {"description": desc, "refused": e.status_code == 422, "error": f"{e.status_code}"}
+
+    with ThreadPoolExecutor(4) as pool:
+        drafts, offs = list(pool.map(one, DRAFTS)), list(pool.map(off, OFF_BOTS))
+    return {"draft": drafts, "off_topic": offs}
+
+
+def write(results: dict) -> None:
+    lines = [f"# Shortcuts eval\n\nRan {results.get('ran_at', '')} against the live workspace as prince (read-only).\n"]
+    if "draft" in results:
+        d, o = results["draft"], results["off_topic"]
+        ms = sorted(x["ms"] for x in d)
+        lines += [f"## Drafting from plain words\n\n- Valid drafts: **{sum(x['ok'] for x in d)}/{len(d)}** (good command, numbered steps, "
+                  "ids turned into blanks)", f"- Off-topic bots refused: **{sum(x['refused'] for x in o)}/{len(o)}**",
+                  f"- Draft time: median {ms[len(ms) // 2] / 1000:.1f} s\n", "| description | ok | /command | blanks |", "|---|---|---|---|"]
+        lines += [f"| {x['description']} | {'✓' if x['ok'] else '✗ ' + x.get('error', '')} | {x.get('draft', {}).get('command', '')} | "
+                  f"{', '.join(x.get('draft', {}).get('inputs', []))} |" for x in d]
+        lines.append("")
+    if "run" in results:
+        r = results["run"]
+        lines += [f"## Running shortcuts through Saathi\n\n- Passed: **{sum(x['ok'] for x in r)}/{len(r)}** (not refused, cites a source, "
+                  "uses the expected tool)\n", "| shortcut | given | ok | tools | cited | s |", "|---|---|---|---|---|---|"]
+        lines += [f"| {x['name']} | {x['given']} | {'✓' if x['ok'] else '✗'} | {', '.join(x['tools'])} | {x['cited']} | {x['ms'] / 1000:.1f} |" for x in r]
+    (HERE / "results_shortcuts.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (HERE / "results_shortcuts.json").write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--unit", action="store_true", help="offline checks against a throwaway local database")
+    p.add_argument("--only", choices=["draft", "run"], help="run one part and keep the other part's saved results")
     args = p.parse_args()
     if args.unit:
         if os.getenv("SAATHI_LOCAL") != "1" or not os.getenv("LOCAL_DATA_DIR"):
@@ -148,6 +232,18 @@ def main() -> None:
         failed = sum(not ok for _, ok in results)
         print(f"{len(results) - failed}/{len(results)} passed")
         sys.exit(1 if failed else 0)
+
+    from app.config import TZ
+    from app.firebase import user_profile
+
+    prince = user_profile("prince")
+    saved = HERE / "results_shortcuts.json"
+    results = json.loads(saved.read_text(encoding="utf-8")) if args.only and saved.exists() else {}
+    results["ran_at"] = datetime.now(TZ).isoformat()
+    if args.only in (None, "draft"):
+        results.update(draft_part(prince))
+    write(results)
+    print((HERE / "results_shortcuts.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

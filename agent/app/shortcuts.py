@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import demo
-from .config import TZ
+from . import ai, demo, scope
+from .config import COMPANY, FAST_MODEL, TZ
 from .firebase import current_user, db, firestore
 
 log = logging.getLogger("saathi.shortcuts")
@@ -34,6 +34,39 @@ class ShortcutIn(BaseModel):
     instruction: str
     inputs: list[str] = []
     minutes_saved: int = 10
+
+
+class DraftIn(BaseModel):
+    description: str | None = None
+    message_id: str | None = None
+
+
+class Draft(BaseModel):
+    name: str
+    command: str
+    instruction: str
+    inputs: list[str]
+    minutes_saved: int
+
+
+DRAFT_PROMPT = """{user} ({role}) at {company}{about} wants to save a job they repeat as a Saathi shortcut: a saved instruction they run
+again with one /command. Saathi, the workspace's AI assistant, can: search the person's chats, files, email and Drive; read
+engineering drawings and the drawing revision register; read material test certificates and their Spec Check verdicts against the
+standards library; look up the decision log, past NCRs and downtime with their fixes, vendor and colleague promise records, plant
+data (as a chart), shift handovers, the person's tasks and calendar; and draft tasks or reminders for the person to confirm. It
+cannot send email, post messages, edit files or change any record.
+
+Return:
+- name: 2 to 5 words, in the language of the description.
+- command: 1 to 3 short lowercase English words joined by hyphens, like dispatch-check.
+- instruction: at most 6 numbered one-line steps ("1. ... 2. ..."), written as instructions to Saathi, using only what Saathi can
+  do. Refer to each blank by its name in curly braces, like {{PO number}}. End with how to present the result (short, cited).
+- inputs: the values that change each time it runs (a PO, drawing, heat number, vendor, machine, part, bay, date range), as short
+  names like "PO number". Empty if nothing changes. If the description gives an example value (PO-7781, SRC-BF-2041, a heat
+  number, a vendor name), make it a blank: never write the example value into the steps.
+- minutes_saved: realistic minutes this saves the person each run compared with doing it by hand, 1 to 120.
+
+{source}"""
 
 
 class ShortcutPatch(BaseModel):
@@ -102,7 +135,7 @@ def fixup(d: dict, taken: set[str]) -> dict:
         n += 1
         command = f"{base[: 30 - len(str(n)) - 1]}-{n}"
     return {"name": re.sub(r"\s+", " ", d.get("name") or "").strip()[:MAX_NAME] or "My shortcut", "command": command,
-            "instruction": (d.get("instruction") or "").strip()[:MAX_INSTRUCTION], "inputs": _inputs(d.get("inputs") or [])[:MAX_INPUTS],
+            "instruction": re.sub(r"\s+(?=\d{1,2}\.\s)", "\n", (d.get("instruction") or "").strip())[:MAX_INSTRUCTION], "inputs": _inputs(d.get("inputs") or [])[:MAX_INPUTS],
             "minutes_saved": _minutes(d.get("minutes_saved"))}
 
 
@@ -179,6 +212,26 @@ def source_from_message(user: dict, message_id: str) -> str:
     return f"Question: {question}\nAnswer: {(d.get('text') or '')[:600]}"
 
 
+def make_draft(user: dict, source: str) -> dict:
+    """A shortcut drafted from plain words (or from a question and answer). Off-topic bots get Saathi's usual refusal (422)."""
+    org_name = (db.collection("orgs").document(user.get("org_id") or "-").get().to_dict() or {}).get("name", "")
+    company = org_name or COMPANY
+    about = ", a railway rolling-stock component manufacturer in India" if company == COMPANY else ""
+    verdict = scope.check(source, [], company=company, about=about, user=user["name"], role=user.get("role", ""))
+    if not verdict["about_work"]:
+        raise HTTPException(422, scope.refusal(company, verdict["kind"], verdict["hinglish"]))
+    try:
+        d = ai.generate_json_hedged(DRAFT_PROMPT.format(user=user["name"], role=user.get("role") or "employee", company=company, about=about,
+                                                        source=source if source.startswith("Question:") else f"Description: {source}"),
+                                    Draft, model=FAST_MODEL, limit=20.0)
+        if d is None:
+            raise ValueError("empty draft")
+    except Exception:
+        log.exception("couldn't draft a shortcut")
+        raise HTTPException(503, "Saathi couldn't draft it right now. Write the steps yourself, or try again.")
+    return fixup(d.model_dump(), {s["command"] for s in mine(user)})
+
+
 def _own(user: dict, sc_id: str):
     ref = _col(user["uid"]).document(sc_id)
     snap = ref.get() if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", sc_id or "") else None
@@ -196,6 +249,23 @@ def list_shortcuts(user=Depends(current_user)):
     rows = mine(user)
     return {"shortcuts": rows, "total_runs": sum(r["runs"] for r in rows),
             "total_minutes_saved": sum(r["runs"] * r["minutes_saved"] for r in rows)}
+
+
+@router.post("/draft")
+def draft(body: DraftIn, user=Depends(current_user)):
+    from .main import org_of, rate_limit, require_ai
+
+    require_ai(user)
+    rate_limit(user["uid"], "shortcut-draft", 10)
+    if not (org_of(user).get("settings") or {}).get("ai_enabled", True):
+        raise HTTPException(403, "Your workspace admin has turned off the AI assistant")
+    if body.message_id:
+        source = source_from_message(user, body.message_id)
+    elif body.description and 0 < len(body.description.strip()) <= 1000:
+        source = body.description.strip()
+    else:
+        raise HTTPException(400, "Describe the job you repeat (up to 1000 characters)")
+    return {"draft": make_draft(user, source)}
 
 
 @router.post("")
