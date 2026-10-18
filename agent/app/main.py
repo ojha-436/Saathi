@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import admin, ai, connectors, decisions, demo, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, sessions, specs, voice, workspaces
+from . import admin, ai, connectors, decisions, demo, dossier, drawings, handover, impact, ingest, invites, jobs, knowledge, live, meetings, memory, people, push, records, research, richdoc, sessions, shortcuts, specs, voice, workspaces
 from .agent import ask
 from .plantdata import refresh as plant_refresh
 from .config import ALLOWED_ORIGINS, BQ_TABLE, CRON_SECRET, FAST_MODEL, LOCAL_MODE, SAATHI_ROLE, TZ
@@ -36,6 +36,7 @@ app.include_router(knowledge.router)
 app.include_router(live.router)
 app.include_router(research.router)
 app.include_router(sessions.router)
+app.include_router(shortcuts.router)
 app.include_router(dossier.router)
 app.include_router(specs.router)
 app.include_router(voice.router)
