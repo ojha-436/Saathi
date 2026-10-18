@@ -70,7 +70,7 @@ export function ShortcutsView({ draftFrom }: { draftFrom?: string }) {
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
         <LogoMark size={32} />
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-bold leading-tight">Shortcuts</h1>
+          <h1 className="truncate text-[15px] font-bold leading-tight max-sm:sr-only">Shortcuts</h1>
           <p className="hidden truncate text-xs text-muted sm:block">Your own saved jobs · run one in Ask by typing / and its command</p>
         </div>
         <SaathiTabs active="shortcuts" />

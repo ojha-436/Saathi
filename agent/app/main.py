@@ -950,7 +950,7 @@ async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)
     pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
                     "charts": result.get("charts") or [], "provenance": {"model": result.get("model"), "latency_ms": latency,
                     "first_token_ms": result.get("first_token_ms"), "prefetched": result.get("prefetched", [])},
-                    **({"shortcut": run["shortcut"]} if run else {})})
+                    **({"shortcut": run["shortcut"]} if run else {}), **({"out_of_scope": result["out_of_scope"]} if result.get("out_of_scope") else {})})
     if run:
         bg.add_task(shortcuts.record_run, user["uid"], run["shortcut"]["id"])
     tools = [c["tool"] for c in result["tool_calls"]]

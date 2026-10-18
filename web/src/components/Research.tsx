@@ -121,7 +121,7 @@ export function SaathiTabs({ active }: { active: "ask" | "research" | "shortcuts
           role="tab"
           aria-selected={active === k}
           onClick={go}
-          className={clsx("h-7 rounded-md px-3 text-xs font-semibold transition", active === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink")}
+          className={clsx("h-7 rounded-md px-2.5 text-xs font-semibold transition sm:px-3", active === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink")}
         >
           {label}
         </button>
@@ -154,7 +154,7 @@ export function ResearchView({ focusId }: { focusId?: string }) {
           <Sparkles size={18} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-bold leading-tight">Saathi Research</h1>
+          <h1 className="truncate text-[15px] font-bold leading-tight max-sm:sr-only">Saathi Research</h1>
           <p className="hidden truncate text-xs text-muted sm:block">Research agents gather evidence in parallel, verify every claim, and turn gaps into tasks</p>
         </div>
         <SaathiTabs active="research" />

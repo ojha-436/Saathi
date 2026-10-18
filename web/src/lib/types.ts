@@ -201,6 +201,7 @@ export type AssistantMsg = {
   tool_calls?: { tool: string; args: Record<string, unknown> }[];
   provenance?: { model?: string; latency_ms?: number; first_token_ms?: number | null; prefetched?: string[] };
   shortcut?: { id: string; name: string }; // the person's saved shortcut this answer ran
+  out_of_scope?: string; // the scope check turned the question away (its kind)
 };
 
 /** A person's own saved Saathi job, run with /command in Ask. */

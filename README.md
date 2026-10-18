@@ -191,14 +191,16 @@ Run from `agent/eval`:
 | Median answer latency (retrieval-first + streaming) | 3.8 s (first words 2.8 s) | ≤ 4 s |
 | Spec Check comparator / certificate extraction | 20/20 · 2/2 | 100% |
 | Saathi Research gold-gap recall · claims with a verified source · leaks | 5/5 + 4/4 · 100% · 0 | ≥ 80% · 100% · 0 |
+| Shortcuts: valid drafts from plain words · off-topic bots refused · runs cited | 12/12 · 5/5 · 4/4 | ≥ 11/12 · 5/5 · 4/4 |
 
-Re-run with `uv run python -m eval.run_eval` and `uv run python -m eval.phase4_eval`, then `uv run python -m eval.export_web` to refresh the numbers shown on the landing page.
+Re-run with `uv run python -m eval.run_eval`, `uv run python -m eval.phase4_eval` and `uv run python -m eval.shortcuts_eval`, then `uv run python -m eval.export_web` to refresh the numbers shown on the landing page.
 
 ## Feature reference
 
 | Area | What it does |
 | --- | --- |
 | Ask Saathi | ADK agent (Gemini 3.8 Flash, low thinking level) with permission-scoped tools; retrieval-first, streamed answers; every claim a clickable source chip; *How Saathi got this* under each answer; English, Hindi and Hinglish |
+| Shortcuts | Anyone's own saved bots for jobs they repeat: describe one in plain words (or *Save as shortcut* on an answer), Gemini drafts the name, /command, steps and blanks, the person edits and saves. `/dispatch-check PO-7781` in Ask runs it through the same agent, scope check and permissions; each shows its runs and minutes saved |
 | Saathi Research | A goal (*"Are we ready for the RDSO inspection on 20 Oct?"*) becomes an editable plan; research agents run in parallel over your permission-scoped tools; a verifying agent writes the report and code re-checks every citation; live progress; each gap becomes a task in one click; sharing checks each source against the chat's members. Templates: inspection readiness, vendor comparison, custom |
 | Inspection Dossier | Turns a finished readiness report into the inspector's evidence pack (PDF): only verified content, drawings re-checked against the register, every page footed with its source |
 | Spec Check & Standards Library | Company specs, procedures and checklists indexed in Vertex AI Search; Gemini proposes acceptance limits for QA approval. A certificate is checked seconds after upload: Gemini reads the values, code decides pass/fail for the grade on the drawing's current revision (thickness bands, test temperature, units); a failure drafts the NCR |

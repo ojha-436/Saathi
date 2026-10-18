@@ -14,6 +14,7 @@ import { Markdown } from "./Markdown";
 import { MicButton } from "./Quality";
 import { SaathiTabs } from "./Research";
 import { newConversation } from "./SaathiSidebar";
+import { runText, ShortcutIcon, useShortcuts } from "./Shortcuts";
 import { ProposedTaskCard } from "./Tasks";
 
 const STARTERS = [
@@ -58,6 +59,18 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
   }, [sid]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const { list: shortcuts } = useShortcuts();
+  // typing "/" lists the person's shortcuts; Enter or Tab picks the highlighted one instead of sending
+  const [menuIdx, setMenuIdx] = useState(0);
+  const [menuClosed, setMenuClosed] = useState(false);
+  const typed = /^\/([a-z0-9-]*)$/i.exec(text);
+  const matches = typed && !menuClosed ? shortcuts.filter((s) => s.command.startsWith(typed[1].toLowerCase())) : [];
+  const menuOpen = matches.length > 0;
+  const pick = (command: string) => {
+    setText(`/${command} `);
+    setMenuIdx(0);
+    inputRef.current?.focus();
+  };
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
@@ -85,6 +98,7 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
     } catch {}
     try {
       await api("/api/assistant", { json: { text: body, session_id: sid } });
+      if (body.startsWith("/")) dispatchEvent(new Event("saathi:shortcuts")); // its run count went up
       // the history list picks up the conversation, then its title (written by Saathi a moment later)
       dispatchEvent(new Event("saathi:answered"));
       setTimeout(() => dispatchEvent(new Event("saathi:answered")), 5000);
@@ -105,7 +119,7 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:h-12 lg:px-6">
         <LogoMark size={32} />
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-bold leading-tight">Ask Saathi</h1>
+          <h1 className="truncate text-[15px] font-bold leading-tight max-sm:sr-only">Ask Saathi</h1>
           <p className="hidden truncate text-xs text-muted sm:block">Searches only the chats and files you can access · every answer cites its source</p>
         </div>
         {account.org.settings.voice_us && account.org_role !== "guest" && (
@@ -184,6 +198,27 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
               </div>
             </div>
 
+            {shortcuts.length > 0 && (
+              <>
+                <p className="mt-8 font-mono text-[11px] uppercase tracking-widest text-muted">Your shortcuts</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {shortcuts.slice(0, 6).map((sc) => (
+                    <button
+                      key={sc.id}
+                      onClick={() => (sc.inputs.length ? pick(sc.command) : ask(runText(sc, [])))}
+                      disabled={busy}
+                      title={sc.name}
+                      className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs transition hover:border-[#c5cad3] hover:shadow-sm disabled:opacity-50"
+                    >
+                      <ShortcutIcon size={13} className="text-saffron-ink" />
+                      <span className="font-mono font-medium text-ink">/{sc.command}</span>
+                      {sc.inputs.length > 0 && <span className="text-muted">{sc.inputs.join(", ")}</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             <p className="mt-8 font-mono text-[11px] uppercase tracking-widest text-muted">Try asking</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {STARTERS.map((s, i) => (
@@ -225,6 +260,11 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
               <div className="flex gap-3">
                 <LogoMark size={32} className="shrink-0" />
                 <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-border bg-surface px-5 py-4 text-[15px]">
+                  {m.shortcut && (
+                    <p className="mb-2 inline-flex items-center gap-1 rounded-md border border-border bg-canvas px-2 py-0.5 text-[11px] font-medium text-ink">
+                      <ShortcutIcon size={12} className="text-saffron-ink" /> {m.shortcut.name}
+                    </p>
+                  )}
                   {m.pending && !m.text ? (
                     <div className="space-y-2" role="status" aria-label="Saathi is searching">
                       <span className="flex items-center gap-2 text-sm text-muted">
@@ -242,7 +282,20 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
                   {m.charts?.map((c, i) => <ChartCard key={i} chart={c} />)}
                   {m.tasks?.map((id) => (taskById[id] ? <ProposedTaskCard key={id} task={taskById[id]} /> : null))}
                   {!m.pending && (m.tool_calls || m.provenance) && <AnswerProvenance m={m} tourTarget={!busy && m.id === messages.at(-1)?.id} />}
-                  {at && !m.pending && <p className="mt-2 text-right text-[11px] text-muted">{at}</p>}
+                  {!m.pending && (
+                    <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
+                      {m.provenance && !m.shortcut && !m.out_of_scope && (
+                        <button
+                          onClick={() => open({ kind: "shortcuts", draftFrom: m.id })}
+                          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium hover:bg-hover hover:text-ink"
+                          title="Turn this question into a shortcut you can run again"
+                        >
+                          <ShortcutIcon size={12} /> Save as shortcut
+                        </button>
+                      )}
+                      {at && <span className="ml-auto">{at}</span>}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -253,7 +306,33 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
         </div>
       </div>
 
-      <div className="px-4 pb-3 pt-1 lg:px-6">
+      <div className="relative px-4 pb-3 pt-1 lg:px-6">
+        {menuOpen && (
+          <div className="absolute inset-x-4 bottom-full z-10 mx-auto mb-1 max-w-3xl lg:inset-x-6">
+            <ul role="listbox" aria-label="Your shortcuts" className="overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg">
+              {matches.map((sc, i) => (
+                <li
+                  key={sc.id}
+                  role="option"
+                  aria-selected={i === menuIdx}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // keep the focus in the box
+                    pick(sc.command);
+                  }}
+                  onMouseEnter={() => setMenuIdx(i)}
+                  className={clsx("flex cursor-pointer items-center gap-2 px-3 py-2 text-sm", i === menuIdx ? "bg-canvas" : "")}
+                >
+                  <ShortcutIcon size={13} className="text-saffron-ink" />
+                  <span className="font-mono font-medium text-ink">/{sc.command}</span>
+                  <span className="truncate text-xs text-muted">
+                    {sc.name}
+                    {sc.inputs.length ? ` · ${sc.inputs.join(", ")}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <form
           data-tour="ask-box"
           onSubmit={(e) => {
@@ -270,14 +349,35 @@ export function AssistantView({ tasks, prompt, session, onPromptUsed }: { tasks:
             ref={inputRef}
             rows={1}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setMenuClosed(false);
+              setMenuIdx(0);
+            }}
             onKeyDown={(e) => {
+              if (menuOpen) {
+                const at = Math.min(menuIdx, matches.length - 1);
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMenuIdx((at + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+                  return;
+                }
+                if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+                  e.preventDefault();
+                  pick(matches[at].command);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  setMenuClosed(true);
+                  return;
+                }
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 ask(text);
               }
             }}
-            placeholder="Ask anything about your work, in English or Hinglish…"
+            placeholder={shortcuts.length ? "Ask anything, or type / for your shortcuts…" : "Ask anything about your work, in English or Hinglish…"}
             className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] outline-none"
           />
           <MicButton onText={(t) => setText((prev) => (prev ? `${prev} ${t}` : t))} className="h-10" />

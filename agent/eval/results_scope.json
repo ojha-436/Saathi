@@ -1,11 +1,11 @@
 {
   "summary": {
-    "work_questions": 52,
+    "work_questions": 68,
     "wrongly_refused": 0,
-    "off_topic": 20,
-    "off_topic_refused": 20,
-    "p50_ms": 928,
-    "p95_ms": 1670
+    "off_topic": 25,
+    "off_topic_refused": 25,
+    "p50_ms": 829,
+    "p95_ms": 1588
   },
   "cases": [
     {
@@ -14,7 +14,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1670,
+      "ms": 1529,
       "pass": true
     },
     {
@@ -41,7 +41,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1667,
+      "ms": 1499,
       "pass": true
     },
     {
@@ -50,7 +50,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1652,
+      "ms": 1491,
       "pass": true
     },
     {
@@ -68,7 +68,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1713,
+      "ms": 1588,
       "pass": true
     },
     {
@@ -77,7 +77,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1883,
+      "ms": 1712,
       "pass": true
     },
     {
@@ -95,7 +95,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1716,
+      "ms": 1625,
       "pass": true
     },
     {
@@ -113,7 +113,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1705,
+      "ms": 1629,
       "pass": true
     },
     {
@@ -122,7 +122,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1636,
+      "ms": 1478,
       "pass": true
     },
     {
@@ -131,7 +131,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 868,
+      "ms": 914,
       "pass": true
     },
     {
@@ -194,7 +194,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 920,
+      "ms": 845,
       "pass": true
     },
     {
@@ -203,7 +203,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 842,
+      "ms": 854,
       "pass": true
     },
     {
@@ -221,7 +221,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1026,
+      "ms": 819,
       "pass": true
     },
     {
@@ -230,7 +230,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 893,
+      "ms": 767,
       "pass": true
     },
     {
@@ -248,7 +248,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 931,
+      "ms": 756,
       "pass": true
     },
     {
@@ -257,7 +257,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 959,
+      "ms": 928,
       "pass": true
     },
     {
@@ -266,7 +266,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 977,
+      "ms": 748,
       "pass": true
     },
     {
@@ -275,7 +275,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1070,
+      "ms": 928,
       "pass": true
     },
     {
@@ -284,7 +284,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1064,
+      "ms": 933,
       "pass": true
     },
     {
@@ -293,7 +293,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 1006,
+      "ms": 926,
       "pass": true
     },
     {
@@ -302,7 +302,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 985,
+      "ms": 915,
       "pass": true
     },
     {
@@ -311,7 +311,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 940,
+      "ms": 892,
       "pass": true
     },
     {
@@ -320,7 +320,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 905,
+      "ms": 873,
       "pass": true
     },
     {
@@ -329,7 +329,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 896,
+      "ms": 816,
       "pass": true
     },
     {
@@ -338,7 +338,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 873,
+      "ms": 895,
       "pass": true
     },
     {
@@ -347,7 +347,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 941,
+      "ms": 739,
       "pass": true
     },
     {
@@ -356,7 +356,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 945,
+      "ms": 959,
       "pass": true
     },
     {
@@ -365,7 +365,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 937,
+      "ms": 829,
       "pass": true
     },
     {
@@ -374,7 +374,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 961,
+      "ms": 792,
       "pass": true
     },
     {
@@ -383,7 +383,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 955,
+      "ms": 967,
       "pass": true
     },
     {
@@ -392,7 +392,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 922,
+      "ms": 855,
       "pass": true
     },
     {
@@ -401,7 +401,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 928,
+      "ms": 762,
       "pass": true
     },
     {
@@ -419,7 +419,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "greeting",
-      "ms": 1122,
+      "ms": 767,
       "pass": true
     },
     {
@@ -428,7 +428,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "greeting",
-      "ms": 1101,
+      "ms": 989,
       "pass": true
     },
     {
@@ -436,8 +436,8 @@
       "follow_up": false,
       "expected": "answer",
       "got": "answer",
-      "kind": "about_saathi",
-      "ms": 965,
+      "kind": "greeting",
+      "ms": 729,
       "pass": true
     },
     {
@@ -446,7 +446,151 @@
       "expected": "answer",
       "got": "answer",
       "kind": "about_saathi",
-      "ms": 1336,
+      "ms": 869,
+      "pass": true
+    },
+    {
+      "q": "Check a PO's delivery schedule, its latest certificate and open NCRs for that vendor",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 905,
+      "pass": true
+    },
+    {
+      "q": "Before an inspection, check which certificate values for a heat number are out of spec",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 824,
+      "pass": true
+    },
+    {
+      "q": "Tell me the latest revision of a drawing, who approved it and what changed",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 764,
+      "pass": true
+    },
+    {
+      "q": "Every Monday: which vendors are late on their promises and what they owe me",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 0,
+      "pass": true
+    },
+    {
+      "q": "har Monday dekho kaun se vendor late hain aur unke promises kya the",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 742,
+      "pass": true
+    },
+    {
+      "q": "Kisi machine ka downtime history aur pichhle fixes batao",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 919,
+      "pass": true
+    },
+    {
+      "q": "Prep me for my next meeting: who is attending, open tasks with them and recent decisions",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 742,
+      "pass": true
+    },
+    {
+      "q": "Find the decisions taken about a part and why they were taken",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 920,
+      "pass": true
+    },
+    {
+      "q": "For a vendor, compare promised and actual dispatch dates this month",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 989,
+      "pass": true
+    },
+    {
+      "q": "Draft a reminder task to follow up with the vendor on a PO tomorrow morning",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 0,
+      "pass": true
+    },
+    {
+      "q": "Check PO-7781 delivery and certificates",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 0,
+      "pass": true
+    },
+    {
+      "q": "Heat K-55210 ka certificate S355J2 ke limits ke against check karo",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 831,
+      "pass": true
+    },
+    {
+      "q": "Run the person's saved shortcut \"Dispatch check\". Steps: 1. Find when {vendor and part} will be dispatched.\n2. Check what the vendor promised and whether it is late.\n3. Present it briefly with citations.. It needs: vendor and part. The person gave: \"Om Castings axle box housings\". If something it needs is missing or unclear, ask for it briefly instead of guessing.",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 923,
+      "pass": true
+    },
+    {
+      "q": "Run the person's saved shortcut \"Drawing revision\". Steps: 1. Find the latest released revision of {drawing number} in the register.\n2. Say who approved it and what changed from the previous revision.\n3. Cite the sources.. It needs: drawing number. The person gave: \"SRC-BF-2041\". If something it needs is missing or unclear, ask for it briefly instead of guessing.",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 0,
+      "pass": true
+    },
+    {
+      "q": "Run the person's saved shortcut \"Heat certificate check\". Steps: 1. Find the material test certificate for {heat number}.\n2. Check its values against the spec limits.\n3. List anything out of spec, with citations.. It needs: heat number. The person gave: \"H-77812\". If something it needs is missing or unclear, ask for it briefly instead of guessing.",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 0,
+      "pass": true
+    },
+    {
+      "q": "Run the person's saved shortcut \"Vendor promises\". Steps: 1. List what {vendor} has promised me and whether each was kept or is late.\n2. Present it as a short list with citations.. It needs: vendor. The person gave: \"Om Castings\". If something it needs is missing or unclear, ask for it briefly instead of guessing.",
+      "follow_up": false,
+      "expected": "answer",
+      "got": "answer",
+      "kind": "work",
+      "ms": 750,
       "pass": true
     },
     {
@@ -455,7 +599,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 852,
+      "ms": 876,
       "pass": true
     },
     {
@@ -464,7 +608,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 818,
+      "ms": 867,
       "pass": true
     },
     {
@@ -473,7 +617,7 @@
       "expected": "answer",
       "got": "answer",
       "kind": "work",
-      "ms": 750,
+      "ms": 21194,
       "pass": true
     },
     {
@@ -482,7 +626,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "coding",
-      "ms": 799,
+      "ms": 849,
       "pass": true
     },
     {
@@ -491,7 +635,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "coding",
-      "ms": 898,
+      "ms": 834,
       "pass": true
     },
     {
@@ -500,7 +644,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "general_knowledge",
-      "ms": 1059,
+      "ms": 878,
       "pass": true
     },
     {
@@ -509,7 +653,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "general_knowledge",
-      "ms": 1026,
+      "ms": 800,
       "pass": true
     },
     {
@@ -518,7 +662,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "general_knowledge",
-      "ms": 1014,
+      "ms": 868,
       "pass": true
     },
     {
@@ -527,7 +671,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "general_knowledge",
-      "ms": 992,
+      "ms": 861,
       "pass": true
     },
     {
@@ -536,7 +680,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "general_knowledge",
-      "ms": 882,
+      "ms": 990,
       "pass": true
     },
     {
@@ -545,7 +689,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "general_knowledge",
-      "ms": 926,
+      "ms": 961,
       "pass": true
     },
     {
@@ -554,7 +698,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "coding",
-      "ms": 778,
+      "ms": 818,
       "pass": true
     },
     {
@@ -563,7 +707,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "coding",
-      "ms": 971,
+      "ms": 801,
       "pass": true
     },
     {
@@ -572,7 +716,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "coding",
-      "ms": 951,
+      "ms": 838,
       "pass": true
     },
     {
@@ -581,7 +725,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "coding",
-      "ms": 969,
+      "ms": 893,
       "pass": true
     },
     {
@@ -590,7 +734,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "coding",
-      "ms": 922,
+      "ms": 792,
       "pass": true
     },
     {
@@ -599,7 +743,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "writing",
-      "ms": 1001,
+      "ms": 798,
       "pass": true
     },
     {
@@ -608,7 +752,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "other",
-      "ms": 845,
+      "ms": 907,
       "pass": true
     },
     {
@@ -617,7 +761,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "other",
-      "ms": 915,
+      "ms": 770,
       "pass": true
     },
     {
@@ -626,7 +770,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "writing",
-      "ms": 742,
+      "ms": 2312,
       "pass": true
     },
     {
@@ -635,7 +779,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "personal",
-      "ms": 1069,
+      "ms": 821,
       "pass": true
     },
     {
@@ -644,7 +788,7 @@
       "expected": "refuse",
       "got": "refuse",
       "kind": "personal",
-      "ms": 904,
+      "ms": 771,
       "pass": true
     },
     {
@@ -652,8 +796,53 @@
       "follow_up": false,
       "expected": "refuse",
       "got": "refuse",
-      "kind": "other",
-      "ms": 913,
+      "kind": "writing",
+      "ms": 820,
+      "pass": true
+    },
+    {
+      "q": "Every morning write me a motivational poem",
+      "follow_up": false,
+      "expected": "refuse",
+      "got": "refuse",
+      "kind": "writing",
+      "ms": 813,
+      "pass": true
+    },
+    {
+      "q": "Make a bot that writes Python scripts for me",
+      "follow_up": false,
+      "expected": "refuse",
+      "got": "refuse",
+      "kind": "coding",
+      "ms": 842,
+      "pass": true
+    },
+    {
+      "q": "A shortcut that tells me today's cricket score",
+      "follow_up": false,
+      "expected": "refuse",
+      "got": "refuse",
+      "kind": "general_knowledge",
+      "ms": 924,
+      "pass": true
+    },
+    {
+      "q": "har din ek joke sunao",
+      "follow_up": false,
+      "expected": "refuse",
+      "got": "refuse",
+      "kind": "personal",
+      "ms": 728,
+      "pass": true
+    },
+    {
+      "q": "Build me a landing page in HTML whenever I ask",
+      "follow_up": false,
+      "expected": "refuse",
+      "got": "refuse",
+      "kind": "coding",
+      "ms": 703,
       "pass": true
     }
   ]
