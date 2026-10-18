@@ -104,8 +104,8 @@ export const READINESS: Record<ResearchReport["readiness"], { label: string; cls
 
 const ACTIVE = ["planning", "queued", "running", "retrying", "cancelling"];
 
-/** Ask | Research switch shown in both Saathi headers. */
-export function SaathiTabs({ active }: { active: "ask" | "research" }) {
+/** Ask | Research | Shortcuts switch shown in the Saathi headers. */
+export function SaathiTabs({ active }: { active: "ask" | "research" | "shortcuts" }) {
   const { open } = useWs();
   return (
     <div role="tablist" aria-label="Saathi mode" className="flex rounded-lg bg-canvas p-0.5">
@@ -113,6 +113,7 @@ export function SaathiTabs({ active }: { active: "ask" | "research" }) {
         [
           ["ask", "Ask", () => open({ kind: "assistant" })],
           ["research", "Research", () => open({ kind: "research" })],
+          ["shortcuts", "Shortcuts", () => open({ kind: "shortcuts" })],
         ] as const
       ).map(([k, label, go]) => (
         <button

@@ -200,7 +200,23 @@ export type AssistantMsg = {
   charts?: Chart[];
   tool_calls?: { tool: string; args: Record<string, unknown> }[];
   provenance?: { model?: string; latency_ms?: number; first_token_ms?: number | null; prefetched?: string[] };
+  shortcut?: { id: string; name: string }; // the person's saved shortcut this answer ran
 };
+
+/** A person's own saved Saathi job, run with /command in Ask. */
+export type Shortcut = {
+  id: string;
+  name: string;
+  command: string;
+  instruction: string;
+  inputs: string[];
+  minutes_saved: number;
+  runs: number;
+  last_run?: string | null;
+  demo?: boolean;
+};
+
+export type ShortcutDraft = Pick<Shortcut, "name" | "command" | "instruction" | "inputs" | "minutes_saved">;
 
 /** A small analytic answer from BigQuery, drawn under the assistant's reply. */
 export type Chart = {
