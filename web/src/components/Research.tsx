@@ -104,8 +104,8 @@ export const READINESS: Record<ResearchReport["readiness"], { label: string; cls
 
 const ACTIVE = ["planning", "queued", "running", "retrying", "cancelling"];
 
-/** Ask | Research switch shown in both Saathi headers. */
-export function SaathiTabs({ active }: { active: "ask" | "research" }) {
+/** Ask | Research | Shortcuts switch shown in the Saathi headers. */
+export function SaathiTabs({ active }: { active: "ask" | "research" | "shortcuts" }) {
   const { open } = useWs();
   return (
     <div role="tablist" aria-label="Saathi mode" className="flex rounded-lg bg-canvas p-0.5">
@@ -113,6 +113,7 @@ export function SaathiTabs({ active }: { active: "ask" | "research" }) {
         [
           ["ask", "Ask", () => open({ kind: "assistant" })],
           ["research", "Research", () => open({ kind: "research" })],
+          ["shortcuts", "Shortcuts", () => open({ kind: "shortcuts" })],
         ] as const
       ).map(([k, label, go]) => (
         <button
@@ -120,7 +121,7 @@ export function SaathiTabs({ active }: { active: "ask" | "research" }) {
           role="tab"
           aria-selected={active === k}
           onClick={go}
-          className={clsx("h-7 rounded-md px-3 text-xs font-semibold transition", active === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink")}
+          className={clsx("h-7 rounded-md px-2.5 text-xs font-semibold transition sm:px-3", active === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink")}
         >
           {label}
         </button>
@@ -153,7 +154,7 @@ export function ResearchView({ focusId }: { focusId?: string }) {
           <Sparkles size={18} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-bold leading-tight">Saathi Research</h1>
+          <h1 className="truncate text-[15px] font-bold leading-tight max-sm:sr-only">Saathi Research</h1>
           <p className="hidden truncate text-xs text-muted sm:block">Research agents gather evidence in parallel, verify every claim, and turn gaps into tasks</p>
         </div>
         <SaathiTabs active="research" />

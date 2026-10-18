@@ -7,6 +7,7 @@ export type View =
   | { kind: "home" }
   | { kind: "assistant"; prompt?: string; session?: string } // session: a conversation id, or "new…" to start one
   | { kind: "research"; id?: string }
+  | { kind: "shortcuts"; draftFrom?: string } // draftFrom: a Saathi answer to turn into a shortcut
   | { kind: "insights" }
   | { kind: "tasks" }
   | { kind: "activity" }

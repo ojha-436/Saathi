@@ -18,7 +18,7 @@ function stripMarkers(t?: string): string {
 }
 
 export function railKey(view: View): RailKey {
-  if (view.kind === "research") return "assistant";
+  if (view.kind === "research" || view.kind === "shortcuts") return "assistant";
   return view.kind === "meeting" ? "home" : view.kind === "chats" || view.kind === "handover" ? "chat" : view.kind;
 }
 

@@ -2,9 +2,9 @@
 
 | Metric | Result | Target |
 |---|---|---|
-| Work questions wrongly refused | 0 / 52 | 0 |
-| Off-topic requests refused | 20 / 20 | all |
-| Check latency p50 / p95 (runs alongside the workspace search) | 928 / 1670 ms | |
+| Work questions wrongly refused | 0 / 68 | 0 |
+| Off-topic requests refused | 25 / 25 | all |
+| Check latency p50 / p95 (runs alongside the workspace search) | 829 / 1588 ms | |
 
 | Expected | Got | Kind | Question |
 |---|---|---|---|
@@ -55,8 +55,31 @@
 | answer | ✅ answer | work | hi |
 | answer | ✅ answer | greeting | Good morning Saathi |
 | answer | ✅ answer | greeting | thanks! |
-| answer | ✅ answer | about_saathi | What can you do? |
+| answer | ✅ answer | greeting | What can you do? |
 | answer | ✅ answer | about_saathi | How do you know who can see what? |
+| answer | ✅ answer | work | Check a PO's delivery schedule, its latest certificate and open NCRs for that vendor |
+| answer | ✅ answer | work | Before an inspection, check which certificate values for a heat number are out of spec |
+| answer | ✅ answer | work | Tell me the latest revision of a drawing, who approved it and what changed |
+| answer | ✅ answer | work | Every Monday: which vendors are late on their promises and what they owe me |
+| answer | ✅ answer | work | har Monday dekho kaun se vendor late hain aur unke promises kya the |
+| answer | ✅ answer | work | Kisi machine ka downtime history aur pichhle fixes batao |
+| answer | ✅ answer | work | Prep me for my next meeting: who is attending, open tasks with them and recent decisions |
+| answer | ✅ answer | work | Find the decisions taken about a part and why they were taken |
+| answer | ✅ answer | work | For a vendor, compare promised and actual dispatch dates this month |
+| answer | ✅ answer | work | Draft a reminder task to follow up with the vendor on a PO tomorrow morning |
+| answer | ✅ answer | work | Check PO-7781 delivery and certificates |
+| answer | ✅ answer | work | Heat K-55210 ka certificate S355J2 ke limits ke against check karo |
+| answer | ✅ answer | work | Run the person's saved shortcut "Dispatch check". Steps: 1. Find when {vendor and part} will be dispatched.
+2. Check what the vendor promised and whether it is late.
+3. Present it briefly with citations.. It needs: vendor and part. The person gave: "Om Castings axle box housings". If something it needs is missing or unclear, ask for it briefly instead of guessing. |
+| answer | ✅ answer | work | Run the person's saved shortcut "Drawing revision". Steps: 1. Find the latest released revision of {drawing number} in the register.
+2. Say who approved it and what changed from the previous revision.
+3. Cite the sources.. It needs: drawing number. The person gave: "SRC-BF-2041". If something it needs is missing or unclear, ask for it briefly instead of guessing. |
+| answer | ✅ answer | work | Run the person's saved shortcut "Heat certificate check". Steps: 1. Find the material test certificate for {heat number}.
+2. Check its values against the spec limits.
+3. List anything out of spec, with citations.. It needs: heat number. The person gave: "H-77812". If something it needs is missing or unclear, ask for it briefly instead of guessing. |
+| answer | ✅ answer | work | Run the person's saved shortcut "Vendor promises". Steps: 1. List what {vendor} has promised me and whether each was kept or is late.
+2. Present it as a short list with citations.. It needs: vendor. The person gave: "Om Castings". If something it needs is missing or unclear, ask for it briefly instead of guessing. |
 | answer | ✅ answer | work | and who approved it? (follow-up) |
 | answer | ✅ answer | work | what about Rev B? (follow-up) |
 | answer | ✅ answer | work | send that to Amit (follow-up) |
@@ -79,4 +102,9 @@
 | refuse | ✅ refuse | writing | Write an essay on climate change for my son's school |
 | refuse | ✅ refuse | personal | Give me a 7 day diet plan to lose weight |
 | refuse | ✅ refuse | personal | Which mutual fund should I invest in? |
-| refuse | ✅ refuse | other | Translate 'good morning, how are you' into French |
+| refuse | ✅ refuse | writing | Translate 'good morning, how are you' into French |
+| refuse | ✅ refuse | writing | Every morning write me a motivational poem |
+| refuse | ✅ refuse | coding | Make a bot that writes Python scripts for me |
+| refuse | ✅ refuse | general_knowledge | A shortcut that tells me today's cricket score |
+| refuse | ✅ refuse | personal | har din ek joke sunao |
+| refuse | ✅ refuse | coding | Build me a landing page in HTML whenever I ask |

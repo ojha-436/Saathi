@@ -18,7 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import scope  # noqa: E402
 from app.config import COMPANY  # noqa: E402
+from app.shortcuts import prompt_for  # noqa: E402
 from eval.run_eval import PERMISSION, RETRIEVAL, TASKS  # noqa: E402
+from eval.shortcuts_eval import DRAFTS, OFF_BOTS, RUNS  # noqa: E402
 
 HERE = Path(__file__).parent
 ABOUT = ", a railway rolling-stock component manufacturer in India"
@@ -64,6 +66,8 @@ WORK = [q for q, _ in RETRIEVAL] + PERMISSION + [t for t, *_ in TASKS] + [
     "What can you do?",
     "How do you know who can see what?",
 ]
+# shortcuts: the descriptions people draft from, and the prompts a saved shortcut sends to Saathi when it runs
+WORK += [d for d, _ in DRAFTS] + [prompt_for({"name": n, "instruction": i, "inputs": ins}, g) for n, i, ins, g, _ in RUNS]
 FOLLOW_UPS = ["and who approved it?", "what about Rev B?", "send that to Amit"]
 
 OFF = [
@@ -92,6 +96,7 @@ OFF = [
     "Which mutual fund should I invest in?",
     "Translate 'good morning, how are you' into French",
 ]
+OFF += OFF_BOTS  # bots people might try to save as a shortcut
 
 
 def judge(text: str, history: list[dict]) -> dict:

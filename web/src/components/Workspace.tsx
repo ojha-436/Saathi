@@ -42,6 +42,7 @@ import { MyDayView } from "./MyDay";
 import { ProfileCard, SettingsDialog, StatusDialog, StatusIcon } from "./People";
 import { AppRail, ChatList, notifyLevel, railKey } from "./Sidebar";
 import { SaathiSidebar } from "./SaathiSidebar";
+import { ShortcutsView } from "./Shortcuts";
 import { ActivityView, TaskDialog, TasksView } from "./Tasks";
 
 const QUICK_STATUS: StatusState[] = ["available", "busy", "dnd", "away", "offline"];
@@ -117,7 +118,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const canDM = guestCan(account, "dm");
   const open = useCallback(
     (v: View) => {
-      if (v.kind === "assistant" && !canAI) {
+      if ((v.kind === "assistant" || v.kind === "shortcuts") && !canAI) {
         toast("Saathi isn't part of your guest access. Ask the person who invited you if you need it.");
         return;
       }
@@ -291,7 +292,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
   const openTasks = tasks.filter((t) => ["open", "in_progress", "blocked"].includes(t.status) && t.owner === uid).length;
   const unreadChats = chatList.filter((c) => !(view.kind === "chat" && view.chatId === c.id) && isUnread(c, uid, reads) && notifyLevel(c, settings) === "all").length;
   const active = railKey(view);
-  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant" || view.kind === "research";
+  const listPane = view.kind === "chat" || view.kind === "chats" || view.kind === "assistant" || view.kind === "research" || view.kind === "shortcuts";
   const admin = isAdmin(account);
   const myState = presence(me);
 
@@ -455,8 +456,13 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
 
           {listPane && (
             <div className={clsx("w-full shrink-0 lg:block lg:w-80", mobileList ? "block" : "hidden")}>
-              {view.kind === "assistant" || view.kind === "research" ? (
-                <SaathiSidebar key={view.kind} mode={view.kind === "research" ? "research" : "ask"} activeId={view.kind === "research" ? view.id : view.session} onNavigate={() => setMobileList(false)} />
+              {view.kind === "assistant" || view.kind === "research" || view.kind === "shortcuts" ? (
+                <SaathiSidebar
+                  key={view.kind === "research" ? "research" : "ask"}
+                  mode={view.kind === "research" ? "research" : "ask"}
+                  activeId={view.kind === "research" ? view.id : view.kind === "assistant" ? view.session : undefined}
+                  onNavigate={() => setMobileList(false)}
+                />
               ) : (
                 <ChatList chatList={chatList} onNavigate={() => setMobileList(false)} />
               )}
@@ -469,6 +475,7 @@ export function Workspace({ uid, account }: { uid: string; account: Account }) {
               <AssistantView key={view.session ?? "resume"} tasks={tasks} prompt={view.prompt} session={view.session} onPromptUsed={() => setView({ kind: "assistant" })} />
             )}
             {view.kind === "research" && <ResearchView key={view.id ?? "research"} focusId={view.id} />}
+            {view.kind === "shortcuts" && canAI && <ShortcutsView key={view.draftFrom ?? "shortcuts"} draftFrom={view.draftFrom} />}
             {view.kind === "insights" && <InsightsView />}
             {view.kind === "tasks" && <TasksView tasks={tasks} />}
             {view.kind === "activity" && <ActivityView notices={notices} />}

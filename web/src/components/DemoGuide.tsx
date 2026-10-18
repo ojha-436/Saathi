@@ -3,6 +3,7 @@
 import { ArrowRight, BarChart3, CalendarDays, DriveIcon, FileSearch, Gavel, Mail, Radar, Settings, ShieldCheck, Sparkles, Workflow } from "@/lib/icons";
 import { Modal, ModalHeader } from "./Dialogs";
 import { isAdmin, useWs, type View } from "./ctx";
+import { ShortcutIcon } from "./Shortcuts";
 
 type Flow = { title: string; icon: typeof Mail; what: string; tryText?: string; cta: string; action: () => void };
 
@@ -47,6 +48,14 @@ export function DemoGuide({ onClose, onVoice, onApps, onSwitch }: { onClose: () 
           tryText: "Pick “Inspection readiness” for drawing SRC-BF-2041.",
           cta: "Open Research",
           action: () => go({ kind: "research" }),
+        },
+        {
+          title: "Your own shortcuts",
+          icon: ShortcutIcon,
+          what: "Save a job you repeat as your own bot: describe it in plain words, Saathi drafts the steps, and you run it with one /command.",
+          tryText: "New shortcut → “Check a PO's delivery schedule, its latest certificate and open NCRs for the vendor”. Save it, then type / in Ask.",
+          cta: "Open Shortcuts",
+          action: () => go({ kind: "shortcuts" }),
         },
       ],
     ],

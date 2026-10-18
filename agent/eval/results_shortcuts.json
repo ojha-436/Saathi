@@ -1,0 +1,265 @@
+{
+  "ran_at": "2026-10-18T10:17:29.600786+05:30",
+  "draft": [
+    {
+      "description": "Check a PO's delivery schedule, its latest certificate and open NCRs for that vendor",
+      "ok": true,
+      "draft": {
+        "name": "Check PO Schedule Certificate and NCRs",
+        "command": "po-status-check",
+        "instruction": "1. Search emails and files for the delivery schedule of {PO number}.\n2. Read the latest material test certificate for {PO number}.\n3. Search past NCRs for the vendor associated with {PO number}.\n4. Present the delivery schedule, certificate status, and open NCRs concisely with citations.",
+        "inputs": [
+          "PO number"
+        ],
+        "minutes_saved": 25
+      },
+      "hardcoded_ids": [],
+      "ms": 2996
+    },
+    {
+      "description": "Before an inspection, check which certificate values for a heat number are out of spec",
+      "ok": true,
+      "draft": {
+        "name": "Check Heat Number Spec",
+        "command": "check-heat-spec",
+        "instruction": "1. Search material test certificates for the given {heat number}.\n2. Read the test certificate values and verify them against the standards library using Spec Check.\n3. Present the out-of-spec certificate values clearly with citations.",
+        "inputs": [
+          "heat number"
+        ],
+        "minutes_saved": 25
+      },
+      "hardcoded_ids": [],
+      "ms": 2847
+    },
+    {
+      "description": "Tell me the latest revision of a drawing, who approved it and what changed",
+      "ok": true,
+      "draft": {
+        "name": "Check Drawing Revision and Changes",
+        "command": "drawing-revision",
+        "instruction": "1. Search the drawing revision register for {drawing number}.\n2. Identify the latest revision number, the approver, and the documented changes.\n3. Present the result in short, cited form.",
+        "inputs": [
+          "drawing number"
+        ],
+        "minutes_saved": 15
+      },
+      "hardcoded_ids": [],
+      "ms": 3018
+    },
+    {
+      "description": "Every Monday: which vendors are late on their promises and what they owe me",
+      "ok": true,
+      "draft": {
+        "name": "Weekly Vendor Promise Delay Check",
+        "command": "vendor-promise-check",
+        "instruction": "1. Search vendor and colleague promise records for any overdue promises due by {target date}.\n2. Cross-reference with the decision log and past NCRs for related delays.\n3. Present the late vendors and what they owe in a short, cited summary.",
+        "inputs": [
+          "target date"
+        ],
+        "minutes_saved": 45
+      },
+      "hardcoded_ids": [],
+      "ms": 2391
+    },
+    {
+      "description": "har Monday dekho kaun se vendor late hain aur unke promises kya the",
+      "ok": true,
+      "draft": {
+        "name": "Somwar Ki Vendor Late List",
+        "command": "vendor-late-check",
+        "instruction": "1. Search vendor promise records and past emails for late vendors for {date range}.\n2. Check vendor and colleague promise records for missed delivery deadlines.\n3. Look up vendor communication history regarding delays.\n4. Present the summary of late vendors and their promises clearly, short and cited.",
+        "inputs": [
+          "date range"
+        ],
+        "minutes_saved": 30
+      },
+      "hardcoded_ids": [],
+      "ms": 2495
+    },
+    {
+      "description": "Kisi machine ka downtime history aur pichhle fixes batao",
+      "ok": true,
+      "draft": {
+        "name": "Machine Downtime aur Fix History",
+        "command": "machine-downtime",
+        "instruction": "1. Search chat, files, and past records for downtime and fixes related to {Machine Name}.\n2. Check the decision log and past NCRs for {Machine Name}.\n3. Present the downtime history and fixes concisely with citations.",
+        "inputs": [
+          "Machine Name"
+        ],
+        "minutes_saved": 25
+      },
+      "hardcoded_ids": [],
+      "ms": 2178
+    },
+    {
+      "description": "Prep me for my next meeting: who is attending, open tasks with them and recent decisions",
+      "ok": true,
+      "draft": {
+        "name": "Meeting Preparation Brief",
+        "command": "meeting-prep",
+        "instruction": "1. Check my calendar to find the details of the upcoming meeting {Meeting Title}.\n2. Identify all attendees and search my chats, emails, and Drive for recent discussions with them.\n3. Look up my tasks and the decision log for any open tasks or recent decisions involving these attendees.\n4. Present the summary of attendees, open tasks, and recent decisions in a short, cited format.",
+        "inputs": [
+          "Meeting Title"
+        ],
+        "minutes_saved": 15
+      },
+      "hardcoded_ids": [],
+      "ms": 2388
+    },
+    {
+      "description": "Find the decisions taken about a part and why they were taken",
+      "ok": true,
+      "draft": {
+        "name": "Retrieve Part Decisions Log",
+        "command": "part-decisions",
+        "instruction": "1. Search the decision log for all entries related to {part}.\n2. Identify the specific decisions made regarding this part.\n3. Retrieve the rationale and context for each decision from the past logs.\n4. Present the results in a short, cited summary.",
+        "inputs": [
+          "part"
+        ],
+        "minutes_saved": 15
+      },
+      "hardcoded_ids": [],
+      "ms": 19558
+    },
+    {
+      "description": "For a vendor, compare promised and actual dispatch dates this month",
+      "ok": true,
+      "draft": {
+        "name": "Vendor Dispatch Date Audit",
+        "command": "vendor-dispatch-audit",
+        "instruction": "1. Search emails, chats, and vendor promise records for {vendor name} regarding dispatch dates scheduled for {date range}.\n2. Compare the promised dispatch dates against actual dispatch records and plant data.\n3. Look up past non-conformance reports or vendor communication logs related to delayed shipments.\n4. Present the comparison results clearly with source citations and a short summary.",
+        "inputs": [
+          "vendor name",
+          "date range"
+        ],
+        "minutes_saved": 45
+      },
+      "hardcoded_ids": [],
+      "ms": 2093
+    },
+    {
+      "description": "Draft a reminder task to follow up with the vendor on a PO tomorrow morning",
+      "ok": true,
+      "draft": {
+        "name": "Vendor PO Follow-up Reminder",
+        "command": "po-followup",
+        "instruction": "1. Search emails and chat messages for discussions regarding {PO number} and {vendor}.\n2. Check vendor and colleague promise records for the committed delivery date.\n3. Draft a task for me to follow up with {vendor} regarding {PO number} for tomorrow morning, and present the result concisely with citations.",
+        "inputs": [
+          "PO number",
+          "vendor"
+        ],
+        "minutes_saved": 15
+      },
+      "hardcoded_ids": [],
+      "ms": 1377
+    },
+    {
+      "description": "Check PO-7781 delivery and certificates",
+      "ok": true,
+      "draft": {
+        "name": "Check PO Delivery and Certificates",
+        "command": "po-delivery-check",
+        "instruction": "1. Search chats, emails, and Drive for PO number {PO number}.\n2. Locate the corresponding material test certificates and check their Spec Check verdicts.\n3. Look up vendor promise records for {PO number}.\n4. Check plant data and shift handovers regarding this delivery.\n5. Present the delivery status, certificate verdicts, and vendor commitments in a short, cited response.",
+        "inputs": [
+          "PO number"
+        ],
+        "minutes_saved": 25
+      },
+      "hardcoded_ids": [],
+      "ms": 1182
+    },
+    {
+      "description": "Heat K-55210 ka certificate S355J2 ke limits ke against check karo",
+      "ok": true,
+      "draft": {
+        "name": "Heat Certificate Compliance Check",
+        "command": "check-heat-cert",
+        "instruction": "1. Search files and email for the material test certificate of {heat number}.\n2. Read the certificate values and compare them against the standards library limits for {grade}.\n3. Run a Spec Check verdict on the certificate data.\n4. Present the result as a short, cited summary.",
+        "inputs": [
+          "heat number",
+          "grade"
+        ],
+        "minutes_saved": 15
+      },
+      "hardcoded_ids": [],
+      "ms": 2151
+    }
+  ],
+  "off_topic": [
+    {
+      "description": "Every morning write me a motivational poem",
+      "refused": true,
+      "error": "422"
+    },
+    {
+      "description": "Make a bot that writes Python scripts for me",
+      "refused": true,
+      "error": "422"
+    },
+    {
+      "description": "A shortcut that tells me today's cricket score",
+      "refused": true,
+      "error": "422"
+    },
+    {
+      "description": "har din ek joke sunao",
+      "refused": true,
+      "error": "422"
+    },
+    {
+      "description": "Build me a landing page in HTML whenever I ask",
+      "refused": true,
+      "error": "422"
+    }
+  ],
+  "run": [
+    {
+      "name": "Dispatch check",
+      "given": "Om Castings axle box housings",
+      "ok": true,
+      "tools": [
+        "promise_record",
+        "search_workspace"
+      ],
+      "cited": 3,
+      "ms": 7885,
+      "answer": "### Dispatch Check: Om Castings — Axle Box Housings\n\n* **Promised Dispatch Date:** Om Castings confirmed on call that the first lot of 24 axle box housings would be dispatched on **15 October 2026** [msg:dm_prince_rahul/seed013].\n* **Current Status:** The dispatch is **overdue** by ~3 days (due 15 Oct 2026; today is 18 Oct 2026) [msg:dm_prince_rahul/seed013].\n* **Vendor Track Record:** \n  * Only 1 of 5 tracked commitments kept on time (on-time rate: 25%) with an average slip of 4.3 days [msg:dm_"
+    },
+    {
+      "name": "Drawing revision",
+      "given": "SRC-BF-2041",
+      "ok": true,
+      "tools": [
+        "revision_status",
+        "search_workspace"
+      ],
+      "cited": 5,
+      "ms": 15917,
+      "answer": "Based on the controlled drawing register and workspace files, here is the revision status for **SRC-BF-2041**:\n\n1. **Latest Released Revision**: \n   * **Revision C** is the current released revision [ref: revision_status]. (Revision B and Revision A are superseded and must not be used on the shop floor [ref: revision_status]).\n\n2. **Approver & Changes**:\n   * **Approved by**: Neha Verma (QA) on 06 Oct 2026 [ref: revision_status] (also approved by Amit Sharma per the change note [drive:prince_dri"
+    },
+    {
+      "name": "Heat certificate check",
+      "given": "H-77812",
+      "ok": true,
+      "tools": [
+        "search_workspace",
+        "spec_check"
+      ],
+      "cited": 2,
+      "ms": 7449,
+      "answer": "Here is the certificate check for heat number **H-77812**:\n\n### 1. Material Test Certificate Found\n* **File:** `MTC_H-77812_Ladle_Analysis.pdf` [file:file004]\n* **Vendor:** Om Steel & Castings Ltd., Raipur [file:file004]\n* **Material Grade:** EN 10025 S355J2 [file:file004]\n* **Component:** Side frame casting for BG bogie (Drawing: SRC-BF-2041 Rev C) [file:file004]\n\n### 2. Specification Check Against Limits (S355J2)\nThe certificate values have been verified against the approved limits for EN 1002"
+    },
+    {
+      "name": "Vendor promises",
+      "given": "Om Castings",
+      "ok": true,
+      "tools": [
+        "promise_record",
+        "search_workspace"
+      ],
+      "cited": 5,
+      "ms": 6848,
+      "answer": "Here is the promise record for **Om Castings** [msg:dm_prince_rahul/seed013]:\n\n*   **Dispatch first lot of 24 axle box housings**: **Overdue** (Due: 15 Oct 2026, currently 3.4 days overdue) [msg:dm_prince_rahul/seed013].\n*   **Share the vendor audit report and the sand check sheets**: **Late** (Due: 30 Sep 2026, completed 3 days late) [msg:dm_prince_rahul/hist09_rahul].\n*   **Dispatch lot 3 side frame castings**: **Late** (Due: 20 Aug 2026, completed 6.8 days late) [msg:dm_prince_rahul/hist02_ra"
+    }
+  ]
+}
