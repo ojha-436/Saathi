@@ -102,7 +102,7 @@ In the endpoint:
 - `ask()` receives the expanded prompt, so the scope check, prefetch and the agent all see the full steps.
 - The finished assistant message gets `shortcut: {id, name}`.
 - Then `runs += 1` (Firestore `Increment`) and `last_run = now`.
-- The audit log and BigQuery rows get `shortcut_id`.
+- The audit log row gets `shortcut_id`. BigQuery is unchanged, because an unknown column would make it reject the row.
 - The session title still comes from the raw text, through the existing `sessions.name`.
 
 ### Demo logins
