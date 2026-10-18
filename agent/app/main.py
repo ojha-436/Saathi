@@ -917,6 +917,7 @@ async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)
     rate_limit(user["uid"], "assistant", 20)
     if not (org_of(user).get("settings") or {}).get("ai_enabled", True):
         raise HTTPException(403, "Your workspace admin has turned off the AI assistant")
+    run = shortcuts.expand(user, text)  # a /command: one of the person's own shortcuts, or a quick reply saying which they have
     col = db.collection("assistant").document(user["uid"]).collection("messages")
     # Saathi's context is this conversation's recent turns (conversations are per person and per workspace)
     sid = body.session_id if sessions.valid(body.session_id) else sessions.new_id()
@@ -924,6 +925,9 @@ async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)
     history = [] if is_new else sessions.history(user["uid"], sid)
     col.document().set({"role": "user", "text": text, "ts": now(), "org_id": user["org_id"], "session_id": sid})
     pending = col.document()
+    if run and "reply" in run:
+        pending.set({"role": "assistant", "text": run["reply"], "pending": False, "ts": now(), "org_id": user["org_id"], "session_id": sid})
+        return {"text": run["reply"], "tool_calls": [], "proposed_tasks": [], "charts": [], "session_id": sid}
     pending.set({"role": "assistant", "text": "", "pending": True, "ts": now(), "org_id": user["org_id"], "session_id": sid})
     started = time.monotonic()
     last = [0.0]
@@ -937,7 +941,7 @@ async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)
                 logging.warning("partial update failed")
 
     try:
-        result = await ask(user, text, history, on_partial=on_partial)
+        result = await ask(user, run["prompt"] if run else text, history, on_partial=on_partial)
     except Exception as e:
         logging.exception("assistant failed")
         pending.update({"text": "Sorry, something went wrong while I was working on that. Please try again.", "pending": False, "error": str(e)[:300]})
@@ -945,10 +949,14 @@ async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)
     latency = int((time.monotonic() - started) * 1000)
     pending.update({"text": result["text"], "pending": False, "tasks": result["proposed_tasks"], "tool_calls": result["tool_calls"],
                     "charts": result.get("charts") or [], "provenance": {"model": result.get("model"), "latency_ms": latency,
-                    "first_token_ms": result.get("first_token_ms"), "prefetched": result.get("prefetched", [])}})
+                    "first_token_ms": result.get("first_token_ms"), "prefetched": result.get("prefetched", [])},
+                    **({"shortcut": run["shortcut"]} if run else {})})
+    if run:
+        bg.add_task(shortcuts.record_run, user["uid"], run["shortcut"]["id"])
     tools = [c["tool"] for c in result["tool_calls"]]
     db.collection("audit_log").add({"uid": user["uid"], "org_id": user["org_id"], "kind": "assistant", "query": text, "tool_calls": result["tool_calls"],
                                     "tools": tools, "latency_ms": latency, "first_token_ms": result.get("first_token_ms"), "ts": now(),
+                                    **({"shortcut_id": run["shortcut"]["id"]} if run else {}),
                                     "cited": len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive):[^\]]+\]", result["text"])))})
     bg.add_task(log_event_bigquery, {
         "uid": user["uid"], "query": text[:1000], "tools": json.dumps(tools), "latency_ms": latency,
@@ -957,7 +965,7 @@ async def assistant(body: AskIn, bg: BackgroundTasks, user=Depends(current_user)
     })
     if is_new:
         bg.add_task(sessions.name, user["uid"], sid, text, result["text"])
-    return {**result, "session_id": sid}
+    return {**result, "session_id": sid, **({"shortcut": run["shortcut"]} if run else {})}
 
 
 @app.post("/api/assistant/clear")

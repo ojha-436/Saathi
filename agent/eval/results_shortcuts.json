@@ -1,5 +1,5 @@
 {
-  "ran_at": "2026-10-18T09:52:07.667101+05:30",
+  "ran_at": "2026-10-18T09:53:09.060087+05:30",
   "draft": [
     {
       "description": "Check a PO's delivery schedule, its latest certificate and open NCRs for that vendor",
@@ -205,6 +205,56 @@
       "description": "Build me a landing page in HTML whenever I ask",
       "refused": true,
       "error": "422"
+    }
+  ],
+  "run": [
+    {
+      "name": "Dispatch check",
+      "given": "Om Castings axle box housings",
+      "ok": true,
+      "tools": [
+        "promise_record",
+        "search_workspace"
+      ],
+      "cited": 3,
+      "ms": 7885,
+      "answer": "### Dispatch Check: Om Castings — Axle Box Housings\n\n* **Promised Dispatch Date:** Om Castings confirmed on call that the first lot of 24 axle box housings would be dispatched on **15 October 2026** [msg:dm_prince_rahul/seed013].\n* **Current Status:** The dispatch is **overdue** by ~3 days (due 15 Oct 2026; today is 18 Oct 2026) [msg:dm_prince_rahul/seed013].\n* **Vendor Track Record:** \n  * Only 1 of 5 tracked commitments kept on time (on-time rate: 25%) with an average slip of 4.3 days [msg:dm_"
+    },
+    {
+      "name": "Drawing revision",
+      "given": "SRC-BF-2041",
+      "ok": true,
+      "tools": [
+        "revision_status",
+        "search_workspace"
+      ],
+      "cited": 5,
+      "ms": 15917,
+      "answer": "Based on the controlled drawing register and workspace files, here is the revision status for **SRC-BF-2041**:\n\n1. **Latest Released Revision**: \n   * **Revision C** is the current released revision [ref: revision_status]. (Revision B and Revision A are superseded and must not be used on the shop floor [ref: revision_status]).\n\n2. **Approver & Changes**:\n   * **Approved by**: Neha Verma (QA) on 06 Oct 2026 [ref: revision_status] (also approved by Amit Sharma per the change note [drive:prince_dri"
+    },
+    {
+      "name": "Heat certificate check",
+      "given": "H-77812",
+      "ok": true,
+      "tools": [
+        "search_workspace",
+        "spec_check"
+      ],
+      "cited": 2,
+      "ms": 7449,
+      "answer": "Here is the certificate check for heat number **H-77812**:\n\n### 1. Material Test Certificate Found\n* **File:** `MTC_H-77812_Ladle_Analysis.pdf` [file:file004]\n* **Vendor:** Om Steel & Castings Ltd., Raipur [file:file004]\n* **Material Grade:** EN 10025 S355J2 [file:file004]\n* **Component:** Side frame casting for BG bogie (Drawing: SRC-BF-2041 Rev C) [file:file004]\n\n### 2. Specification Check Against Limits (S355J2)\nThe certificate values have been verified against the approved limits for EN 1002"
+    },
+    {
+      "name": "Vendor promises",
+      "given": "Om Castings",
+      "ok": true,
+      "tools": [
+        "promise_record",
+        "search_workspace"
+      ],
+      "cited": 5,
+      "ms": 6848,
+      "answer": "Here is the promise record for **Om Castings** [msg:dm_prince_rahul/seed013]:\n\n*   **Dispatch first lot of 24 axle box housings**: **Overdue** (Due: 15 Oct 2026, currently 3.4 days overdue) [msg:dm_prince_rahul/seed013].\n*   **Share the vendor audit report and the sand check sheets**: **Late** (Due: 30 Sep 2026, completed 3 days late) [msg:dm_prince_rahul/hist09_rahul].\n*   **Dispatch lot 3 side frame castings**: **Late** (Due: 20 Aug 2026, completed 6.8 days late) [msg:dm_prince_rahul/hist02_ra"
     }
   ]
 }

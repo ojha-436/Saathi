@@ -47,6 +47,19 @@ OFF_BOTS = [
     "Build me a landing page in HTML whenever I ask",
 ]
 
+# Shortcuts as people would save them, run with values prince can see (seed data): (name, steps, blanks, given, any of these tools)
+RUNS = [
+    ("Dispatch check", "1. Find when {vendor and part} will be dispatched.\n2. Check what the vendor promised and whether it is late.\n"
+     "3. Present it briefly with citations.", ["vendor and part"], "Om Castings axle box housings",
+     {"search_workspace", "promise_record", "lookup_document", "get_message_context"}),
+    ("Drawing revision", "1. Find the latest released revision of {drawing number} in the register.\n2. Say who approved it and what "
+     "changed from the previous revision.\n3. Cite the sources.", ["drawing number"], "SRC-BF-2041", {"revision_status", "lookup_document"}),
+    ("Heat certificate check", "1. Find the material test certificate for {heat number}.\n2. Check its values against the spec limits.\n"
+     "3. List anything out of spec, with citations.", ["heat number"], "H-77812", {"spec_check", "lookup_document"}),
+    ("Vendor promises", "1. List what {vendor} has promised me and whether each was kept or is late.\n2. Present it as a short list "
+     "with citations.", ["vendor"], "Om Castings", {"promise_record", "who_owes", "search_workspace"}),
+]
+
 
 def unit() -> list[tuple[str, bool]]:
     from fastapi import HTTPException
@@ -198,6 +211,26 @@ def draft_part(user: dict) -> dict:
     return {"draft": drafts, "off_topic": offs}
 
 
+async def run_part(user: dict) -> dict:
+    from app.agent import ask
+    from app.firebase import db
+    from app.shortcuts import prompt_for
+
+    out = []
+    for name, instruction, inputs, given, expected in RUNS:
+        t = time.monotonic()
+        r = await ask(user, prompt_for({"name": name, "instruction": instruction, "inputs": inputs}, given), [])
+        for tid in r["proposed_tasks"]:
+            db.collection("tasks").document(tid).delete()  # keep the demo data clean
+        # the workspace search Saathi runs before the agent counts as a search_workspace step
+        tools = [c["tool"] for c in r["tool_calls"]] + (["search_workspace"] if r.get("prefetched") else [])
+        cited = len(set(re.findall(r"\[(?:msg|file|meet|dec|rec|mail|drive|ho|kn|std):[^\]]+\]", r["text"])))
+        ok = not r.get("out_of_scope") and cited >= 1 and bool(expected & set(tools))
+        out.append({"name": name, "given": given, "ok": ok, "tools": sorted(set(tools)), "cited": cited, "ms": int((time.monotonic() - t) * 1000),
+                    "answer": r["text"][:500]})
+    return {"run": out}
+
+
 def write(results: dict) -> None:
     lines = [f"# Shortcuts eval\n\nRan {results.get('ran_at', '')} against the live workspace as prince (read-only).\n"]
     if "draft" in results:
@@ -242,6 +275,10 @@ def main() -> None:
     results["ran_at"] = datetime.now(TZ).isoformat()
     if args.only in (None, "draft"):
         results.update(draft_part(prince))
+    if args.only in (None, "run"):
+        import asyncio
+
+        results.update(asyncio.run(run_part(prince)))
     write(results)
     print((HERE / "results_shortcuts.md").read_text(encoding="utf-8"))
 

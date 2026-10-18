@@ -1,6 +1,6 @@
 # Shortcuts eval
 
-Ran 2026-10-18T09:52:07.667101+05:30 against the live workspace as prince (read-only).
+Ran 2026-10-18T09:53:09.060087+05:30 against the live workspace as prince (read-only).
 
 ## Drafting from plain words
 
@@ -23,3 +23,13 @@ Ran 2026-10-18T09:52:07.667101+05:30 against the live workspace as prince (read-
 | Check PO-7781 delivery and certificates | ✓ | check-po-status | PO number |
 | Heat K-55210 ka certificate S355J2 ke limits ke against check karo | ✓ | heat-cert-check | heat number, grade |
 
+## Running shortcuts through Saathi
+
+- Passed: **4/4** (not refused, cites a source, uses the expected tool)
+
+| shortcut | given | ok | tools | cited | s |
+|---|---|---|---|---|---|
+| Dispatch check | Om Castings axle box housings | ✓ | promise_record, search_workspace | 3 | 7.9 |
+| Drawing revision | SRC-BF-2041 | ✓ | revision_status, search_workspace | 5 | 15.9 |
+| Heat certificate check | H-77812 | ✓ | search_workspace, spec_check | 2 | 7.4 |
+| Vendor promises | Om Castings | ✓ | promise_record, search_workspace | 5 | 6.8 |
